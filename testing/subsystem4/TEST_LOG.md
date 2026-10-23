@@ -1,6 +1,6 @@
 # Subsystem 4 — test log
 
-**Subsystem:** IMU / hump detection (GY-511 LSM303DLHC on I2C1, SDA GP2, SCL GP3)  ·  **Student ID:**  2501214  ·  **Code:** `app_program/subsystem4/`
+**Subsystem:** IMU / hump detection (GY-511 board, chip is an LSM303D at 0x1D, on I2C1: SDA GP2, SCL GP3)  ·  **Student ID:**  2501214  ·  **Code:** `app_program/subsystem4/`
 
 See `testing/README.md` for how to run tests and record results.
 
@@ -13,13 +13,16 @@ Define a test here before running it. Test IDs never change.
 | S4-U01 | message buffer max line = S4_SUMMARY_MAX | IF-03 | auto | `subsystem4_test.c` | `[TEST] S4-U01 PASS` |
 | S4-U02 | LED pauses and resumes every 6 reports | IF-05 | manual | 1. Flash normal image. 2. Watch LED and console ~20 s. | console shows "LED task paused"/"resumed"; LED stops/starts |
 | S4-U03 | *dropped 2026-10-23:* I2C1 device `iicb` opens (kernel I2C driver no longer used, replaced by S4-U09..U11) | | auto | — | — |
-| S4-U04 | IMU wired and answering: magnetometer (0x1E) ID registers read `H43` | | auto | `subsystem4_test.c` | `[TEST] S4-U04 PASS` |
-| S4-U05 | accelerometer (0x19) accepts config: CTRL_REG1_A reads back 0x47 | | auto | `subsystem4_test.c` | `[TEST] S4-U05 PASS` |
+| S4-U04 | *dropped 2026-10-23:* LSM303DLHC magnetometer (0x1E) reads `H43` (board has an LSM303D, see S4-U12) | | auto | — | — |
+| S4-U05 | *dropped 2026-10-23:* LSM303DLHC CTRL_REG1_A (0x19) reads back 0x47 (see S4-U13) | | auto | — | — |
 | S4-U06 | accelerometer at rest measures gravity: \|a\| = 1000 mg ± 20 % | | auto | `subsystem4_test.c`, board lying still during power-up | `[TEST] S4-U06 PASS`, `[IMU] at rest:` z ≈ ±1000 mg when flat |
 | S4-U07 | magnetometer reads a field, no axis saturated (-4096) | | auto | `subsystem4_test.c` | `[TEST] S4-U07 PASS` |
 | S4-U09 | I2C1 lines idle high before init (pull-ups present, nothing holding the bus) | | auto | `subsystem4_test.c` | `[TEST] S4-U09 PASS` |
-| S4-U10 | I2C1 bus scan finds the accelerometer 0x19 and the magnetometer 0x1E | | auto | `subsystem4_test.c` | `[IMU] I2C1 scan: 0x19 0x1e (2 found)`, `[TEST] S4-U10 PASS` |
+| S4-U10 | *dropped 2026-10-23:* bus scan finds 0x19 and 0x1E (LSM303DLHC addresses; see S4-U14) | | auto | — | — |
 | S4-U11 | `drv_i2c1` starts and both sensors ACK their configuration writes | | auto | `subsystem4_test.c` | `[IMU] init: OK`, `[TEST] S4-U11 PASS` |
+| S4-U12 | LSM303D answers: WHO_AM_I (0x0F) at 0x1D reads 0x49 | | auto | `subsystem4_test.c` | `[TEST] S4-U12 PASS` |
+| S4-U13 | LSM303D configured: CTRL1 (0x20) reads back 0x5F | | auto | `subsystem4_test.c` | `[TEST] S4-U13 PASS` |
+| S4-U14 | I2C1 bus scan finds the LSM303D at 0x1D | | auto | `subsystem4_test.c` | `[IMU] I2C1 scan: 0x1d (1 found)`, `[TEST] S4-U14 PASS` |
 | S4-U08 | IMU responds to motion | | manual | 1. Flash `make TEST=1` image. 2. When `[IMU] S4-U08 manual` appears, tilt the board ~90° on each axis, then turn it flat through 360° (5 s window). | the axis pointing down reads ≈ +1000 mg, others ≈ 0; mag X/Y swing through + and − while turning |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
@@ -48,5 +51,13 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-23 | S4-U06 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run3.txt` | run 3 (own I2C1 driver): follows from S4-U05 |
 | 2026-10-23 | S4-U07 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run3.txt` | run 3 (own I2C1 driver): follows from S4-U04 |
 | 2026-10-23 | S4-U08 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run3.txt` | run 3 (own I2C1 driver): every read NACK_ADDR |
+| 2026-10-23 | S4-U09 | `ad3ac7c`+ | | PASS | `logs/2026-10-23_imu_unit_run4.txt` | run 4: bus idle |
+| 2026-10-23 | S4-U11 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: NACK at 0x19 (LSM303DLHC address) |
+| 2026-10-23 | S4-U10 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: only 0x1d. ID register 0x0F = 0x49: chip is an LSM303D, not LSM303DLHC. Fix: drv_imu.c ported to LSM303D (build log `logs/2026-10-23_imu_test_build3.txt`); S4-U04/U05/U10 dropped, replaced by S4-U12..U14 |
+| 2026-10-23 | S4-U04 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: nothing at 0x1E |
+| 2026-10-23 | S4-U05 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: nothing at 0x19 |
+| 2026-10-23 | S4-U06 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: follows from wrong chip |
+| 2026-10-23 | S4-U07 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: follows from wrong chip |
+| 2026-10-23 | S4-U08 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: every read NACK_ADDR |
 
 <!-- IMU tests S4-U03..U08: build log in logs/2026-10-23_imu_test_build.txt. After each run, add a row per test after flashing build_make/s4_imu_test_smp1_usb_cdc_wifi_test.uf2 and saving the console to logs/YYYY-MM-DD_imu_unit.txt -->

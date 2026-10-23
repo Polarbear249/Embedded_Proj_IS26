@@ -1,0 +1,24 @@
+# S4 IMU unit test, run 4, 2026-10-23
+# image: s4_imu_test build with 0x1D chip identification (own I2C1 driver), base ad3ac7c + uncommitted changes
+# console output as pasted by the tester
+
+[IMU] ===== subsystem 4 IMU test (GY-511) =====
+[IMU] keep the board flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 FAIL  I2C1 init + sensor configuration writes ACKed   (../app_program/subsystem4/subsystem4_test.c:111)
+[IMU] init: NACK_ADDR (no device at address) (abort src 0x1)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U10 FAIL  bus scan finds 0x19 and 0x1E   (../app_program/subsystem4/subsystem4_test.c:118)
+[IMU] device at 0x1D: reg0x0F=0x49 reg0x00=0x00 reg0x0D=0x08 -> LSM303D or LSM9DS0 (accel+mag at 0x1D)
+[IMU] magnetometer ID: NACK_ADDR (no device at address), 0x00 0x00 0x00 (expect 0x48 0x34 0x33)
+[TEST] S4-U04 FAIL  magnetometer at 0x1E answers "H43"   (../app_program/subsystem4/subsystem4_test.c:126)
+[IMU] CTRL_REG1_A: NACK_ADDR (no device at address), 0x00 (expect 0x47)
+[TEST] S4-U05 FAIL  accelerometer at 0x19 configured (CTRL_REG1_A read back)   (../app_program/subsystem4/subsystem4_test.c:134)
+[IMU] at rest: NACK_ADDR (no device at address)  acc mg x=0 y=0 z=0  mag x=0 y=0 z=0
+[TEST] S4-U06 FAIL  accel at rest reads 1 g +-20 %   (../app_program/subsystem4/subsystem4_test.c:150)
+[TEST] S4-U07 FAIL  magnetometer reads a field, no axis saturated   (../app_program/subsystem4/subsystem4_test.c:155)
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 read error: NACK_ADDR (no device at address)
+... (samples 1-23 identical, interleaved with monitor lines)
+[IMU] 24 read error: NACK_ADDR (no device at address)
+[TEST] subsystem4 IMU SUMMARY 1 passed, 6 failed
