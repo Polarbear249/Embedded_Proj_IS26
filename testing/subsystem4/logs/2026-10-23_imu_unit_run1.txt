@@ -1,0 +1,32 @@
+# S4 IMU unit test, run 1, 2026-10-23
+# image: build_make/s4_imu_test_smp1_usb_cdc_wifi_test.uf2 (make TEST=1), base ad3ac7c + uncommitted IMU changes
+# console output as pasted by the tester (start of log cut off before S3)
+
+[TEST] INT-01 PASS  samples flow from subsystem 2 to subsystem 3
+[TEST] S3-U01 PASS  min <= max, both within 0..100
+[TEST] subsystem3 SUMMARY 2 passed, 0 failed
+[TEST] S4-U01 PASS  message buffer max line = S4_SUMMARY_MAX
+
+[IMU] ===== subsystem 4 IMU test (GY-511) =====
+[IMU] keep the board flat and still
+monitor: batch  n=15 last=60 from core 1
+monitor: t=3355774196 ms  samples=15  min=0 max=100 avg=56  free slots=4  free blocks=4
+monitor: batch  n=20 last=10 from core 1
+monitor: t=3355775746 ms  samples=20  min=0 max=100 avg=50  free slots=4  free blocks=4
+[TEST] S4-U03 PASS  I2C device iicb opens
+[TEST] S4-U04 FAIL  magnetometer at 0x1E answers "H43"   (../app_program/subsystem4/subsystem4_test.c:69)
+[IMU] ID error -41 (check wiring, 3V3, GND)
+[TEST] S4-U05 FAIL  accelerometer at 0x19 configured (CTRL_REG1_A read back)   (../app_program/subsystem4/subsystem4_test.c:78)
+[IMU] init er=-17 CTRL_REG1_A=0x00
+[IMU] at rest: acc mg x=0 y=0 z=-1712  mag x=4096 y=-1516 z=4096
+[TEST] S4-U06 FAIL  accel at rest reads 1 g +-20 %   (../app_program/subsystem4/subsystem4_test.c:89)
+[TEST] S4-U07 FAIL  magnetometer reads a field, no axis saturated   (../app_program/subsystem4/subsystem4_test.c:93)
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 read error
+... (samples 1-23 identical: read error, interleaved with monitor lines)
+[IMU] 24 read error
+[TEST] INT-02 PASS  summary lines flow from subsystem 3 to subsystem 4
+[TEST] subsystem4 SUMMARY 3 passed, 4 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===

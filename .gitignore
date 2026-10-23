@@ -22,5 +22,8 @@ config/wifi_secrets.h
 *.avi
 *.mkv
 
+CLAUDE.md
 # macOS
 .DS_Store
+
+proj/

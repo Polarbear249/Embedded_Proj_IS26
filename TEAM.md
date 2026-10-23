@@ -50,8 +50,8 @@ fixed.
 | GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
 | GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
 | GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | | |
-| GP3 | | |
+| GP2 | S4 | I2C1 SDA — GY-511 IMU |
+| GP3 | S4 | I2C1 SCL — GY-511 IMU |
 | GP4 | | |
 | GP5 | | |
 | GP6 | | |
@@ -107,7 +107,7 @@ the drivers have no locking to stop it.
 |---|---|---|---|
 | UART1 | | | |
 | I2C0 | | | |
-| I2C1 | | | |
+| I2C1 (own polled driver `subsystem4/drv_i2c1.c`; kernel I2C driver stays off) | S4 | IMU task (tests: initial task) | GP2 SDA, GP3 SCL |
 | SPI0 | | | |
 | SPI1 | | | |
 | ADC | | | GP26–GP28 |
