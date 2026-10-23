@@ -59,5 +59,32 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-23 | S4-U06 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: follows from wrong chip |
 | 2026-10-23 | S4-U07 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: follows from wrong chip |
 | 2026-10-23 | S4-U08 | `ad3ac7c`+ | | FAIL | `logs/2026-10-23_imu_unit_run4.txt` | run 4: every read NACK_ADDR |
+| 2026-10-23 | S4-U09 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5 (LSM303D driver) |
+| 2026-10-23 | S4-U11 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5 |
+| 2026-10-23 | S4-U14 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5: scan 0x1d |
+| 2026-10-23 | S4-U12 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5: WHO_AM_I 0x49 |
+| 2026-10-23 | S4-U13 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5: CTRL1 0x5f |
+| 2026-10-23 | S4-U06 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5: x=-966 y=8 z=212 mg, \|a\| ≈ 989 mg. Gravity on -X: module was on its side / tilted ~12°, not flat |
+| 2026-10-23 | S4-U07 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5: mag ≈ 1.02 G total, higher than Earth's field (0.25-0.65 G): needs hard-iron calibration before heading use |
+| 2026-10-23 | S4-U01 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run5.txt` | run 5 |
+| 2026-10-23 | S4-U08 | `8b86919` | | NOT RUN | `logs/2026-10-23_imu_unit_run5.txt` | run 5: readings constant for all 25 samples, board was not moved. Repeat with tilting/turning |
+| 2026-10-23 | S4-U09 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U11 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U14 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U12 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U13 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U06 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6: board flat, x=-42 y=-361 z=884 mg, \|a\| ≈ 956 mg |
+| 2026-10-23 | S4-U07 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U01 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run6.txt` | run 6 |
+| 2026-10-23 | S4-U08 | `8b86919` | | FAIL | `logs/2026-10-23_imu_unit_run6.txt` | run 6: readings follow the motion (acc Y -545..+113 mg, mag Y -2431..+70), but tilts stayed under ~35°: no axis taken to ±1000 mg, mag X stayed negative (hard-iron offset, see S4-U07 note). Repeat with 90° tilts and a full flat turn |
+| 2026-10-23 | S4-U09 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U11 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U14 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U12 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U13 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U06 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7: board on its side, x=-979 y=0 z=203 mg, \|a\| ≈ 1000 mg |
+| 2026-10-23 | S4-U07 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U01 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
+| 2026-10-23 | S4-U08 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7: every axis reached about 1 g: X -979 (still), Y -984 and +920, Z +1074 and -668. Mag X (+3090..-5364) and Y (-13151..+2069) both changed sign while turning. Samples were taken while moving, so they include hand acceleration (\|a\| up to ~1.5 g) and the other axes were not ≈ 0 |
 
-<!-- IMU tests S4-U03..U08: build log in logs/2026-10-23_imu_test_build.txt. After each run, add a row per test after flashing build_make/s4_imu_test_smp1_usb_cdc_wifi_test.uf2 and saving the console to logs/YYYY-MM-DD_imu_unit.txt -->
+<!-- Runs 5-7 (`8b86919`): the flashed image also contained subsystem1/task_led.c and subsystem2/task_producer.c restored from e4ec31d, because the repo does not link without them. IMU tests S4-U03..U08: build log in logs/2026-10-23_imu_test_build.txt. After each run, add a row per test after flashing build_make/s4_imu_test_smp1_usb_cdc_wifi_test.uf2 and saving the console to logs/YYYY-MM-DD_imu_unit.txt -->

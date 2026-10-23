@@ -1,0 +1,51 @@
+# S4 IMU unit test, run 5, 2026-10-23
+# image: s4_imu_test build 3 (LSM303D driver + own I2C1 driver), base ad3ac7c + uncommitted changes
+# console output as pasted by the tester
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the board flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=-966 y=8 z=212  mag x=116 y=-12625 z=-1702
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 acc mg  -966     8   212  mag    116 -12625  -1702
+[IMU]  1 acc mg  -956     4   212  mag     98 -12668  -1691
+[IMU]  2 acc mg  -957    10   215  mag    154 -12667  -1637
+[IMU]  3 acc mg  -952     5   218  mag    144 -12639  -1649
+[IMU]  4 acc mg  -953     5   221  mag    158 -12661  -1638
+[IMU]  5 acc mg  -960     4   211  mag    155 -12671  -1616
+[IMU]  6 acc mg  -957     5   215  mag    143 -12677  -1608
+[IMU]  7 acc mg  -963     8   208  mag    170 -12630  -1683
+[IMU]  8 acc mg  -954     7   212  mag    143 -12639  -1654
+[IMU]  9 acc mg  -957     7   214  mag    134 -12660  -1640
+[IMU] 10 acc mg  -954    11   176  mag    159 -12656  -1646
+[IMU] 11 acc mg  -948     5   203  mag    153 -12658  -1633
+[IMU] 12 acc mg  -960     4   210  mag    161 -12661  -1631
+[IMU] 13 acc mg  -958     7   212  mag    148 -12641  -1679
+[IMU] 14 acc mg  -954     8   212  mag    186 -12600  -1665
+[IMU] 15 acc mg  -960     8   211  mag    156 -12631  -1649
+[IMU] 16 acc mg  -953     3   212  mag    126 -12646  -1643
+[IMU] 17 acc mg  -960     4   210  mag    180 -12650  -1561
+[IMU] 18 acc mg  -951    11   211  mag    168 -12639  -1640
+[IMU] 19 acc mg  -955     5   213  mag    125 -12676  -1603
+[IMU] 20 acc mg  -958     4   213  mag    132 -12665  -1633
+[IMU] 21 acc mg  -958     6   215  mag    131 -12633  -1713
+[IMU] 22 acc mg  -959     4   215  mag    152 -12595  -1653
+[IMU] 23 acc mg  -964     2   212  mag    134 -12656  -1634
+[IMU] 24 acc mg  -960     2   213  mag    145 -12674  -1601
+[TEST] subsystem4 IMU SUMMARY 7 passed, 0 failed
+[TEST] INT-02 PASS  summary lines flow from subsystem 3 to subsystem 4
+[TEST] subsystem4 (S4-U01, INT-02) SUMMARY 2 passed, 0 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===
+(monitor: lines from the example monitor task removed)
