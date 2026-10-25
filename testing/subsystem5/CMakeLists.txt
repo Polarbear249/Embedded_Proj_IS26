@@ -25,7 +25,8 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(subsystem5_test
-    s5_u01_echo_voltage.c
+    #s5_u01_echo_voltage.c
+    s5_u02_u03_distance.c
 )
 
 # Link the standard Pico libraries

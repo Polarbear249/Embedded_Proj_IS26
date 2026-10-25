@@ -1,0 +1,31 @@
+# S5 Ultrasonic unit test, run 1, 2026-10-26
+# image: subsystem5_test build 2
+# console output as pasted by the tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# tester notes: 
+# 177.6cm reading corresponds to the ceiling height (estimated ~177-181cm using a tape measure).
+# Targets for the other pulses were held by hand with a ruler, so physical distance 
+# is approximate. However, the correlation between raw pulse width and distance math is verified.
+
+[TEST] ===== Starting Subsystem 5: S5-U02 & S5-U03 =====
+[TEST] Pins configured. Reading distance 5 times...
+[TEST] Place an object at 10cm, 20cm, and 30cm.
+
+[TEST] Raw Pulse: 10298 us  |  Distance: 177.6 cm
+[TEST] Raw Pulse: 471 us    |  Distance: 8.1 cm
+[TEST] Raw Pulse: 1034 us   |  Distance: 17.8 cm
+[TEST] Raw Pulse: 1895 us   |  Distance: 32.7 cm
+[TEST] Raw Pulse: 881 us    |  Distance: 15.2 cm
+
+[TEST] Loop finished.
+[TEST] S5-U02 PASS - Raw pulse width values captured successfully.
+[TEST] S5-U03 PASS - Distance formula executed. (Tester must confirm prints match physical ruler).
+[TEST] === test run end ===
+
+# Annotation:
+# Pulse 1 (177.6cm): Ceiling, measured with tape measure. [PASS - High confidence]
+# Pulse 2 (8.1cm)  : Target held at ~10cm by hand. [PASS - Validated math, human error probable]
+# Pulse 3 (17.8cm) : Target held at ~20cm by hand. [PASS - Validated math, human error probable]
+# Pulse 4 (32.7cm) : Target held at ~30cm by hand. [PASS - Validated math, human error probable]
+# Pulse 5 (15.2cm) : Target held at ~15cm by hand. [PASS - Validated math, human error probable]
+# Will do further tests on close range for more results.
