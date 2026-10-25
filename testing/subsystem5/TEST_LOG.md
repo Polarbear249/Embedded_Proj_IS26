@@ -27,4 +27,4 @@ Add a new row for every run. Never edit or delete old rows.
 
 | Date       | Test ID | Commit    | Tester | Result      | Log / evidence          | Notes |
 | ---------- | ------- | --------- | ------ | ----------- | ----------------------- | ----- |
-| YYYY-MM-DD | S5-U01  | `abc1234` |        | PASS / FAIL | `logs/YYYY-MM-DD_….txt` |       |
+| 2026-10-25 | S5-U01  | `d44957c` | Daryl  | PASS | `2026-10-25_s5_echo_voltage_run1.txt` | 100/100 pings. Verified 3.3V safe via Grove GP6/GP7. Used GP6 and GP7 due to wiring limitations. |
