@@ -52,15 +52,23 @@ int main(void)
         pwm_set_enabled(slice, true);
     }
 
-    /* Continuously test each driver input */
-    while (true)
-    {
-        for (uint i = 0U; i < 4U; i++)
-        {
-            motor_test(pins[i]);
-        }
+    /* Test each motor-driver input once */
+for (uint i = 0U; i < 4U; i++)
+{
+    motor_test(pins[i]);
+}
 
-        printf("Motor test complete\n");
-        sleep_ms(3000U);
-    }
+/* Stop all motor-driver inputs */
+for (uint i = 0U; i < 4U; i++)
+{
+    pwm_set_gpio_level(pins[i], 0U);
+}
+
+printf("Motor test finished. Motors stopped.\n");
+
+/* Stay idle without repeating the test */
+while (true)
+{
+    sleep_ms(1000U);
+}
 }
