@@ -26,7 +26,7 @@ subsystem, ask its owner or open a pull request for them to review.
 | 3 | IR line following and barcode decoding | | | `app_program/subsystem3/` | `testing/subsystem3/` |
 | 4 | IMU motion and terrain monitoring (GY-511, LSM303D) | | | `app_program/subsystem4/` | `testing/subsystem4/` |
 | 5 | Servo ultrasonic scanning and obstacle profiling | | | `app_program/subsystem5/` | `testing/subsystem5/` |
-| - | Vehicle Controller: mission state and coordination, no hardware. **CONFIRM** writer: Tribunal 1 lists Buddy 2 with all buddies; Buddy 4 is writing it | | | `app_program/vehicle_controller.*` | `testing/integration/` |
+| - | Vehicle Controller: mission state and coordination, no hardware. Owner: **Buddy 4** (Tribunal 1 listed Buddy 2 with all buddies; tell Buddy 2) | | | `app_program/vehicle_controller.*` | `testing/integration/` |
 
 Shared files (`app_program/app_main.c`, `app_program/app.h`, this file)
 are changed only by agreement of the team. The exception is claiming an empty
@@ -229,8 +229,8 @@ in the code; replace them as each owner creates the objects in section 5.
 
 ## 7. Open points
 
-1. Who writes the Vehicle Controller (Buddy 4 is; Tribunal 1 says Buddy 2
-   with all) and who owns `g_fault_mask` (VC or Motion).
+1. Who owns `g_fault_mask` (VC or Motion). The Vehicle Controller is owned
+   by Buddy 4.
 2. Liveness LED pin (GP14 or GP15) and its owner; move the example LED off
    GP19.
 3. Owner of the shared GPIO interrupt dispatcher (encoders and ECHO).

@@ -24,6 +24,8 @@ Define a test here before running it. Test IDs never change.
 | S4-U13 | LSM303D configured: CTRL1 (0x20) reads back 0x5F | | auto | `subsystem4_test.c` | `[TEST] S4-U13 PASS` |
 | S4-U14 | I2C1 bus scan finds the LSM303D at 0x1D | | auto | `subsystem4_test.c` | `[IMU] I2C1 scan: 0x1d (1 found)`, `[TEST] S4-U14 PASS` |
 | S4-U08 | IMU responds to motion | | manual | 1. Flash `make TEST=1` image. 2. When `[IMU] S4-U08 manual` appears, tilt the board ~90° on each axis, then turn it flat through 360° (5 s window). | the axis pointing down reads ≈ +1000 mg, others ≈ 0; mag X/Y swing through + and − while turning |
+| S4-U15 | IMU mounted on the car: rest vector on the flat floor is 1 g ± 20 % (50 samples, 1 s) | NFR6, FR7 | manual + auto | 1. Flash `make TEST=1` image. 2. When `[IMU] S4-U15 ramp` appears, put the car on the flat floor before the ramp, hands off (5 s). | `[IMU] rest vector` \|a\| 800–1200 mg, 50 of 50 reads ok, `[TEST] S4-U15 PASS`. Record which axis carries gravity (mounting orientation) |
+| S4-U16 | Tilt over a ramp: `tilt` (angle from the rest vector) follows the ramp; 30 s stream with no I2C1 read errors | FR7, A6 | manual + auto | 1. Measure the ramp: rise and run with a ruler, angle = atan(rise/run). 2. When `S4-U16 now push` appears, push the car slowly up, hold on the slope ~2 s, then over and down. | `[TEST] S4-U16 PASS`; while held still on the slope, `tilt` within ±1° of the measured ramp angle (pass limit to confirm after the first run); ≈ 0 again on the flat |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -86,5 +88,21 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-23 | S4-U07 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
 | 2026-10-23 | S4-U01 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7 |
 | 2026-10-23 | S4-U08 | `8b86919` | | PASS | `logs/2026-10-23_imu_unit_run7.txt` | run 7: every axis reached about 1 g: X -979 (still), Y -984 and +920, Z +1074 and -668. Mag X (+3090..-5364) and Y (-13151..+2069) both changed sign while turning. Samples were taken while moving, so they include hand acceleration (\|a\| up to ~1.5 g) and the other axes were not ≈ 0 |
+| 2026-10-26 | S4-U09 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8: IMU mounted on the car; build log `logs/2026-10-26_imu_test_build4.txt` |
+| 2026-10-26 | S4-U11 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U14 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U12 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U13 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U06 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8: on the car, x=200 y=18 z=1009 mg, \|a\| ≈ 1029 mg. Z is up; X ≈ +200 mg on flat ground means the module is mounted ~10-11° nose-tilted about Y (NFR6: level it or calibrate the offset) |
+| 2026-10-26 | S4-U07 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U08 | `b59546c`+ | | NOT RUN | `logs/2026-10-26_imu_unit_run8.txt` | run 8: car not moved during the 5 s window (readings constant, noise about ±10 mg); motion covered by S4-U16 |
+| 2026-10-26 | S4-U01 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8 |
+| 2026-10-26 | S4-U15 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8: rest vector x=126 y=30 z=943, \|a\| = 951 mg, 50/50 reads. Passed the ±20 % limit, but flat stretches later read \|a\| ≈ 1020 mg (x ≈ 170, z ≈ 1005), so the car was probably still being handled: flat ground then shows 1-4° instead of 0°. Limit too loose: tighten and add a stillness check |
+| 2026-10-26 | S4-U16 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run8.txt` | run 8: 300 samples, 0 read errors. Derived from x/z, not measured on the car: flat pitch ≈ +10° (mount offset), slope A ≈ 0° (t 14.4-19.3 s), slope B ≈ +19° (t 21.7-26.6 s), so ramp ≈ 9-11° each side; Y stays ≈ 0, so X is the travel axis. Ruler angle of the ramp not yet recorded. "max tilt 91.2°" is hand-push transients up to ~2 g, not slope. Loop period measured 110 ms for a 100 ms delay (tk_dly_tsk drift) |
+| 2026-10-26 | S4-U09, U11, U14, U12, U13, U07, U01 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run9.txt` | run 9: same image as run 8 |
+| 2026-10-26 | S4-U06 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run9.txt` | run 9: x=139 y=-55 z=1009 mg. Run 8 was x=200 y=18 on the same bench: module shifted ~3-4° between runs unless it was remounted (NFR6: rigid mount) |
+| 2026-10-26 | S4-U08 | `b59546c`+ | | NOT RUN | `logs/2026-10-26_imu_unit_run9.txt` | run 9: car not moved in the 5 s window |
+| 2026-10-26 | S4-U15 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run9.txt` | run 9: rest vector x=137 y=-59 z=1012, \|a\| = 1022 mg, car still (fixes run 8 issue) |
+| 2026-10-26 | S4-U16 | `b59546c`+ | | PASS | `logs/2026-10-26_imu_unit_run9.txt` | run 9: 0 read errors. Steady poses: t 7.8-11.3 s pure X change (x ≈ -235, -370 mg from rest, tilt ≈ 21°); later poses changed Y too (car rolled/turned), so axes not yet identified. Tester unsure of poses: repeat as a scripted book test (nose up, left side up) |
 
 <!-- Runs 5-7 (`8b86919`): the flashed image also contained subsystem1/task_led.c and subsystem2/task_producer.c restored from e4ec31d, because the repo does not link without them. IMU tests S4-U03..U08: build log in logs/2026-10-23_imu_test_build.txt. After each run, add a row per test after flashing build_make/s4_imu_test_smp1_usb_cdc_wifi_test.uf2 and saving the console to logs/YYYY-MM-DD_imu_unit.txt -->

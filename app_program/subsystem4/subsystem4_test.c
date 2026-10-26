@@ -27,15 +27,44 @@
 #define IMU_MAG_SAT_POS         (32767)     // full-scale reading
 #define IMU_MAG_SAT_NEG         (-32768)
 
+// S4-U15 / S4-U16 ramp test
+#define IMU_RAMP_PREP_MS        (5000)      // time to put the car down
+#define IMU_RAMP_CAL_SAMPLES    (50)        // 50 x 20 ms = 1 s at rest
+#define IMU_RAMP_CAL_MS         (20)        //   (one 50 Hz sample each)
+#define IMU_RAMP_SAMPLES        (300U)      // 300 x 100 ms = 30 s
+#define IMU_RAMP_MS             (100)
+#define IMU_AXES                (3U)
+
+// Integer atan from a tan(k deg) x 10000 table, k = 0..45
+#define IMU_TAN_SCALE           (10000U)
+#define IMU_TAN_STEPS           (45U)
+#define IMU_DDEG_PER_DEG        (10U)       // results in 0.1 deg units
+#define IMU_DDEG_90             (900U)
+#define IMU_DDEG_180            (1800U)
+
+static uint16_t const g_tan_x10000[IMU_TAN_STEPS + 1U] =
+{
+       0U,  175U,  349U,  524U,  699U,  875U, 1051U, 1228U, 1405U, 1584U,
+    1763U, 1944U, 2126U, 2309U, 2493U, 2679U, 2867U, 3057U, 3249U, 3443U,
+    3640U, 3839U, 4040U, 4245U, 4452U, 4663U, 4877U, 5095U, 5317U, 5543U,
+    5774U, 6009U, 6249U, 6494U, 6745U, 7002U, 7265U, 7536U, 7813U, 8098U,
+    8391U, 8693U, 9004U, 9325U, 9657U, 10000U
+};
+
 #if TM_CONSOLE_USB_CDC
 // libtm USB glue: true once a terminal has opened the port (DTR)
 extern int tm_tusb_connected(void);
 #endif
 
-static void imu_wait_for_terminal(void);
-static bool imu_scan_bus(void);
-static bool imu_mag_axis_ok(int16_t value);
-static void imu_tests(void);
+static void     imu_wait_for_terminal(void);
+static bool     imu_scan_bus(void);
+static bool     imu_mag_axis_ok(int16_t value);
+static void     imu_tests(void);
+static void     imu_ramp_test(bool *p_b_rest_ok, bool *p_b_stream_ok);
+static uint32_t imu_tilt_ddeg(int32_t const p_ref[], imu_sample_t const *p_now);
+static uint32_t imu_angle_ddeg(uint64_t opposite, uint64_t adjacent);
+static uint32_t imu_atan_ddeg(uint32_t tan_x10000);
+static uint32_t imu_isqrt(uint64_t value);
 
 void
 subsystem4_test (void)
@@ -77,6 +106,8 @@ imu_tests (void)
     uint32_t      idx;
     bool          b_idle;
     bool          b_found;
+    bool          b_rest_ok = false;
+    bool          b_stream_ok = false;
 
     TEST_INIT();
 
@@ -169,7 +200,217 @@ imu_tests (void)
         tk_dly_tsk(IMU_STREAM_MS);
     }
 
+    // S4-U15 / S4-U16 (manual): car on the flat floor, then over a ramp
+    imu_ramp_test(&b_rest_ok, &b_stream_ok);
+    TEST_CHECK("S4-U15", b_rest_ok,
+               "rest vector on flat floor is 1 g +-20 %");
+    TEST_CHECK("S4-U16", b_stream_ok,
+               "30 s ramp stream with no I2C1 read errors");
+
     TEST_SUMMARY("subsystem4 IMU");
+}
+
+/*
+ * S4-U15 / S4-U16: ramp. Average gravity on the flat floor, then print
+ * the tilt away from that vector while the car is pushed over a ramp.
+ * Tilt from the rest vector does not depend on how the module is
+ * mounted, but it has no sign (up and down slopes both read positive).
+ */
+static void
+imu_ramp_test (bool *p_b_rest_ok, bool *p_b_stream_ok)
+{
+    imu_sample_t  sample = {0};
+    i2c1_result_t result;
+    int32_t       sum[IMU_AXES] = {0, 0, 0};
+    int32_t       ref[IMU_AXES] = {0, 0, 0};
+    int32_t       ref2;
+    int32_t       good = 0;
+    uint32_t      errors = 0U;
+    uint32_t      tilt;
+    uint32_t      max_tilt = 0U;
+    uint32_t      idx;
+    uint32_t      axis;
+    SYSTIM        start;
+    SYSTIM        now;
+
+    tm_printf((UB*)"[IMU] S4-U15 ramp: put the car on the flat floor"
+              " before the ramp, hands off, %d s\n", IMU_RAMP_PREP_MS / 1000);
+    tk_dly_tsk(IMU_RAMP_PREP_MS);
+
+    for (idx = 0U; idx < (uint32_t)IMU_RAMP_CAL_SAMPLES; idx++)
+    {
+        if (I2C1_OK == imu_read(&sample))
+        {
+            sum[0] += sample.acc_x_mg;
+            sum[1] += sample.acc_y_mg;
+            sum[2] += sample.acc_z_mg;
+            good++;
+        }
+
+        tk_dly_tsk(IMU_RAMP_CAL_MS);
+    }
+
+    for (axis = 0U; (axis < IMU_AXES) && (good > 0); axis++)
+    {
+        ref[axis] = sum[axis] / good;
+    }
+
+    ref2 = (ref[0] * ref[0]) + (ref[1] * ref[1]) + (ref[2] * ref[2]);
+    tm_printf((UB*)"[IMU] rest vector mg x=%d y=%d z=%d  |a|=%u"
+              "  (%d of %d reads ok)\n", (int)ref[0], (int)ref[1],
+              (int)ref[2], (unsigned)imu_isqrt((uint64_t)ref2), (int)good,
+              IMU_RAMP_CAL_SAMPLES);
+    *p_b_rest_ok = (IMU_RAMP_CAL_SAMPLES == good)
+                   && (ref2 >= (IMU_1G_MIN_MG * IMU_1G_MIN_MG))
+                   && (ref2 <= (IMU_1G_MAX_MG * IMU_1G_MAX_MG));
+
+    tm_printf((UB*)"[IMU] S4-U16 now push the car slowly up and over the"
+              " ramp (%u s)\n",
+              (unsigned)((IMU_RAMP_SAMPLES * IMU_RAMP_MS) / 1000U));
+    tk_get_tim(&start);
+
+    for (idx = 0U; idx < IMU_RAMP_SAMPLES; idx++)
+    {
+        result = imu_read(&sample);
+        tk_get_tim(&now);
+
+        if (I2C1_OK == result)
+        {
+            tilt = imu_tilt_ddeg(ref, &sample);
+
+            if (tilt > max_tilt)
+            {
+                max_tilt = tilt;
+            }
+
+            tm_printf((UB*)"[IMU] ramp t=%5u ms  acc mg %5d %5d %5d"
+                      "  tilt %3u.%u deg\n", (unsigned)(now.lo - start.lo),
+                      sample.acc_x_mg, sample.acc_y_mg, sample.acc_z_mg,
+                      (unsigned)(tilt / IMU_DDEG_PER_DEG),
+                      (unsigned)(tilt % IMU_DDEG_PER_DEG));
+        }
+        else
+        {
+            errors++;
+            tm_printf((UB*)"[IMU] ramp read error: %s\n",
+                      i2c1_result_name(result));
+        }
+
+        tk_dly_tsk(IMU_RAMP_MS);
+    }
+
+    tm_printf((UB*)"[IMU] ramp max tilt %u.%u deg, %u read errors\n",
+              (unsigned)(max_tilt / IMU_DDEG_PER_DEG),
+              (unsigned)(max_tilt % IMU_DDEG_PER_DEG), (unsigned)errors);
+    *p_b_stream_ok = (0U == errors);
+}
+
+/*
+ * Angle between the rest vector and the current reading, 0.1 deg units,
+ * from atan2(|ref x now|, ref . now). Exact integer inputs, so small
+ * angles keep their resolution (an acos of the dot product would not).
+ */
+static uint32_t
+imu_tilt_ddeg (int32_t const p_ref[], imu_sample_t const *p_now)
+{
+    int64_t  now_x = p_now->acc_x_mg;
+    int64_t  now_y = p_now->acc_y_mg;
+    int64_t  now_z = p_now->acc_z_mg;
+    int64_t  cross_x = (p_ref[1] * now_z) - (p_ref[2] * now_y);
+    int64_t  cross_y = (p_ref[2] * now_x) - (p_ref[0] * now_z);
+    int64_t  cross_z = (p_ref[0] * now_y) - (p_ref[1] * now_x);
+    int64_t  dot = (p_ref[0] * now_x) + (p_ref[1] * now_y)
+                   + (p_ref[2] * now_z);
+    uint64_t cross2 = (uint64_t)((cross_x * cross_x) + (cross_y * cross_y)
+                                 + (cross_z * cross_z));
+    uint64_t opposite = imu_isqrt(cross2);
+    uint32_t angle;
+
+    if (dot >= 0)
+    {
+        angle = imu_angle_ddeg(opposite, (uint64_t)dot);
+    }
+    else
+    {
+        angle = IMU_DDEG_180 - imu_angle_ddeg(opposite, (uint64_t)(-dot));
+    }
+
+    return (angle);
+}
+
+// atan(opposite / adjacent) for 0..90 deg, 0.1 deg units
+static uint32_t
+imu_angle_ddeg (uint64_t opposite, uint64_t adjacent)
+{
+    uint32_t angle = 0U;
+
+    if (0U == adjacent)
+    {
+        angle = (0U == opposite) ? 0U : IMU_DDEG_90;
+    }
+    else if (opposite <= adjacent)
+    {
+        angle = imu_atan_ddeg((uint32_t)((opposite * IMU_TAN_SCALE)
+                                         / adjacent));
+    }
+    else
+    {
+        angle = IMU_DDEG_90 - imu_atan_ddeg((uint32_t)((adjacent
+                                            * IMU_TAN_SCALE) / opposite));
+    }
+
+    return (angle);
+}
+
+// tan x 10000 (0..10000) -> 0..450 (0.1 deg), linear between table steps
+static uint32_t
+imu_atan_ddeg (uint32_t tan_x10000)
+{
+    uint32_t deg = 0U;
+    uint32_t span;
+
+    while ((deg < (IMU_TAN_STEPS - 1U))
+           && (tan_x10000 >= g_tan_x10000[deg + 1U]))
+    {
+        deg++;
+    }
+
+    span = (uint32_t)g_tan_x10000[deg + 1U] - g_tan_x10000[deg];
+
+    return ((deg * IMU_DDEG_PER_DEG)
+            + ((((tan_x10000 - g_tan_x10000[deg]) * IMU_DDEG_PER_DEG)
+                + (span / 2U)) / span));
+}
+
+// Integer square root (bit by bit)
+static uint32_t
+imu_isqrt (uint64_t value)
+{
+    uint64_t rem = value;
+    uint64_t root = 0U;
+    uint64_t bit = (uint64_t)1U << 62;
+
+    while (bit > rem)
+    {
+        bit >>= 2;
+    }
+
+    while (0U != bit)
+    {
+        if (rem >= (root + bit))
+        {
+            rem -= root + bit;
+            root = (root >> 1) + bit;
+        }
+        else
+        {
+            root >>= 1;
+        }
+
+        bit >>= 2;
+    }
+
+    return ((uint32_t)root);
 }
 
 static bool
