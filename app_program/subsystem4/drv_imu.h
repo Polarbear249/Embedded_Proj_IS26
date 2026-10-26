@@ -7,6 +7,11 @@
  * accelerometer + 3-axis magnetometer behind ONE I2C address, no gyro.
  *
  * Wiring (TEAM.md section 2): SDA = GP2, SCL = GP3, VCC = 3V3, GND.
+ *
+ * Axes on the car (measured, S4-U19 run 12, 2026-10-26): +X forward
+ * (toward the ball caster), +Y left, +Z up. The GY-511 silkscreen
+ * arrows are for the LSM303DLHC and do not match: ignore them.
+ * Re-run S4-U17..U19 after any remount.
  * Bus: I2C1 through drv_i2c1. Call only from the I2C1 owning task.
  * Registers and values: ST LSM303D datasheet (DocID023312).
  */
