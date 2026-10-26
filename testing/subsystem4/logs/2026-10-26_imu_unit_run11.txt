@@ -1,0 +1,57 @@
+Date:    2026-10-26
+Run:     11 (guided axis test, 3-point car version)
+Branch:  IMU_Branch, code as in commit 9b09539
+Image:   build_make/s4_imu_axis_smp1_usb_cdc_wifi_test.uf2 (make TEST=1 -j8)
+Setup:   GY-511 (LSM303D) on the car: 2 rear drive wheels + front ball
+         caster. Block: 23 mm (stated by tester). Wheel track W about
+         90 mm (stated). Axle-to-ball distance L not measured.
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the car flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=8 y=-21 z=1038  mag x=-4196 y=4317 z=2816
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- axis test: you need a flat block ~2 cm high -----
+[IMU] for each pose: place the car, then hands off when told
+
+[IMU] >>> pose 1/4  FLAT: car on the flat floor  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=17 y=-13 z=1031  |a|=1031  spread 45 mg  (50/50 reads ok)
+
+[IMU] >>> pose 2/4  NOSE UP: ball caster on the block, both wheels on the floor  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=305 y=-14 z=984  |a|=1030  spread 27 mg  (50/50 reads ok)
+
+[IMU] >>> pose 3/4  FLAT again: car back on the floor, same spot  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=18 y=-14 z=1031  |a|=1031  spread 39 mg  (50/50 reads ok)
+
+[IMU] >>> pose 4/4  LEFT UP: car's own LEFT wheel on the block, right wheel and ball on the floor  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-17 y=-211 z=1008  |a|=1029  spread 27 mg  (50/50 reads ok)
+[TEST] S4-U17 PASS  all 4 poses held still (|a| 1 g +-10 %, spread <= 60 mg)
+[IMU] flat 1 vs flat 3 (mg): dx=1 dy=-1 dz=0
+[TEST] S4-U18 PASS  flat pose repeats within 30 mg (module fixed on mount)
+[IMU] nose up - flat (mg): dx=288 dy=-1 dz=-47
+[IMU] left up - flat (mg): dx=-34 dy=-198 dz=-23
+[IMU] AXES  forward = +X   left = -Y   up = +Z
+[IMU] forward x left != up: a pose was wrong or the module is turned on the car
+[IMU] with this forward and up, left must be +Y: lift the car's own LEFT wheels (as seen from the driver's seat) and repeat
+[TEST] S4-U19 FAIL  forward/left/up axes found, one each, right-handed   (../app_program/subsystem4/imu_unit_test.c:316)
+[IMU] nose up tilt 16.3 deg
+[IMU] left up tilt 11.3 deg
+[IMU] mount tilt (module vs level) 1.2 deg
+[IMU] expected: nose up = asin(h / L), L = rear axle to ball contact
+[IMU]           left up = asin(h / d), d = L x W / sqrt(L^2 + (W/2)^2), W = wheel track
+[TEST] subsystem4 IMU axes SUMMARY 2 passed, 1 failed
+[TEST] === test run end ===
