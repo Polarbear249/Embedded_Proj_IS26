@@ -9,15 +9,21 @@
  *
  * Part 1 (bench): bus, identity, configuration, one sample at rest.
  * Part 2 (S4-U17..U19, guided): finds which sensor axis points forward,
- * left and up on the car. Needs a book (or any flat block). The console
- * asks for four poses in turn:
+ * left and up on the car. Needs a flat block about 2 cm high. The car
+ * has two rear wheels and a front ball caster. The console asks for
+ * four poses in turn:
  *   1 FLAT     car on the flat floor
- *   2 NOSE UP  front wheels on the book, rear wheels on the floor
+ *   2 NOSE UP  ball caster on the block, both wheels on the floor
  *   3 FLAT     car back on the floor (checks the module did not shift)
- *   4 LEFT UP  left wheels on the book, right wheels on the floor
+ *   4 LEFT UP  left wheel on the block, right wheel and ball on floor
  * At rest an accelerometer axis reads +1000 mg x cos(angle to straight
  * up), so the axis that points uphill reads MORE. Lifting the nose
  * raises the forward axis, lifting the left side raises the left axis.
+ *
+ * Three contact points: lifting one wheel tips the car about the line
+ * from the other wheel to the ball, a diagonal, so pose 4 also changes
+ * the forward axis by (track / 2) / (axle-to-ball) of the side change.
+ * The left axis is therefore picked with the forward axis left out.
  */
 
 #include "imu_unit_test.h"
@@ -79,9 +85,10 @@ static uint16_t const g_tan_x10000[IMU_TAN_STEPS + 1U] =
 static char const * const g_pose_prompt[IMU_POSES] =
 {
     "FLAT: car on the flat floor",
-    "NOSE UP: front wheels on the book, rear wheels on the floor",
+    "NOSE UP: ball caster on the block, both wheels on the floor",
     "FLAT again: car back on the floor, same spot",
-    "LEFT UP: left wheels on the book, right wheels on the floor"
+    "LEFT UP: car's own LEFT wheel on the block, right wheel and ball"
+    " on the floor"
 };
 
 // [0] = negative direction, [1] = positive direction
@@ -219,6 +226,7 @@ imu_axis_tests (void)
     int32_t  pose[IMU_POSES][IMU_AXES] = {{0}};
     int32_t  fwd_delta[IMU_AXES] = {0, 0, 0};
     int32_t  left_delta[IMU_AXES] = {0, 0, 0};
+    int32_t  side_delta[IMU_AXES] = {0, 0, 0};
     int32_t  up_ref[IMU_AXES] = {0, 0, 0};
     uint32_t idx;
     uint32_t axis;
@@ -237,8 +245,8 @@ imu_axis_tests (void)
 
     TEST_INIT();
 
-    tm_printf((UB*)"[IMU] ----- axis test: you need a book ~2-4 cm thick"
-              " -----\n[IMU] for each pose: place the car, then hands off"
+    tm_printf((UB*)"[IMU] ----- axis test: you need a flat block ~2 cm"
+              " high -----\n[IMU] for each pose: place the car, then hands off"
               " when told\n");
 
     for (idx = 0U; idx < IMU_POSES; idx++)
@@ -277,7 +285,15 @@ imu_axis_tests (void)
     // The axis that rose is the one pointing that way
     up = imu_main_axis(pose[IMU_POSE_FLAT], IMU_UP_MIN_MG, &b_up_clear);
     fwd = imu_main_axis(fwd_delta, IMU_MIN_DELTA_MG, &b_fwd_clear);
-    left = imu_main_axis(left_delta, IMU_MIN_DELTA_MG, &b_left_clear);
+
+    // Pose 4 tips about a diagonal: drop the forward part before
+    // choosing the side axis (see the file header)
+    for (axis = 0U; axis < IMU_AXES; axis++)
+    {
+        side_delta[axis] = (axis == fwd) ? 0 : left_delta[axis];
+    }
+
+    left = imu_main_axis(side_delta, IMU_MIN_DELTA_MG, &b_left_clear);
     b_up_pos = (pose[IMU_POSE_FLAT][up] > 0);
     b_fwd_pos = (fwd_delta[fwd] > 0);
     b_left_pos = (left_delta[left] > 0);
@@ -301,7 +317,7 @@ imu_axis_tests (void)
                b_fwd_clear && b_left_clear && b_up_clear && b_frame_ok,
                "forward/left/up axes found, one each, right-handed");
 
-    // Tilt of each pose from flat; compare with asin(book / wheelbase)
+    // Tilt of each pose from flat; expected values in the hint below
     imu_print_ddeg("nose up tilt",
                    imu_tilt_ddeg(pose[IMU_POSE_FLAT],
                                  pose[IMU_POSE_NOSE_UP]));
@@ -313,9 +329,9 @@ imu_axis_tests (void)
     up_ref[up] = b_up_pos ? IMU_1G_MG : -IMU_1G_MG;
     imu_print_ddeg("mount tilt (module vs level)",
                    imu_tilt_ddeg(up_ref, pose[IMU_POSE_FLAT]));
-    tm_printf((UB*)"[IMU] expected: nose up = asin(h / front-rear axle"
-              " distance)\n[IMU]           left up = asin(h / left-right"
-              " wheel track)\n");
+    tm_printf((UB*)"[IMU] expected: nose up = asin(h / L), L = rear axle"
+              " to ball contact\n[IMU]           left up = asin(h / d),"
+              " d = L x W / sqrt(L^2 + (W/2)^2), W = wheel track\n");
 
     TEST_SUMMARY("subsystem4 IMU axes");
 }
