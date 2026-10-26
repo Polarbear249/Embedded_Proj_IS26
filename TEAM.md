@@ -1,7 +1,11 @@
 # Team and subsystems
 
-The tables are pre-filled with the **example** in `app_program/` (marked
-*example*). Replace those rows with your own as you replace the example code.
+Team IS26, INF2004 Autonomous Robotic Car Challenge ("PicoCar").
+
+The tables below record the team's decisions from the **Week 6 design
+document** and **Tribunal 1 (Week 8, 19 Oct 2026)**. Rows marked **CONFIRM**
+are still open (see section 7). The template's example code (LED, producer,
+consumer, monitor) is still in `app_program/` until each owner replaces it.
 
 Fill this in at the start of the project and keep it up to date. It is the
 single place that says **who owns what**, so that five people can work in
@@ -17,11 +21,12 @@ subsystem, ask its owner or open a pull request for them to review.
 
 | # | Subsystem (what it does) | Student ID | GitHub username | Code | Tests |
 |---|---|---|---|---|---|
-| 1 | *example:* LED heartbeat on GP19 | | | `app_program/subsystem1/` | `testing/subsystem1/` |
-| 2 | *example:* Producer: makes a sample every 300 ms | | | `app_program/subsystem2/` | `testing/subsystem2/` |
-| 3 | *example:* Consumer: collects samples into statistics | | | `app_program/subsystem3/` | `testing/subsystem3/` |
-| 4 | *example:* Monitor: prints reports, pauses the LED | | | `app_program/subsystem4/` | `testing/subsystem4/` |
-| 5 | | | | `app_program/subsystem5/` | `testing/subsystem5/` |
+| 1 | WiFi communication, MQTT command and telemetry | | | `app_program/subsystem1/` | `testing/subsystem1/` |
+| 2 | Motion control: motors, encoders, PID speed, encoder turns | | | `app_program/subsystem2/` | `testing/subsystem2/` |
+| 3 | IR line following and barcode decoding | | | `app_program/subsystem3/` | `testing/subsystem3/` |
+| 4 | IMU motion and terrain monitoring (GY-511, LSM303D) | | | `app_program/subsystem4/` | `testing/subsystem4/` |
+| 5 | Servo ultrasonic scanning and obstacle profiling | | | `app_program/subsystem5/` | `testing/subsystem5/` |
+| - | Vehicle Controller: mission state and coordination, no hardware. **CONFIRM** writer: Tribunal 1 lists Buddy 2 with all buddies; Buddy 4 is writing it | | | `app_program/vehicle_controller.*` | `testing/integration/` |
 
 Shared files (`app_program/app_main.c`, `app_program/app.h`, this file)
 are changed only by agreement of the team. The exception is claiming an empty
@@ -39,41 +44,46 @@ and then fail once they are combined, and two outputs driving the same pin
 against each other can damage it. Writing the claim down first means a clash
 is spotted when someone edits this table, not hours later on the bench.
 
-**No instructor check needed.** The team keeps this table itself. You do not
-need the instructor, or the rest of the team, to check or approve a claim:
-if the row is empty, fill it in and commit. If two people claim the same
-pin, they agree between themselves who moves. Only the *reserved* rows are
-fixed.
+**Approval before wiring.** The table below is the Week 6 pin table, agreed
+at Tribunal 1. The course requires the pin layout to be **approved before any
+wire is connected**, and any pin change goes through the same approval and is
+then recorded here. Inside the team, claim a free row and agree clashes
+between yourselves; only the *reserved* and *board* rows are fixed.
 
 | Pin | Owner | Used for |
 |---|---|---|
 | GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
-| GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | S4 | I2C1 SDA — GY-511 IMU |
-| GP3 | S4 | I2C1 SCL — GY-511 IMU |
-| GP4 | | |
-| GP5 | | |
-| GP6 | | |
-| GP7 | | |
-| GP8 | | |
-| GP9 | | |
-| GP10 | | |
-| GP11 | | |
-| GP12 | | |
-| GP13 | | |
-| GP14 | | |
-| GP15 | | |
-| GP16 | | |
-| GP17 | | |
-| GP18 | | |
-| GP19 | *example:* S1 | external LED (LED + 330 Ω to GND) |
-| GP20 | | |
-| GP21 | | |
-| GP22 | | |
-| GP26 | | (ADC0 capable) |
-| GP27 | | (ADC1 capable) |
-| GP28 | | (ADC2 capable) |
+| GP0 | S2 | Right wheel encoder A (Grove 1). **Never build with `CRASH_REPORT=1`** on the car: it takes GP0/GP1 for the crash UART |
+| GP1 | S2 | Right wheel encoder B (Grove 1). See GP0 |
+| GP2 | S4 | I2C1 SDA, GY-511 IMU (Grove 2 / Maker port) |
+| GP3 | S4 | I2C1 SCL, GY-511 IMU (Grove 2 / Maker port) |
+| GP4 | S2 | Left wheel encoder A (Grove 3) |
+| GP5 | S2 | Left wheel encoder B (Grove 3) |
+| GP6 | S3 | Left IR DOUT (Grove 5) |
+| GP7 | S3 | Right IR DOUT, barcode (Grove 7; AOUT unused) |
+| GP8 | S2 | Motor 1 input A (M1A, fixed by Robo Pico) |
+| GP9 | S2 | Motor 1 input B (M1B, fixed by Robo Pico) |
+| GP10 | S2 | Motor 2 input A (M2A, fixed by Robo Pico) |
+| GP11 | S2 | Motor 2 input B (M2B, fixed by Robo Pico) |
+| GP12 | S5 | Scan servo signal (servo port 1) |
+| GP13 | | spare servo-port pin; shares PWM slice 6 with GP12, do not use for the LED |
+| GP14 | | spare servo-port pin; **CONFIRM** liveness LED here or on GP15 |
+| GP15 | | spare servo-port pin |
+| GP16 | S5 | HC-SR04+ TRIG (Grove 4) |
+| GP17 | S5 | HC-SR04+ ECHO, direct 3.3 V (Grove 4) |
+| GP18 | *board* | NeoPixel RGB LED: reserved |
+| GP19 | S3 | Centre IR DOUT (GPIO breakout). The template's example LED (`S1_LED_PIN`) still uses GP19 and must move |
+| GP20 | *board* | Programmable button: reserved |
+| GP21 | *board* | Programmable button: reserved |
+| GP22 | *board* | Piezo buzzer: reserved |
+| GP26 | S3 | Left IR AOUT (ADC0) |
+| GP27 | S3 | Centre IR AOUT (ADC1) |
+| GP28 | *board* | VBAT sense or spare ADC2: keep free |
+
+Notes
+- GY-511: power it from the **3V3 pin only**; never connect VIN and 3V3
+  together. INT1, INT2 and DRDY are not wired; the IMU is polled.
+- HC-SR04+ is the 3.3 V variant; never feed 5 V into a GPIO.
 
 ## 3. Peripherals
 
@@ -105,13 +115,17 @@ the drivers have no locking to stop it.
 
 | Peripheral | Owner subsystem | Owning task | Pins |
 |---|---|---|---|
+| UART0 | *unused* | (`CRASH_REPORT=1` would take it; not allowed on the car, GP0/GP1 are encoders) | |
 | UART1 | | | |
 | I2C0 | | | |
-| I2C1 (own polled driver `subsystem4/drv_i2c1.c`; kernel I2C driver stays off) | S4 | IMU task (tests: initial task) | GP2 SDA, GP3 SCL |
+| I2C1 (own polled driver `subsystem4/drv_i2c1.c`; kernel I2C driver stays off) | S4 | IMU / Terrain task (tests: initial task) | GP2 SDA, GP3 SCL |
 | SPI0 | | | |
 | SPI1 | | | |
-| ADC | | | GP26–GP28 |
-| PWM slices (list) | | | |
+| ADC | S3 | Line / Barcode task | GP26 (ADC0), GP27 (ADC1); GP28 unused |
+| PWM slice 4 (motor 1) | S2 | Motion Control task | GP8, GP9 |
+| PWM slice 5 (motor 2) | S2 | Motion Control task | GP10, GP11 |
+| PWM slice 6 (servo) | S5 | Obstacle Scan task | GP12 (GP13 shares the slice) |
+| GPIO edge interrupts (encoders, ECHO) | **CONFIRM** owner | one shared GPIO interrupt dispatcher, minimal ISR work (store raw counts/timestamps), no interrupt disabling | GP0, GP1, GP4, GP5, GP17 |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
 
 ### WiFi and MQTT are special
@@ -141,18 +155,25 @@ What students *can* do:
 
 ## 4. Task priorities
 
-1 is the highest. 1–4 are used by the kernel (USB console 3, WiFi 4). Each subsystem gets its own band by default;
-change it only by team agreement. Write down every task you create.
+1 is the highest. 1–4 are used by the kernel (USB console 3, WiFi 4). The
+team's task table (Week 6 Section 3, agreed at Tribunal 1) **replaces the
+template's default bands 12–21**. Change it only by team agreement, and
+update the `S*_PRI_*` macros in each `subsystemN.h` to match (the example
+code still uses 12–21). Write down every task you create.
 
-| Subsystem | Priority band | Tasks (name – priority – core) |
-|---|---|---|
-| 1 | 12–13 | *example:* led_task – 12 – any |
-| 2 | 14–15 | *example:* producer_task – 14 – core 1 |
-| 3 | 16–17 | *example:* consumer_task – 16 – core 0 |
-| 4 | 18–19 | *example:* monitor_task – 18 – any |
-| 5 | 20–21 | |
+| Task | Subsystem | Priority | Period | Core |
+|---|---|---|---|---|
+| Motion Control | 2 | 5 | 10 ms | |
+| Line / Barcode | 3 | 6 | 10 ms | |
+| Vehicle Controller | shared | 7 | event-driven + 20 ms supervisory tick | |
+| Obstacle Scan | 5 | 8 | >= 60 ms between ultrasonic triggers | |
+| IMU / Terrain | 4 | 9 | 10 ms | |
+| WiFi / MQTT | 1 | 10 | 200 ms telemetry, 1 s heartbeat | |
+| Liveness LED | **CONFIRM** owner | | | |
 
-Core: `TP_PRC1` = core 0, `TP_PRC2` = core 1, or "any".
+Core: `TP_PRC1` = core 0, `TP_PRC2` = core 1, or "any". Cores are not yet
+decided. The 10 ms tasks use absolute wake-up times or a cyclic handler, not
+`tk_dly_tsk`.
 
 ## 5. Interfaces between subsystems
 
@@ -160,14 +181,27 @@ Every arrow between two subsystems is listed here. The **provider** creates
 the kernel object and publishes its ID in its own `subsystemN.h`; the **user** only
 sends to it or waits on it. Agree on the data format before coding.
 
+"VC" is the Vehicle Controller. "Kernel type TBD" means the report names the
+object but the µT-Kernel object type is not yet chosen.
+
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
-| IF-01 | S2 → S3 | mailbox (owned by S3) | `mbx_samples` | `SAMPLE_MSG` in `subsystem2.h` | *example* |
-| IF-02 | S3 → S2 | semaphore + fixed memory pool (owned by S2) | `sem_slots`, `mpf_samples` | receiver returns the block, then 1 slot | *example* |
-| IF-03 | S3 → S4 | message buffer + event flag (owned by S4) | `mbf_summary`, `flg_events` | text line ≤ `S4_SUMMARY_MAX` bytes, then `FLG_BATCH` | *example* |
-| IF-04 | S4 → S3 | shared data under a mutex (owned by S3) | `app_stats`, `mtx_stats` | `APP_STATS`, read only while locked | *example* |
-| IF-05 | S4 → S1 | task control | `tid_led` | `tk_sus_tsk` / `tk_rsm_tsk` / `tk_chg_pri` | *example* |
-| IF-06 | | | | | |
+| IF-01 | VC → S2 | queue (kernel type TBD, owned by S2) | `Q_motion` | packed movement commands | Tribunal 1 |
+| IF-02 | VC → S2 | event flag (owned by S2) | `EVG_stop` | safety stop, checked every control cycle; outranks `Q_motion` | Tribunal 1 |
+| IF-03 | S3, S4, S5, S1 → VC | queue (kernel type TBD, owned by VC) | `Q_events` | packed event header, bounded depth, overflow flag; header layout **CONFIRM** | Tribunal 1 |
+| IF-04 | S3, S4, S5, S1 → VC | event flag (owned by VC) | `EVG_sys` | event notification with `tk_set_flg`; wait/clear options **CONFIRM** | Tribunal 1 |
+| IF-05 | all → VC | shared word, atomic access | `g_fault_mask` | latched fault bits: motor stall, encoder fault, IMU fault, no echo, WiFi loss. Owner **CONFIRM**: VC (Version C) or S2 | Tribunal 1 |
+| IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop | Tribunal 1 |
+| IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `Q_telem` | 13-byte packed snapshot, no shared struct | Tribunal 1 |
+| IF-08 | S1 → VC | queue (kernel type TBD, owned by VC) | `Q_cmd` | validated commands | Tribunal 1 |
+| IF-09 | S5 → VC | queue (kernel type TBD, owned by VC) | `Q_profile` | packed `ObstacleProfile_t`: three 9-bit distances in 32 bits | Tribunal 1 |
+| IF-10 | S2 → S4 | aligned 32-bit word, single writer, no lock | **TBD** | encoder distance for hump height, every 10 ms | **PROPOSED** |
+| IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer, no lock | **TBD** | hump result, 8-bit height clamped (mm), written on hump end | Tribunal 1 |
+
+Safety path: S5 confirms an obstacle and reports it to VC; VC sets
+`EVG_stop`; S2 stops the motors and the encoders confirm stationary;
+scanning or bypass planning starts only after that. S2 also stops the
+motors if VC goes silent (command timeout).
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -175,7 +209,8 @@ Each interface is tested by at least one integration test
 ## 6. Kernel object budget
 
 Limits are set in `config/config.h`. If the team needs more, raise the
-limit there. The numbers below are the example's usage.
+limit there. The numbers below are the **template example's** usage, still
+in the code; replace them as each owner creates the objects in section 5.
 
 | Object | Limit | S1 | S2 | S3 | S4 | S5 |
 |---|---|---|---|---|---|---|
@@ -191,3 +226,16 @@ limit there. The numbers below are the example's usage.
 | Alarm handler | 12 | | | | 1 | |
 
 (The kernel's USB and WiFi service tasks also use a few of these.)
+
+## 7. Open points
+
+1. Who writes the Vehicle Controller (Buddy 4 is; Tribunal 1 says Buddy 2
+   with all) and who owns `g_fault_mask` (VC or Motion).
+2. Liveness LED pin (GP14 or GP15) and its owner; move the example LED off
+   GP19.
+3. Owner of the shared GPIO interrupt dispatcher (encoders and ECHO).
+4. Kernel object type for each `Q_*` queue, the `Q_events` header layout,
+   and the `EVG_sys` wait/clear options.
+5. Encoder distance word from Motion to IMU (IF-10).
+6. Core assignment for each task.
+7. MQTT code inside `cyw43_utk_task` needs team and instructor agreement.
