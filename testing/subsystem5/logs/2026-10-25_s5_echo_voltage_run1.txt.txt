@@ -1,0 +1,11 @@
+# S5 Ultrasonic unit test, run 1, 2026-10-25
+# image: subsystem5_test build 1
+# console output as pasted by the tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# note: notice the wiring is different from the report, this is because of cable limitations
+
+[TEST] ===== Starting Subsystem 5: S5-U01 =====
+[TEST] Pins configured (TRIG: GP6, ECHO: GP7). Firing 100 pings...
+[TEST] Loop finished. Successful ECHO reads: 100 / 100
+[TEST] S5-U01 PASS - 100 pings fired without hardware damage. ECHO pin handled 3.3V logic.
+[TEST] === test run end ===
