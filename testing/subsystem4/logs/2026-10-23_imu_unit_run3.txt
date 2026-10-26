@@ -1,0 +1,28 @@
+# S4 IMU unit test, run 3, 2026-10-23
+# image: s4_imu_test build 2 (own I2C1 driver drv_i2c1.c), base ad3ac7c + uncommitted changes
+# console output as pasted by the tester (first character of the banner line cut off in the paste)
+
+IMU] ===== subsystem 4 IMU test (GY-511) =====
+[IMU] keep the board flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 FAIL  I2C1 init + sensor configuration writes ACKed   (../app_program/subsystem4/subsystem4_test.c:97)
+[IMU] init: NACK_ADDR (no device at address) (abort src 0x1)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U10 FAIL  bus scan finds 0x19 and 0x1E   (../app_program/subsystem4/subsystem4_test.c:104)
+[IMU] magnetometer ID: NACK_ADDR (no device at address), 0x00 0x00 0x00 (expect 0x48 0x34 0x33)
+[TEST] S4-U04 FAIL  magnetometer at 0x1E answers "H43"   (../app_program/subsystem4/subsystem4_test.c:111)
+[IMU] CTRL_REG1_A: NACK_ADDR (no device at address), 0x00 (expect 0x47)
+[TEST] S4-U05 FAIL  accelerometer at 0x19 configured (CTRL_REG1_A read back)   (../app_program/subsystem4/subsystem4_test.c:119)
+[IMU] at rest: NACK_ADDR (no device at address)  acc mg x=0 y=0 z=0  mag x=0 y=0 z=0
+[TEST] S4-U06 FAIL  accel at rest reads 1 g +-20 %   (../app_program/subsystem4/subsystem4_test.c:135)
+[TEST] S4-U07 FAIL  magnetometer reads a field, no axis saturated   (../app_program/subsystem4/subsystem4_test.c:140)
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 read error: NACK_ADDR (no device at address)
+... (samples 1-23 identical, interleaved with monitor lines)
+[IMU] 24 read error: NACK_ADDR (no device at address)
+[TEST] subsystem4 IMU SUMMARY 1 passed, 6 failed
+[TEST] INT-02 PASS  summary lines flow from subsystem 3 to subsystem 4
+[TEST] subsystem4 (S4-U01, INT-02) SUMMARY 2 passed, 0 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===

@@ -1,0 +1,8 @@
+# S4 IMU unit test, run 2, 2026-10-23
+# image: s4_imu_test (kernel I2C driver "iicb", single-byte reads), base ad3ac7c + uncommitted changes
+# console output as pasted by the tester: only the S4-U08 part was provided (earlier [IMU]/[TEST] lines not captured)
+
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 read error -57
+... (samples 1-23 identical: read error -57 = E_IO, interleaved with monitor lines)
+[IMU] 24 read error -57

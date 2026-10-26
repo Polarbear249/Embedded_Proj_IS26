@@ -6,6 +6,7 @@
  */
 
 #include "subsystem4.h"
+#include "imu_unit_test.h"	/* IMU tests (Buddy 4) */
 #include "../test_report.h"
 
 #if APP_TEST
@@ -31,6 +32,9 @@ EXPORT void subsystem4_test(void)
 		   "summary lines flow from subsystem 3 to subsystem 4");
 
 	TEST_SUMMARY("subsystem4");
+
+	/* IMU tests: GY-511 / LSM303D on I2C1, see imu_unit_test.c */
+	imu_unit_test();
 }
 
 #endif /* APP_TEST */
