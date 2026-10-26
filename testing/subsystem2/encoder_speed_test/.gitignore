@@ -1,0 +1,5 @@
+# Ignore generated Pico SDK build files
+/build/
+
+# Ignore local VS Code configuration
+/.vscode/
