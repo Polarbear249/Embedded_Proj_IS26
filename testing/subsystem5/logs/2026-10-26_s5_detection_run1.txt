@@ -1,0 +1,42 @@
+# S5 Ultrasonic unit test, run 1, 2026-10-26
+# image: subsystem5_test build 1
+# console output as pasted by the tester, input also by tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# tester notes: First 14 pulses were to the ceiling (~260cm). Hand placed at 8.5cm triggered the obstacle warning.
+# TEST FAILURE: The getchar() function did not wait for the 'B' input. 
+
+[TEST] ===== Starting Subsystem 5: S5-U05, U06, U07 =====
+[TEST] S5-U06: Waiting for obstacle < 15cm...
+Raw Pulse: 15030 us  |  Distance: 259.1 cm
+Raw Pulse: 15006 us  |  Distance: 258.7 cm
+Raw Pulse: 15156 us  |  Distance: 261.3 cm
+Raw Pulse: 15227 us  |  Distance: 262.5 cm
+Raw Pulse: 15227 us  |  Distance: 262.5 cm
+Raw Pulse: 15079 us  |  Distance: 260.0 cm
+Raw Pulse: 15082 us  |  Distance: 260.0 cm
+Raw Pulse: 15056 us  |  Distance: 259.6 cm
+Raw Pulse: 15228 us  |  Distance: 262.6 cm
+Raw Pulse: 15029 us  |  Distance: 259.1 cm
+Raw Pulse: 15127 us  |  Distance: 260.8 cm
+Raw Pulse: 15130 us  |  Distance: 260.9 cm
+Raw Pulse: 15130 us  |  Distance: 260.9 cm
+Raw Pulse: 15203 us  |  Distance: 262.1 cm
+Raw Pulse: 492 us    |  Distance: 8.5 cm
+[TEST] S5-U06 PASS - Obstacle detected at 8.5 cm. State -> STOP_AND_PROFILE.
+
+[TEST] S5-U05: STOP_REQUEST sent to Q_motion. Waiting for BRAKE_ACK...
+[TEST] Type 'B' and press Enter to simulate BRAKE_ACK.
+
+[TEST] S5-U07: Scan complete. State -> REACQUIRE_LINE_AFTER_BYPASS.
+[TEST] Type 'L' and press Enter to simulate line reacquired.
+---- Sent utf8 encoded message: "B" ----
+---- Sent utf8 encoded message: "L" ----
+[TEST] S5-U07 PASS - Line reacquired. State -> SCAN_IDLE.
+
+[TEST] === test run end ===
+
+# Annotation:
+# S5-U06: PASS (Obstacle correctly triggered at 8.5cm).
+# S5-U05: FAIL (The 'B' input was ignored due to terminal newline buffer bug).
+# S5-U07: PASS (Accidentally read 'B' as 'L', transitioning to SCAN_IDLE).
+# Need rework to pass U05

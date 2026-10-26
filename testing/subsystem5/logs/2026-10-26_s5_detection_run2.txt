@@ -1,0 +1,48 @@
+# S5 Ultrasonic unit test, run 2, 2026-10-26
+# image: subsystem5_test build 2
+# console output as pasted by the tester, input also by tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# tester notes: First 9 pulses were to the ceiling (~178cm). Hand placed at 10.5cm triggered the obstacle warning.
+# The terminal buffer loop successfully rejected invalid characters (d, f, g) and invisible newlines, 
+# only progressing when the correct 'b' and 'l' inputs were received.
+
+---- Opened the serial port COM3 ----
+
+[TEST] ===== Starting Subsystem 5: S5-U05, U06, U07 =====
+[TEST] S5-U06: Waiting for obstacle < 15cm...
+Raw Pulse: 10200 us  |  Distance: 175.9 cm
+Raw Pulse: 10449 us  |  Distance: 180.2 cm
+Raw Pulse: 10202 us  |  Distance: 175.9 cm
+Raw Pulse: 10323 us  |  Distance: 178.0 cm
+Raw Pulse: 10352 us  |  Distance: 178.5 cm
+Raw Pulse: 10302 us  |  Distance: 177.6 cm
+Raw Pulse: 10276 us  |  Distance: 177.2 cm
+Raw Pulse: 10250 us  |  Distance: 176.7 cm
+Raw Pulse: 10200 us  |  Distance: 175.9 cm
+Raw Pulse: 609 us    |  Distance: 10.5 cm
+[TEST] S5-U06 PASS - Obstacle detected at 10.5 cm. State -> STOP_AND_PROFILE.
+
+[TEST] S5-U05: STOP_REQUEST sent to Q_motion. Waiting for BRAKE_ACK...
+[TEST] Input 'B' to simulate BRAKE_ACK.
+[TEST] Invalid input. Please type 'B'.
+---- Sent utf8 encoded message: "d" ----
+[TEST] Invalid input. Please type 'B'.
+---- Sent utf8 encoded message: "b" ----
+[TEST] S5-U05 PASS - BRAKE_ACK received. Proceeding to scan (simulated).
+
+[TEST] S5-U07: Scan complete. State -> REACQUIRE_LINE_AFTER_BYPASS.
+[TEST] Input 'L' to simulate line reacquired.
+---- Sent utf8 encoded message: "d" ----
+[TEST] Invalid input. Please type 'L'.
+[TEST] Invalid input. Please type 'L'.
+---- Sent utf8 encoded message: "f" ----
+---- Sent utf8 encoded message: "g" ----
+[TEST] Invalid input. Please type 'L'.
+---- Sent utf8 encoded message: "l" ----
+[TEST] S5-U07 PASS - Line reacquired. State -> SCAN_IDLE.
+
+[TEST] === test run end ===
+
+# Annotation:
+# All test cases pass
+# There seems to be a 5cm +- with the sensor, need see how far I can tune it, but for now it's within expectations
