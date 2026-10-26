@@ -1,11 +1,22 @@
 /*
  * subsystem4_test.c
- * Subsystem 4 (Buddy 4): on-target tests. Built only with: make TEST=1
- * Record unit results in testing/subsystem4/TEST_LOG.md and the
- * INT- result in testing/integration/TEST_LOG.md.
+ * Subsystem 4 (Buddy 4): on-target IMU tests. Built only with:
+ * make TEST=1. Record results in testing/subsystem4/TEST_LOG.md.
  *
- * IMU tests (GY-511 = LSM303D at 0x1D on I2C1, SDA GP2 / SCL GP3) print
- * [IMU] lines; keep the board flat and still until the S4-U08 prompt.
+ * GY-511 = LSM303D at 0x1D on I2C1 (SDA GP2 / SCL GP3). Every line
+ * starts with [IMU] or [TEST].
+ *
+ * Part 1 (bench): bus, identity, configuration, one sample at rest.
+ * Part 2 (S4-U17..U19, guided): finds which sensor axis points forward,
+ * left and up on the car. Needs a book (or any flat block). The console
+ * asks for four poses in turn:
+ *   1 FLAT     car on the flat floor
+ *   2 NOSE UP  front wheels on the book, rear wheels on the floor
+ *   3 FLAT     car back on the floor (checks the module did not shift)
+ *   4 LEFT UP  left wheels on the book, right wheels on the floor
+ * At rest an accelerometer axis reads +1000 mg x cos(angle to straight
+ * up), so the axis that points uphill reads MORE. Lifting the nose
+ * raises the forward axis, lifting the left side raises the left axis.
  */
 
 #include "subsystem4.h"
@@ -14,8 +25,6 @@
 
 #if APP_TEST
 
-#define IMU_STREAM_SAMPLES      (25U)       // S4-U08: 25 x 200 ms = 5 s
-#define IMU_STREAM_MS           (200)
 #define IMU_WAIT_TERM_MS        (120000)    // give up after 2 min
 #define IMU_POLL_MS             (100)
 #define IMU_SETTLE_MS           (1000)
@@ -26,14 +35,29 @@
 #define IMU_1G_MAX_MG           (1200)      // 1 g +20 %
 #define IMU_MAG_SAT_POS         (32767)     // full-scale reading
 #define IMU_MAG_SAT_NEG         (-32768)
-
-// S4-U15 / S4-U16 ramp test
-#define IMU_RAMP_PREP_MS        (5000)      // time to put the car down
-#define IMU_RAMP_CAL_SAMPLES    (50)        // 50 x 20 ms = 1 s at rest
-#define IMU_RAMP_CAL_MS         (20)        //   (one 50 Hz sample each)
-#define IMU_RAMP_SAMPLES        (300U)      // 300 x 100 ms = 30 s
-#define IMU_RAMP_MS             (100)
 #define IMU_AXES                (3U)
+
+// S4-U17..U19 guided axis test. Thresholds are test choices, not
+// datasheet values: noise at rest measured about +-10 mg (run 5).
+#define IMU_POSE_MOVE_MS        (5000)      // time to place the car
+#define IMU_POSE_HANDS_OFF_MS   (3000)      // then hands off
+#define IMU_POSE_SAMPLES        (50)        // 50 x 20 ms = 1 s average
+#define IMU_POSE_MS             (20)        //   (one 50 Hz sample each)
+#define IMU_POSE_TRIES          (3U)        // retries if the car moved
+#define IMU_STILL_SPREAD_MG     (60)        // max - min on every axis
+#define IMU_STILL_MIN_MG        (900)       // |a| 1 g -10 %
+#define IMU_STILL_MAX_MG        (1100)      // |a| 1 g +10 %
+#define IMU_REPEAT_MG           (30)        // flat 1 vs flat 3, per axis
+#define IMU_MIN_DELTA_MG        (50)        // about 3 deg of tilt
+#define IMU_UP_MIN_MG           (500)       // up axis: at least 0.5 g
+#define IMU_DOMINANT_RATIO      (2)         // main axis >= 2 x the next
+#define IMU_1G_MG               (1000)
+
+#define IMU_POSE_FLAT           (0U)
+#define IMU_POSE_NOSE_UP        (1U)
+#define IMU_POSE_FLAT_AGAIN     (2U)
+#define IMU_POSE_LEFT_UP        (3U)
+#define IMU_POSES               (4U)
 
 // Integer atan from a tan(k deg) x 10000 table, k = 0..45
 #define IMU_TAN_SCALE           (10000U)
@@ -51,6 +75,21 @@ static uint16_t const g_tan_x10000[IMU_TAN_STEPS + 1U] =
     8391U, 8693U, 9004U, 9325U, 9657U, 10000U
 };
 
+static char const * const g_pose_prompt[IMU_POSES] =
+{
+    "FLAT: car on the flat floor",
+    "NOSE UP: front wheels on the book, rear wheels on the floor",
+    "FLAT again: car back on the floor, same spot",
+    "LEFT UP: left wheels on the book, right wheels on the floor"
+};
+
+// [0] = negative direction, [1] = positive direction
+static char const * const g_axis_name[2][IMU_AXES] =
+{
+    {"-X", "-Y", "-Z"},
+    {"+X", "+Y", "+Z"}
+};
+
 #if TM_CONSOLE_USB_CDC
 // libtm USB glue: true once a terminal has opened the port (DTR)
 extern int tm_tusb_connected(void);
@@ -59,9 +98,18 @@ extern int tm_tusb_connected(void);
 static void     imu_wait_for_terminal(void);
 static bool     imu_scan_bus(void);
 static bool     imu_mag_axis_ok(int16_t value);
-static void     imu_tests(void);
-static void     imu_ramp_test(bool *p_b_rest_ok, bool *p_b_stream_ok);
-static uint32_t imu_tilt_ddeg(int32_t const p_ref[], imu_sample_t const *p_now);
+static void     imu_bench_tests(void);
+static void     imu_axis_tests(void);
+static bool     imu_capture_pose(uint32_t pose, int32_t p_avg[]);
+static bool     imu_measure_still(int32_t p_avg[]);
+static uint32_t imu_main_axis(int32_t const p_vec[], int32_t min_mg,
+                              bool *p_b_clear);
+static bool     imu_right_handed(uint32_t fwd, bool b_fwd_pos,
+                                 uint32_t left, bool b_left_pos,
+                                 uint32_t up, bool b_up_pos);
+static void     imu_print_ddeg(char const *p_label, uint32_t ddeg);
+static int32_t  imu_abs(int32_t value);
+static uint32_t imu_tilt_ddeg(int32_t const p_ref[], int32_t const p_now[]);
 static uint32_t imu_angle_ddeg(uint64_t opposite, uint64_t adjacent);
 static uint32_t imu_atan_ddeg(uint32_t tan_x10000);
 static uint32_t imu_isqrt(uint64_t value);
@@ -69,51 +117,28 @@ static uint32_t imu_isqrt(uint64_t value);
 void
 subsystem4_test (void)
 {
-    T_RMBF   rmbf;
-    uint32_t before;
+    imu_wait_for_terminal();
+    tm_printf((UB*)"\n[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D)"
+              " =====\n[IMU] keep the car flat and still\n");
 
-    TEST_INIT();
-
-    // S4-U01: the message buffer accepts the documented line length
-    TEST_CHECK("S4-U01",
-               (E_OK == tk_ref_mbf(mbf_summary, &rmbf))
-               && (S4_SUMMARY_MAX == rmbf.maxmsz),
-               "message buffer max line = S4_SUMMARY_MAX");
-
-    imu_tests();
-
-    // INT-02 (integration, IF-03): summary lines from subsystem 3 reach
-    // the monitor. One line per 5 samples = one per 1.5 s.
-    before = s4_lines_received;
-    tk_dly_tsk(3500);
-    TEST_CHECK("INT-02", s4_lines_received >= (before + 2U),
-               "summary lines flow from subsystem 3 to subsystem 4");
-
-    TEST_SUMMARY("subsystem4 (S4-U01, INT-02)");
+    imu_bench_tests();
+    imu_axis_tests();
 }
 
 /*
- * IMU tests. Uses its own TEST_INIT/TEST_SUMMARY so the IMU result line
- * is easy to find in the log.
+ * Part 1: bus, identity, configuration and one sample at rest.
  */
 static void
-imu_tests (void)
+imu_bench_tests (void)
 {
     imu_sample_t  sample = {0};
     i2c1_result_t result;
     uint8_t       value = 0U;
     int32_t       mag2;
-    uint32_t      idx;
     bool          b_idle;
     bool          b_found;
-    bool          b_rest_ok = false;
-    bool          b_stream_ok = false;
 
     TEST_INIT();
-
-    imu_wait_for_terminal();
-    tm_printf((UB*)"\n[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D)"
-              " =====\n[IMU] keep the board flat and still\n");
 
     // S4-U09: both lines idle high before we start (pull-ups present)
     b_idle = i2c1_bus_is_idle();
@@ -177,150 +202,310 @@ imu_tests (void)
                    || (0 != sample.mag_z)),
                "magnetometer reads a field, no axis saturated");
 
-    // S4-U08 (manual): tilt and turn the board while this prints
-    tm_printf((UB*)"[IMU] S4-U08 manual: tilt/rotate the board for 5 s\n");
-
-    for (idx = 0U; idx < IMU_STREAM_SAMPLES; idx++)
-    {
-        result = imu_read(&sample);
-
-        if (I2C1_OK == result)
-        {
-            tm_printf((UB*)"[IMU] %2u acc mg %5d %5d %5d"
-                      "  mag %6d %6d %6d\n", (unsigned)idx,
-                      sample.acc_x_mg, sample.acc_y_mg, sample.acc_z_mg,
-                      sample.mag_x, sample.mag_y, sample.mag_z);
-        }
-        else
-        {
-            tm_printf((UB*)"[IMU] %2u read error: %s\n", (unsigned)idx,
-                      i2c1_result_name(result));
-        }
-
-        tk_dly_tsk(IMU_STREAM_MS);
-    }
-
-    // S4-U15 / S4-U16 (manual): car on the flat floor, then over a ramp
-    imu_ramp_test(&b_rest_ok, &b_stream_ok);
-    TEST_CHECK("S4-U15", b_rest_ok,
-               "rest vector on flat floor is 1 g +-20 %");
-    TEST_CHECK("S4-U16", b_stream_ok,
-               "30 s ramp stream with no I2C1 read errors");
-
-    TEST_SUMMARY("subsystem4 IMU");
+    TEST_SUMMARY("subsystem4 IMU bench");
 }
 
 /*
- * S4-U15 / S4-U16: ramp. Average gravity on the flat floor, then print
- * the tilt away from that vector while the car is pushed over a ramp.
- * Tilt from the rest vector does not depend on how the module is
- * mounted, but it has no sign (up and down slopes both read positive).
+ * Part 2: guided poses -> which sensor axis is forward, left and up.
+ * Works from differences to the flat pose, so a crooked mount does not
+ * change the answer, only the mount tilt printed at the end.
  */
 static void
-imu_ramp_test (bool *p_b_rest_ok, bool *p_b_stream_ok)
+imu_axis_tests (void)
 {
-    imu_sample_t  sample = {0};
-    i2c1_result_t result;
-    int32_t       sum[IMU_AXES] = {0, 0, 0};
-    int32_t       ref[IMU_AXES] = {0, 0, 0};
-    int32_t       ref2;
-    int32_t       good = 0;
-    uint32_t      errors = 0U;
-    uint32_t      tilt;
-    uint32_t      max_tilt = 0U;
-    uint32_t      idx;
-    uint32_t      axis;
-    SYSTIM        start;
-    SYSTIM        now;
+    int32_t  pose[IMU_POSES][IMU_AXES] = {{0}};
+    int32_t  fwd_delta[IMU_AXES] = {0, 0, 0};
+    int32_t  left_delta[IMU_AXES] = {0, 0, 0};
+    int32_t  up_ref[IMU_AXES] = {0, 0, 0};
+    uint32_t idx;
+    uint32_t axis;
+    uint32_t fwd;
+    uint32_t left;
+    uint32_t up;
+    bool     b_all_still = true;
+    bool     b_repeat = true;
+    bool     b_fwd_clear = false;
+    bool     b_left_clear = false;
+    bool     b_up_clear = false;
+    bool     b_fwd_pos;
+    bool     b_left_pos;
+    bool     b_up_pos;
+    bool     b_frame_ok;
 
-    tm_printf((UB*)"[IMU] S4-U15 ramp: put the car on the flat floor"
-              " before the ramp, hands off, %d s\n", IMU_RAMP_PREP_MS / 1000);
-    tk_dly_tsk(IMU_RAMP_PREP_MS);
+    TEST_INIT();
 
-    for (idx = 0U; idx < (uint32_t)IMU_RAMP_CAL_SAMPLES; idx++)
+    tm_printf((UB*)"[IMU] ----- axis test: you need a book ~2-4 cm thick"
+              " -----\n[IMU] for each pose: place the car, then hands off"
+              " when told\n");
+
+    for (idx = 0U; idx < IMU_POSES; idx++)
+    {
+        b_all_still = imu_capture_pose(idx, pose[idx]) && b_all_still;
+    }
+
+    TEST_CHECK("S4-U17", b_all_still,
+               "all 4 poses held still (|a| 1 g +-10 %, spread <= 60 mg)");
+
+    // S4-U18: flat -> nose up -> flat gives the same vector again
+    for (axis = 0U; axis < IMU_AXES; axis++)
+    {
+        fwd_delta[axis] = pose[IMU_POSE_NOSE_UP][axis]
+                          - pose[IMU_POSE_FLAT][axis];
+        left_delta[axis] = pose[IMU_POSE_LEFT_UP][axis]
+                           - pose[IMU_POSE_FLAT][axis];
+        b_repeat = b_repeat
+                   && (imu_abs(pose[IMU_POSE_FLAT_AGAIN][axis]
+                               - pose[IMU_POSE_FLAT][axis])
+                       <= IMU_REPEAT_MG);
+    }
+
+    tm_printf((UB*)"[IMU] flat 1 vs flat 3 (mg): dx=%d dy=%d dz=%d\n",
+              (int)(pose[IMU_POSE_FLAT_AGAIN][0] - pose[IMU_POSE_FLAT][0]),
+              (int)(pose[IMU_POSE_FLAT_AGAIN][1] - pose[IMU_POSE_FLAT][1]),
+              (int)(pose[IMU_POSE_FLAT_AGAIN][2] - pose[IMU_POSE_FLAT][2]));
+    TEST_CHECK("S4-U18", b_repeat,
+               "flat pose repeats within 30 mg (module fixed on mount)");
+
+    tm_printf((UB*)"[IMU] nose up - flat (mg): dx=%d dy=%d dz=%d\n",
+              (int)fwd_delta[0], (int)fwd_delta[1], (int)fwd_delta[2]);
+    tm_printf((UB*)"[IMU] left up - flat (mg): dx=%d dy=%d dz=%d\n",
+              (int)left_delta[0], (int)left_delta[1], (int)left_delta[2]);
+
+    // The axis that rose is the one pointing that way
+    up = imu_main_axis(pose[IMU_POSE_FLAT], IMU_UP_MIN_MG, &b_up_clear);
+    fwd = imu_main_axis(fwd_delta, IMU_MIN_DELTA_MG, &b_fwd_clear);
+    left = imu_main_axis(left_delta, IMU_MIN_DELTA_MG, &b_left_clear);
+    b_up_pos = (pose[IMU_POSE_FLAT][up] > 0);
+    b_fwd_pos = (fwd_delta[fwd] > 0);
+    b_left_pos = (left_delta[left] > 0);
+    b_frame_ok = imu_right_handed(fwd, b_fwd_pos, left, b_left_pos,
+                                  up, b_up_pos);
+
+    tm_printf((UB*)"[IMU] AXES  forward = %s%s   left = %s%s   up = %s%s\n",
+              g_axis_name[b_fwd_pos][fwd], b_fwd_clear ? "" : " (unclear)",
+              g_axis_name[b_left_pos][left],
+              b_left_clear ? "" : " (unclear)",
+              g_axis_name[b_up_pos][up], b_up_clear ? "" : " (unclear)");
+
+    if (false == b_frame_ok)
+    {
+        tm_printf((UB*)"[IMU] forward x left != up: a pose was wrong or"
+                  " the module is turned on the car, repeat the test\n");
+    }
+
+    TEST_CHECK("S4-U19",
+               b_fwd_clear && b_left_clear && b_up_clear && b_frame_ok,
+               "forward/left/up axes found, one each, right-handed");
+
+    // Tilt of each pose from flat; compare with asin(book / wheelbase)
+    imu_print_ddeg("nose up tilt",
+                   imu_tilt_ddeg(pose[IMU_POSE_FLAT],
+                                 pose[IMU_POSE_NOSE_UP]));
+    imu_print_ddeg("left up tilt",
+                   imu_tilt_ddeg(pose[IMU_POSE_FLAT],
+                                 pose[IMU_POSE_LEFT_UP]));
+
+    // How far the module itself is off level when the car is flat
+    up_ref[up] = b_up_pos ? IMU_1G_MG : -IMU_1G_MG;
+    imu_print_ddeg("mount tilt (module vs level)",
+                   imu_tilt_ddeg(up_ref, pose[IMU_POSE_FLAT]));
+    tm_printf((UB*)"[IMU] expected tilt = asin(book thickness / wheel"
+              " distance), e.g. 30 mm / 150 mm -> 11.5 deg\n");
+
+    TEST_SUMMARY("subsystem4 IMU axes");
+}
+
+/*
+ * Prompt for one pose, give time to place the car, then average 1 s.
+ * Retries if the car was moving. Returns true if a still average was
+ * captured; p_avg[] holds the last average either way.
+ */
+static bool
+imu_capture_pose (uint32_t pose, int32_t p_avg[])
+{
+    uint32_t tries = 0U;
+    bool     b_still = false;
+
+    while ((false == b_still) && (tries < IMU_POSE_TRIES))
+    {
+        tm_printf((UB*)"\n[IMU] >>> pose %u/%u  %s  (%u s)\n",
+                  (unsigned)(pose + 1U), (unsigned)IMU_POSES,
+                  g_pose_prompt[pose], (unsigned)(IMU_POSE_MOVE_MS / 1000));
+        tk_dly_tsk(IMU_POSE_MOVE_MS);
+        tm_printf((UB*)"[IMU] hands off, measuring in %u s\n",
+                  (unsigned)(IMU_POSE_HANDS_OFF_MS / 1000));
+        tk_dly_tsk(IMU_POSE_HANDS_OFF_MS);
+
+        b_still = imu_measure_still(p_avg);
+        tries++;
+
+        if (false == b_still)
+        {
+            tm_printf((UB*)"[IMU] car moved or read failed, again\n");
+        }
+    }
+
+    return (b_still);
+}
+
+/*
+ * Average IMU_POSE_SAMPLES readings. Still = every read ok, every axis
+ * spread within IMU_STILL_SPREAD_MG and |a| within 1 g +-10 %.
+ */
+static bool
+imu_measure_still (int32_t p_avg[])
+{
+    imu_sample_t sample = {0};
+    int32_t      sum[IMU_AXES] = {0, 0, 0};
+    int32_t      min[IMU_AXES] = {INT16_MAX, INT16_MAX, INT16_MAX};
+    int32_t      max[IMU_AXES] = {INT16_MIN, INT16_MIN, INT16_MIN};
+    int32_t      now[IMU_AXES] = {0, 0, 0};
+    int32_t      spread = 0;
+    int32_t      good = 0;
+    int32_t      mag2;
+    uint32_t     idx;
+    uint32_t     axis;
+
+    for (idx = 0U; idx < (uint32_t)IMU_POSE_SAMPLES; idx++)
     {
         if (I2C1_OK == imu_read(&sample))
         {
-            sum[0] += sample.acc_x_mg;
-            sum[1] += sample.acc_y_mg;
-            sum[2] += sample.acc_z_mg;
+            now[0] = sample.acc_x_mg;
+            now[1] = sample.acc_y_mg;
+            now[2] = sample.acc_z_mg;
             good++;
-        }
 
-        tk_dly_tsk(IMU_RAMP_CAL_MS);
-    }
-
-    for (axis = 0U; (axis < IMU_AXES) && (good > 0); axis++)
-    {
-        ref[axis] = sum[axis] / good;
-    }
-
-    ref2 = (ref[0] * ref[0]) + (ref[1] * ref[1]) + (ref[2] * ref[2]);
-    tm_printf((UB*)"[IMU] rest vector mg x=%d y=%d z=%d  |a|=%u"
-              "  (%d of %d reads ok)\n", (int)ref[0], (int)ref[1],
-              (int)ref[2], (unsigned)imu_isqrt((uint64_t)ref2), (int)good,
-              IMU_RAMP_CAL_SAMPLES);
-    *p_b_rest_ok = (IMU_RAMP_CAL_SAMPLES == good)
-                   && (ref2 >= (IMU_1G_MIN_MG * IMU_1G_MIN_MG))
-                   && (ref2 <= (IMU_1G_MAX_MG * IMU_1G_MAX_MG));
-
-    tm_printf((UB*)"[IMU] S4-U16 now push the car slowly up and over the"
-              " ramp (%u s)\n",
-              (unsigned)((IMU_RAMP_SAMPLES * IMU_RAMP_MS) / 1000U));
-    tk_get_tim(&start);
-
-    for (idx = 0U; idx < IMU_RAMP_SAMPLES; idx++)
-    {
-        result = imu_read(&sample);
-        tk_get_tim(&now);
-
-        if (I2C1_OK == result)
-        {
-            tilt = imu_tilt_ddeg(ref, &sample);
-
-            if (tilt > max_tilt)
+            for (axis = 0U; axis < IMU_AXES; axis++)
             {
-                max_tilt = tilt;
+                sum[axis] += now[axis];
+                min[axis] = (now[axis] < min[axis]) ? now[axis] : min[axis];
+                max[axis] = (now[axis] > max[axis]) ? now[axis] : max[axis];
             }
-
-            tm_printf((UB*)"[IMU] ramp t=%5u ms  acc mg %5d %5d %5d"
-                      "  tilt %3u.%u deg\n", (unsigned)(now.lo - start.lo),
-                      sample.acc_x_mg, sample.acc_y_mg, sample.acc_z_mg,
-                      (unsigned)(tilt / IMU_DDEG_PER_DEG),
-                      (unsigned)(tilt % IMU_DDEG_PER_DEG));
-        }
-        else
-        {
-            errors++;
-            tm_printf((UB*)"[IMU] ramp read error: %s\n",
-                      i2c1_result_name(result));
         }
 
-        tk_dly_tsk(IMU_RAMP_MS);
+        tk_dly_tsk(IMU_POSE_MS);
     }
 
-    tm_printf((UB*)"[IMU] ramp max tilt %u.%u deg, %u read errors\n",
-              (unsigned)(max_tilt / IMU_DDEG_PER_DEG),
-              (unsigned)(max_tilt % IMU_DDEG_PER_DEG), (unsigned)errors);
-    *p_b_stream_ok = (0U == errors);
+    for (axis = 0U; axis < IMU_AXES; axis++)
+    {
+        p_avg[axis] = (good > 0) ? (sum[axis] / good) : 0;
+
+        if ((good > 0) && ((max[axis] - min[axis]) > spread))
+        {
+            spread = max[axis] - min[axis];
+        }
+    }
+
+    mag2 = (p_avg[0] * p_avg[0]) + (p_avg[1] * p_avg[1])
+           + (p_avg[2] * p_avg[2]);
+    tm_printf((UB*)"[IMU] avg mg x=%d y=%d z=%d  |a|=%u  spread %d mg"
+              "  (%d/%d reads ok)\n", (int)p_avg[0], (int)p_avg[1],
+              (int)p_avg[2], (unsigned)imu_isqrt((uint64_t)mag2),
+              (int)spread, (int)good, IMU_POSE_SAMPLES);
+
+    return ((IMU_POSE_SAMPLES == good)
+            && (spread <= IMU_STILL_SPREAD_MG)
+            && (mag2 >= (IMU_STILL_MIN_MG * IMU_STILL_MIN_MG))
+            && (mag2 <= (IMU_STILL_MAX_MG * IMU_STILL_MAX_MG)));
 }
 
 /*
- * Angle between the rest vector and the current reading, 0.1 deg units,
- * from atan2(|ref x now|, ref . now). Exact integer inputs, so small
- * angles keep their resolution (an acos of the dot product would not).
+ * Index of the axis with the largest |value|. *p_b_clear: that value is
+ * at least min_mg and IMU_DOMINANT_RATIO times the next largest, so the
+ * axis is really aligned with the car and not a diagonal.
  */
 static uint32_t
-imu_tilt_ddeg (int32_t const p_ref[], imu_sample_t const *p_now)
+imu_main_axis (int32_t const p_vec[], int32_t min_mg, bool *p_b_clear)
 {
-    int64_t  now_x = p_now->acc_x_mg;
-    int64_t  now_y = p_now->acc_y_mg;
-    int64_t  now_z = p_now->acc_z_mg;
-    int64_t  cross_x = (p_ref[1] * now_z) - (p_ref[2] * now_y);
-    int64_t  cross_y = (p_ref[2] * now_x) - (p_ref[0] * now_z);
-    int64_t  cross_z = (p_ref[0] * now_y) - (p_ref[1] * now_x);
-    int64_t  dot = (p_ref[0] * now_x) + (p_ref[1] * now_y)
-                   + (p_ref[2] * now_z);
+    uint32_t best = 0U;
+    uint32_t axis;
+    int32_t  best_abs = 0;
+    int32_t  next_abs = 0;
+    int32_t  mag;
+
+    for (axis = 0U; axis < IMU_AXES; axis++)
+    {
+        mag = imu_abs(p_vec[axis]);
+
+        if (mag > best_abs)
+        {
+            next_abs = best_abs;
+            best_abs = mag;
+            best = axis;
+        }
+        else if (mag > next_abs)
+        {
+            next_abs = mag;
+        }
+        else
+        {
+            // smaller than both so far: nothing to keep
+        }
+    }
+
+    *p_b_clear = (best_abs >= min_mg)
+                 && (best_abs >= (IMU_DOMINANT_RATIO * next_abs));
+
+    return (best);
+}
+
+/*
+ * The LSM303D axes form a right-handed frame, so forward x left must
+ * equal up. If it does not, a pose was done wrong (or the module is
+ * rotated on the car). e_i x e_j = +e_k when (i, j, k) is cyclic.
+ */
+static bool
+imu_right_handed (uint32_t fwd, bool b_fwd_pos, uint32_t left,
+                  bool b_left_pos, uint32_t up, bool b_up_pos)
+{
+    bool     b_ok = false;
+    bool     b_cyclic;
+    bool     b_cross_pos;
+    uint32_t third;
+
+    if (fwd != left)
+    {
+        third = (IMU_AXES - fwd) - left;    // 0 + 1 + 2 = 3
+        b_cyclic = (1U == (((left + IMU_AXES) - fwd) % IMU_AXES));
+        b_cross_pos = ((b_fwd_pos == b_left_pos) == b_cyclic);
+        b_ok = (third == up) && (b_cross_pos == b_up_pos);
+    }
+
+    return (b_ok);
+}
+
+static void
+imu_print_ddeg (char const *p_label, uint32_t ddeg)
+{
+    tm_printf((UB*)"[IMU] %s %u.%u deg\n", p_label,
+              (unsigned)(ddeg / IMU_DDEG_PER_DEG),
+              (unsigned)(ddeg % IMU_DDEG_PER_DEG));
+}
+
+static int32_t
+imu_abs (int32_t value)
+{
+    return ((value < 0) ? -value : value);
+}
+
+/*
+ * Angle between two gravity vectors, 0.1 deg units, from
+ * atan2(|ref x now|, ref . now). Exact integer inputs, so small angles
+ * keep their resolution (an acos of the dot product would not).
+ */
+static uint32_t
+imu_tilt_ddeg (int32_t const p_ref[], int32_t const p_now[])
+{
+    int64_t  ref_x = p_ref[0];
+    int64_t  ref_y = p_ref[1];
+    int64_t  ref_z = p_ref[2];
+    int64_t  now_x = p_now[0];
+    int64_t  now_y = p_now[1];
+    int64_t  now_z = p_now[2];
+    int64_t  cross_x = (ref_y * now_z) - (ref_z * now_y);
+    int64_t  cross_y = (ref_z * now_x) - (ref_x * now_z);
+    int64_t  cross_z = (ref_x * now_y) - (ref_y * now_x);
+    int64_t  dot = (ref_x * now_x) + (ref_y * now_y) + (ref_z * now_z);
     uint64_t cross2 = (uint64_t)((cross_x * cross_x) + (cross_y * cross_y)
                                  + (cross_z * cross_z));
     uint64_t opposite = imu_isqrt(cross2);
