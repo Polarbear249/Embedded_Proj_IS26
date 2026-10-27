@@ -63,7 +63,7 @@ pico_sdk_init()
 
 # Create executable from the encoder test source
 add_executable(encoder_test
-    encoder_test.c
+    encoder_signal_debug.c
 )
 
 # Program information

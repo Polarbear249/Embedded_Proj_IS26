@@ -24,3 +24,19 @@ config/wifi_secrets.h
 
 # macOS
 .DS_Store
+
+# Ignore generated build folders
+build/
+**/build/
+
+# Ignore local VS Code settings
+.vscode/
+**/.vscode/
+
+# Ignore generated firmware
+*.uf2
+*.elf
+*.bin
+*.hex
+*.map
+*.dis
