@@ -1,0 +1,27 @@
+# S5 Ultrasonic unit test, run 2, 2026-10-27
+# image: subsystem5_test build 5
+# console output as pasted by the tester
+# wiring: Servo on GP12, Ultrasonic on GP16/GP17
+# tester notes: Tested array {15, 230, 190}. Servo physically clamped at 180 causing a mechanical stall. No damage obtained.
+# TEST FAIL: Scan array contained values > 180, triggering the safety clamp and causing a weird pause.
+
+[TEST] ===== Starting Subsystem 5: S5-U04 (Servo Pan) =====
+[TEST] Servo initialized on GP12
+[TEST] Sweeping to 30, 90, and 150 degrees...
+
+[SERVO] Commanded angle: 15 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 15 deg (out of range)
+
+[SERVO] Commanded angle: 180 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 230 deg (out of range)
+
+[SERVO] Commanded angle: 180 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 190 deg (out of range)
+
+[SERVO] Returning to center (90 degrees).
+[SERVO] Commanded angle: 90 degrees
+[TEST] S5-U04 PASS - Servo swept to 30, 90, and 150. Distances acquired after settling.
+[TEST] === test run end ===

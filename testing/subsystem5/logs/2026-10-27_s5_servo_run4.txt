@@ -1,5 +1,5 @@
 # S5 Ultrasonic unit test, run 2 2026-10-27
-# image: subsystem5_test build 5
+# image: subsystem5_test build 7
 # console output as pasted by the tester
 # wiring: Servo on GP12, Ultrasonic on GP16/GP17 (On the robo pico)
 # tester notes: Servo physically swept to 15 (Right), 110 (Center), and 178 (Left).
