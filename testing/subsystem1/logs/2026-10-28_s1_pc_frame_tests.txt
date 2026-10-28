@@ -1,0 +1,14 @@
+[PC] S1-P01 PASS  all-zero frame is 13 bytes, version byte 0x01
+[PC] S1-P02 PASS  golden bytes 01 AD 71 12 34 AB CD (MSB-first, no swapping)
+[PC] S1-P03 PASS  obs_width 0x1FF fills the final 9 bits
+[PC] S1-P04 PASS  maximum of every field round-trips
+[PC] S1-P05 PASS  100000 random snapshots round-trip
+[PC] S1-P06 PASS  length 0, 12 and 14 rejected
+[PC] S1-P07 PASS  version 0, 2 and 255 rejected
+[PC] S1-P08 PASS  motion state 7 rejected (valid 0..6)
+[PC] S1-P09 PASS  too-wide fields are refused, never truncated
+[PC] S1-P10 PASS  null pointers rejected
+[PC] S1-P11 PASS  SET_SPEED 42 seq 9 encodes to 01 32 A9 and round-trips
+[PC] S1-P12 PASS  bad command, argument, seq, version and length rejected
+[PC] S1-P13 PASS  200000 random byte strings decoded without a bad value
+[PC] SUMMARY 0 failed

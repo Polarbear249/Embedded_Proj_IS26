@@ -1,0 +1,114 @@
+---- Opened the serial port COM9 ----
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 356"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356137686 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 355"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 356"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 357"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 357"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 358"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 358"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356139696 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 359"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 359"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 360"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 360"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356141706 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 361"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 361"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 362"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 362"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356143716 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 363"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 363"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 364"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356145726 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 365"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 364"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 365"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 366"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 366"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356147736 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: command 3 arg 42 seq 9 accepted
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 367"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 367"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 368"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 368"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356149746 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 369"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 369"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 370"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 370"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356151756 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: command rejected (code 3)
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 371"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 371"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 372"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 372"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356153766 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 373"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 373"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 374"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 374"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356155776 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 375"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 375"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 376"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 376"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356157786 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 377"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 377"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 378"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 378"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356159796 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 379"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 379"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 380"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 380"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356161806 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 381"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 381"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 382"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 382"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356163816 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 383"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 383"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 384"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 384"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356165826 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 385"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 385"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 386"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 386"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356167836 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 387"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 387"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 388"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 388"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356169846 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 389"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 389"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 390"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 390"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3356171856 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+---- Closed the serial port COM9 ----

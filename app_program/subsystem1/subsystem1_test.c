@@ -72,6 +72,49 @@ EXPORT void subsystem1_test(void)
 			   "WiFi task reports link UP with an IP");
 	}
 
+	/* S1-U10: Q_telem -> MQTT. Stand-in for the Vehicle Controller sends 25
+	   snapshots 200 ms apart; about as many must be handed to MQTT. Needs
+	   the hotspot, the broker and the NET=lwip MQTT=1 build. */
+	{
+		T_TELEM	snap = {0};
+		UW	before = s1_telem_published();
+		INT	i;
+
+		snap.vstate = 1U;
+		for (i = 0; i < 25; i++) {
+			snap.seq = (uint8_t)(i & 0x1F);
+			snap.dist_cm = (uint16_t)(i * 10);
+			(void)s1_telem_send(&snap);
+			(void)tk_dly_tsk(200);
+		}
+		(void)tk_dly_tsk(300);
+		TEST_CHECK("S1-U10", (s1_telem_published() - before) >= 22U,
+			   "telemetry frames reach MQTT at about 5 Hz");
+	}
+
+	/* S1-U11: command path, no network needed. Feed the receive hook one
+	   good frame and three bad ones; only the good one may come out. */
+	{
+		static const uint8_t	good[CMD_LEN]   = {0x01U, 0x32U, 0xA9U};
+		static const uint8_t	badver[CMD_LEN] = {0x02U, 0x32U, 0xA9U};
+		static const uint8_t	badarg[CMD_LEN] = {0x01U, 0x3FU, 0xFFU};
+		T_CMD	c = {0};
+		UW	acc = s1_cmd_accepted();
+		UW	rej = s1_cmd_rejected();
+		BOOL	ok;
+
+		mqtt_app_rx("test", good, CMD_LEN);
+		mqtt_app_rx("test", badver, CMD_LEN);
+		mqtt_app_rx("test", badarg, CMD_LEN);
+		mqtt_app_rx("test", good, 2U);
+		ok = ((s1_cmd_accepted() - acc) == 1U) &&
+		     ((s1_cmd_rejected() - rej) == 3U) &&
+		     (s1_cmd_recv(&c, TMO_POL) == E_OK) &&
+		     (c.cmd == CMD_SET_SPEED) && (c.arg == 42U) && (c.seq == 9U) &&
+		     (s1_cmd_recv(&c, TMO_POL) != E_OK);
+		TEST_CHECK("S1-U11", ok, "only a valid command reaches the Vehicle Controller");
+	}
+
 	TEST_SUMMARY("subsystem1");
 }
 
