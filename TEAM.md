@@ -252,3 +252,15 @@ in the code; replace them as each owner creates the objects in section 5.
    disconnects on short WiFi stalls.
 9. The forced WiFi reconnect with motion and line tasks running (design
    review A1) needs the Motion task; run it at integration.
+
+## Buddy 2 motor foundation
+
+S2 now runs `motion_task`, priority 14 on core 1, with a 10 ms delay
+between updates. Only that task writes PWM after initialization.
+`motion_control.h` provides signed duty commands with a maximum 1000 ms
+lease, stop, latched emergency stop, and status. One mutex protects commands
+across cores. Calls are non-blocking: callers must check and retry E_TMOUT.
+The existing sample pool and semaphore remain for S3/S4 source compatibility,
+but S2 no longer generates fake samples. Those example interfaces are obsolete.
+GP0/1 and GP4/5 are not configured by this motor-only implementation.
+Encoder feedback, PI tuning and distance/angle commands are pending.

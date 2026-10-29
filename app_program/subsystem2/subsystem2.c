@@ -6,6 +6,7 @@
  */
 
 #include "subsystem2.h"
+#include "motion_control.h"
 
 EXPORT ID	sem_slots;	/* IF-02, see subsystem2.h */
 EXPORT ID	mpf_samples;
@@ -33,13 +34,13 @@ EXPORT ER subsystem2_init(void)
 	cmpf.mpfcnt = S2_POOL_COUNT;		/* number of blocks */
 	cmpf.blfsz  = sizeof(SAMPLE_MSG);	/* size of one block */
 	mpf_samples = tk_cre_mpf(&cmpf);
-	return (mpf_samples < E_OK) ? mpf_samples : E_OK;
+	return (mpf_samples < E_OK) ? mpf_samples : motion_init();
 }
 
 EXPORT ER subsystem2_start(void)
 {
 	/* Pinned to core 1 (TP_PRC2): samples cross to subsystem 3 on core 0 */
-	ID tid = app_start_task(producer_task, S2_PRI_PRODUCER, TP_PRC2,
-				"producer_task");
+	ID tid = app_start_task(motion_task, S2_PRI_PRODUCER, TP_PRC2,
+				"motion_task");
 	return (tid < E_OK) ? tid : E_OK;
 }
