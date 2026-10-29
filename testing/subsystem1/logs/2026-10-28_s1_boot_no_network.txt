@@ -1,0 +1,132 @@
+---- Opened the serial port COM9 ----
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355771866 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[TEST] S1-U07 PASS  WiFi task sleeps between polls
+[TEST] S1-U08 PASS  WiFi task polls about every 200 ms
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355773876 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: link down, status=0 kpolls=0
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355775886 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+wifi: joining "Fitz" ...
+wifi: link status -> joined AP, waiting for IP (1)
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355777896 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355779906 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+wifi: link status -> FAILED (association failure) (-1)
+s1: link down, status=-1 kpolls=162
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355781916 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355783926 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: link down, status=-1 kpolls=425
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355785936 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355787946 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[TEST] S1-U09 FAIL  WiFi task reports link UP with an IP   (../app_program/subsystem1/subsystem1_test.c:71)
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355789956 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: link down, status=-1 kpolls=687
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355791966 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355793976 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+[TEST] S1-U10 FAIL  telemetry frames reach MQTT at about 5 Hz   (../app_program/subsystem1/subsystem1_test.c:91)
+s1: command 3 arg 42 seq 9 accepted
+s1: command rejected (code 3)
+s1: command rejected (code 4)
+s1: command rejected (code 2)
+[TEST] S1-U11 PASS  only a valid command reaches the Vehicle Controller
+[TEST] subsystem1 SUMMARY 5 passed, 2 failed
+[TEST] S2-U01 PASS  sample values stay within 0..100
+[TEST] S2-U02 PASS  free slots and free blocks within pool size
+[TEST] subsystem2 SUMMARY 2 passed, 0 failed
+s1: link down, status=-1 kpolls=950
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355795986 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[TEST] INT-01 FAIL  samples flow from subsystem 2 to subsystem 3   (../app_program/subsystem3/subsystem3_test.c:34)
+[TEST] S3-U01 FAIL  min <= max, both within 0..100   (../app_program/subsystem3/subsystem3_test.c:38)
+[TEST] subsystem3 SUMMARY 0 passed, 2 failed
+[TEST] S4-U01 PASS  message buffer max line = S4_SUMMARY_MAX
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the board flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=-27 y=-25 z=1026  mag x=-5587 y=-2454 z=4233
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 acc mg   -27   -25  1026  mag  -5587  -2454   4233
+[IMU]  1 acc mg   -34   -31  1023  mag  -5569  -2428   4226
+[IMU]  2 acc mg   -28   -24  1021  mag  -5581  -2471   4213
+[IMU]  3 acc mg   -27   -30  1019  mag  -5577  -2458   4202
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355797996 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[IMU]  4 acc mg   -33   -27  1030  mag  -5580  -2455   4229
+[IMU]  5 acc mg   -31   -30  1017  mag  -5593  -2450   4233
+[IMU]  6 acc mg   -29   -26  1025  mag  -5589  -2445   4213
+[IMU]  7 acc mg   -34   -30  1026  mag  -5585  -2447   4201
+[IMU]  8 acc mg   -32   -28  1027  mag  -5569  -2465   4243
+[IMU]  9 acc mg   -31   -27  1023  mag  -5558  -2464   4237
+[IMU] 10 acc mg   -33   -32  1026  mag  -5569  -2446   4222
+[IMU] 11 acc mg   -31   -31  1018  mag  -5572  -2484   4241
+[IMU] 12 acc mg   -32   -29  1029  mag  -5570  -2453   4224
+[IMU] 13 acc mg   -27   -28  1024  mag  -5593  -2430   4218
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355800006 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[IMU] 14 acc mg   -35   -26  1027  mag  -5574  -2463   4228
+[IMU] 15 acc mg   -36   -26  1033  mag  -5552  -2433   4233
+[IMU] 16 acc mg   -27   -29  1019  mag  -5584  -2432   4243
+[IMU] 17 acc mg   -35   -32  1023  mag  -5574  -2441   4266
+[IMU] 18 acc mg   -30   -27  1019  mag  -5580  -2411   4223
+s1: link down, status=-1 kpolls=1212
+[IMU] 19 acc mg    27   -30  1044  mag  -5555  -2452   4243
+[IMU] 20 acc mg   -32   -30  1030  mag  -5563  -2447   4237
+[IMU] 21 acc mg   -34   -31  1026  mag  -5569  -2428   4252
+[IMU] 22 acc mg   -33   -27  1021  mag  -5571  -2446   4235
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355802016 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[IMU] 23 acc mg   -29   -35  1027  mag  -5583  -2439   4253
+[IMU] 24 acc mg   -28   -19  1029  mag  -5566  -2445   4256
+[TEST] subsystem4 IMU SUMMARY 7 passed, 0 failed
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355804026 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[TEST] INT-02 FAIL  summary lines flow from subsystem 3 to subsystem 4   (../app_program/subsystem4/subsystem4_test.c:60)
+[TEST] subsystem4 (S4-U01, INT-02) SUMMARY 1 passed, 1 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355806036 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+s1: link down, status=-1 kpolls=1474
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355808046 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355810056 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: link down, status=-1 kpolls=1737
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355812066 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355814076 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355816086 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+s1: link down, status=-1 kpolls=1999
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355818096 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355820106 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+---- Closed the serial port COM9 ----

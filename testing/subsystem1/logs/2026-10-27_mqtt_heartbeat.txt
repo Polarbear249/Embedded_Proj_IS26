@@ -1,0 +1,159 @@
+---- Opened the serial port COM9 ----
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the board flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=-87 y=-76 z=1042  mag x=-1629 y=-4245 z=2363
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[IMU] S4-U08 manual: tilt/rotate the board for 5 s
+[IMU]  0 acc mg   -87   -76  1042  mag  -1629  -4245   2363
+[IMU]  1 acc mg   -81   -73  1043  mag  -1653  -4286   2348
+[IMU]  2 acc mg   -80   -77  1039  mag  -1658  -4218   2391
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355785936 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[IMU]  3 acc mg   -73   -72  1053  mag  -1654  -4239   2405
+[IMU]  4 acc mg   -84   -73  1044  mag  -1670  -4230   2358
+[IMU]  5 acc mg   -81   -78  1033  mag  -1703  -4230   2341
+[IMU]  6 acc mg   -87   -76  1045  mag  -1663  -4236   2442
+[IMU]  7 acc mg   -80   -74  1042  mag  -1647  -4258   2414
+[IMU]  8 acc mg   -84   -79  1049  mag  -1639  -4210   2413
+[IMU]  9 acc mg   -78   -77  1041  mag  -1664  -4196   2402
+[IMU] 10 acc mg   -88   -73  1047  mag  -1650  -4234   2370
+[IMU] 11 acc mg   -77   -73  1039  mag  -1688  -4210   2440
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355787946 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 0"
+[IMU] 12 acc mg   -82   -75  1047  mag  -1639  -4211   2386
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 0"
+[IMU] 13 acc mg   -84   -78  1050  mag  -1639  -4215   2383
+[IMU] 14 acc mg   -87   -76  1039  mag  -1630  -4205   2331
+[IMU] 15 acc mg   -82   -71  1042  mag  -1639  -4224   2356
+[IMU] 16 acc mg   -78   -79  1039  mag  -1634  -4198   2362
+[IMU] 17 acc mg   -83   -73  1040  mag  -1677  -4210   2457
+[IMU] 18 acc mg   -84   -74  1045  mag  -1619  -4182   2384
+[IMU] 19 acc mg   -80   -75  1045  mag  -1667  -4218   2429
+[IMU] 20 acc mg   -81   -74  1040  mag  -1640  -4205   2375
+[IMU] 21 acc mg   -83   -72  1042  mag  -1643  -4258   2290
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355789956 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+[IMU] 22 acc mg   -80   -75  1039  mag  -1658  -4270   2368
+[IMU] 23 acc mg   -90   -76  1035  mag  -1579  -4197   2349
+[IMU] 24 acc mg   -82   -76  1040  mag  -1622  -4231   2397
+[TEST] subsystem4 IMU SUMMARY 7 passed, 0 failed
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355791966 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 1"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 1"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355793976 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+[TEST] INT-02 FAIL  summary lines flow from subsystem 3 to subsystem 4   (../app_program/subsystem4/subsystem4_test.c:60)
+[TEST] subsystem4 (S4-U01, INT-02) SUMMARY 1 passed, 1 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355795986 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 2"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355797996 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 2"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355800006 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355802016 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 3"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 3"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355804026 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355806036 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 4"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355808046 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 4"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355810056 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355812066 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 5"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 5"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355814076 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355816086 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 6"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355818096 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355820106 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355822116 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 7"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 6"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355824126 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355826136 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 7"
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 8"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 8"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355828146 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355830156 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355832166 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 9"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 9"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355834176 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355836186 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 10"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 10"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355838196 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355840206 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355842216 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task resumed, state=WAIT, pri=12
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 11"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 11"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355844226 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355846236 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 12"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 12"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355848246 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355850256 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355852266 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 13"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 13"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355854276 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355856286 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+mqtt: TX [mtk3smp-pico/heartbeat] "hb 14"
+mqtt: RX [mtk3smp-pico/heartbeat] "hb 14"
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355858296 ms  samples=0  min=0 max=0 avg=0  free slots=4  free blocks=4
+---- Closed the serial port COM9 ----

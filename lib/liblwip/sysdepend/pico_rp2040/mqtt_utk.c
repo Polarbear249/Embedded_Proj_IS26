@@ -22,7 +22,7 @@
 #include "mqtt_utk.h"
 #include <tm/tmonitor.h>
 
-#define MQTT_UTK_HEARTBEAT_MS   5000
+#define MQTT_UTK_HEARTBEAT_MS   1000
 #define MQTT_UTK_KEEPALIVE_S    60
 #define MQTT_UTK_RETRY_MS       3000
 
@@ -44,6 +44,35 @@ static u16_t		rx_len;
 static u8_t		rx_truncated;
 
 static void heartbeat_timeout(void *arg);
+static void telem_timeout(void *arg);
+
+/* Do-nothing defaults. The application overrides both by defining a function
+ * of the same name (Subsystem 1: app_program/subsystem1/wifi_telemetry.c). */
+__attribute__((weak)) uint32_t mqtt_app_tx(uint8_t *buf, uint32_t max)
+{
+	(void)buf;
+	(void)max;
+	return 0U;
+}
+
+__attribute__((weak)) void mqtt_app_rx(const char *topic, const uint8_t *data,
+				       uint32_t len)
+{
+	(void)topic;
+	(void)data;
+	(void)len;
+}
+
+static int topic_is_cmd(void)
+{
+	const char	*want = MQTT_UTK_TOPIC_CMD;
+	u16_t		i = 0;
+
+	while(want[i] != '\0' && rx_topic[i] == want[i]) {
+		i++;
+	}
+	return want[i] == '\0' && rx_topic[i] == '\0';
+}
 
 /* mqtt.c NUL-terminates the topic before handing it over, but it is only
  * valid for the duration of this call -- copy it out. */
@@ -71,19 +100,33 @@ static void incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
 
 	for(i = 0; i < len; i++) {
 		if(rx_len < (MQTT_UTK_RX_DATA_MAX - 1)) {
-			/* The console is a terminal -- keep raw bytes from a
-			 * payload this demo did not publish from scrambling it. */
-			UB c = data[i];
-			rx_data[rx_len++] = (c >= 0x20 && c < 0x7f)? c: '.';
+			/* Keep the bytes raw: command frames are binary. Text for
+			 * the console is cleaned up below, only where it is printed. */
+			rx_data[rx_len++] = data[i];
 		} else {
 			rx_truncated = 1;
 		}
 	}
 
 	if((flags & MQTT_DATA_FLAG_LAST) != 0) {
-		rx_data[rx_len] = '\0';
-		tm_printf((UB*)"mqtt: RX [%s] \"%s\"%s\n", rx_topic, rx_data,
-			  rx_truncated? " (truncated)": "");
+		if(topic_is_cmd()) {
+			if(rx_truncated) {
+				tm_printf((UB*)"mqtt: command too long, dropped\n");
+			} else {
+				mqtt_app_rx(rx_topic, rx_data, rx_len);
+			}
+		} else {
+			/* The console is a terminal -- keep raw bytes from a
+			 * payload this demo did not publish from scrambling it. */
+			for(i = 0; i < rx_len; i++) {
+				if(rx_data[i] < 0x20 || rx_data[i] >= 0x7f) {
+					rx_data[i] = '.';
+				}
+			}
+			rx_data[rx_len] = '\0';
+			tm_printf((UB*)"mqtt: RX [%s] \"%s\"%s\n", rx_topic, rx_data,
+				  rx_truncated? " (truncated)": "");
+		}
 	}
 }
 
@@ -94,6 +137,16 @@ static void subscribe_done_cb(void *arg, err_t result)
 		tm_printf((UB*)"mqtt: subscribed to " MQTT_TOPIC "\n");
 	} else {
 		tm_printf((UB*)"mqtt: subscribe failed, err=%d\n", (int)result);
+	}
+}
+
+static void subscribe_cmd_done_cb(void *arg, err_t result)
+{
+	(void)arg;
+	if(result == ERR_OK) {
+		tm_printf((UB*)"mqtt: subscribed to " MQTT_UTK_TOPIC_CMD "\n");
+	} else {
+		tm_printf((UB*)"mqtt: command subscribe failed, err=%d\n", (int)result);
 	}
 }
 
@@ -125,6 +178,26 @@ static void heartbeat_timeout(void *arg)
 	 * only starts this chain once, on the transition into MQTT_CONNECT_
 	 * ACCEPTED, so there is exactly one heartbeat chain alive at a time. */
 	sys_timeout(MQTT_UTK_HEARTBEAT_MS, heartbeat_timeout, NULL);
+}
+
+static void telem_timeout(void *arg)
+{
+	uint8_t		buf[MQTT_UTK_BUF_MAX];
+	uint32_t	len;
+
+	(void)arg;
+
+	if(mqtt_client_is_connected(client)) {
+		len = mqtt_app_tx(buf, sizeof(buf));
+		if(len > 0U && len <= sizeof(buf)) {
+			(void)mqtt_publish(client, MQTT_UTK_TOPIC_TELEM, buf,
+					   (u16_t)len, 0 /* qos */, 0 /* retain */,
+					   publish_done_cb, NULL);
+		}
+	}
+
+	/* Re-arms itself, exactly like heartbeat_timeout(). */
+	sys_timeout(MQTT_UTK_TELEM_MS, telem_timeout, NULL);
 }
 
 static void retry_timeout(void *arg)
@@ -172,6 +245,16 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 		 * MEMP_SYS_TIMEOUT slot until the pool is exhausted. */
 		sys_untimeout(heartbeat_timeout, NULL);
 		sys_timeout(MQTT_UTK_HEARTBEAT_MS, heartbeat_timeout, NULL);
+
+		/* Commands in, telemetry out. Same one-chain-at-a-time rule. */
+		err = mqtt_subscribe(client, MQTT_UTK_TOPIC_CMD, 0 /* qos */,
+				     subscribe_cmd_done_cb, NULL);
+		if(err != ERR_OK) {
+			tm_printf((UB*)"mqtt: command mqtt_subscribe() failed, err=%d\n",
+				  (int)err);
+		}
+		sys_untimeout(telem_timeout, NULL);
+		sys_timeout(MQTT_UTK_TELEM_MS, telem_timeout, NULL);
 	} else {
 		/* mqtt_client_connect() reconnects on its own for a dropped
 		 * keepalive; a rejected/never-established connection does not
@@ -180,6 +263,12 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 		 * into a tight reconnect loop. */
 		tm_printf((UB*)"mqtt: connection status %d, retrying in %ds\n",
 			  (int)status, MQTT_UTK_RETRY_MS / 1000);
+		/* Hold the start guard until retry_timeout() releases it. If this
+		 * was an established link that dropped, "connecting" is already 0,
+		 * so the WiFi task's per-poll mqtt_utk_start() would otherwise call
+		 * mqtt_client_connect() every ~2 ms for the whole delay and just
+		 * get ERR_ISCONN back. */
+		connecting = 1;
 		sys_timeout(MQTT_UTK_RETRY_MS, retry_timeout, NULL);
 	}
 }

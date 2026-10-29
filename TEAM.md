@@ -192,11 +192,17 @@ object but the µT-Kernel object type is not yet chosen.
 | IF-04 | S3, S4, S5, S1 → VC | event flag (owned by VC) | `EVG_sys` | event notification with `tk_set_flg`; wait/clear options **CONFIRM** | Tribunal 1 |
 | IF-05 | all → VC | shared word, atomic access | `g_fault_mask` | latched fault bits: motor stall, encoder fault, IMU fault, no echo, WiFi loss. Owner **CONFIRM**: VC (Version C) or S2 | Tribunal 1 |
 | IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop | Tribunal 1 |
-| IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `Q_telem` | 13-byte packed snapshot, no shared struct | Tribunal 1 |
-| IF-08 | S1 → VC | queue (kernel type TBD, owned by VC) | `Q_cmd` | validated commands | Tribunal 1 |
+| IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `mbf_telem` (`Q_telem`) | 13-byte packed snapshot, frame v1, layout in `app_program/subsystem1/telemetry_frame.h`; VC calls `s1_telem_send()` | Tribunal 1 |
+| IF-08 | S1 → VC | message buffer (created by S1 until the VC exists; then move to VC) | `mbf_cmd` (`Q_cmd`) | validated 3-byte command frame (`CMD_STOP`, `CMD_START`, `CMD_SET_SPEED`, `CMD_PING`); VC calls `s1_cmd_recv()` | Tribunal 1 (buffer type and temporary owner: S1) |
 | IF-09 | S5 → VC | queue (kernel type TBD, owned by VC) | `Q_profile` | packed `ObstacleProfile_t`: three 9-bit distances in 32 bits | Tribunal 1 |
 | IF-10 | S2 → S4 | aligned 32-bit word, single writer, no lock | **TBD** | encoder distance for hump height, every 10 ms | **PROPOSED** |
 | IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer, no lock | **TBD** | hump result, 8-bit height clamped (mm), written on hump end | Tribunal 1 |
+
+MQTT topics (broker on the laptop): `mtk3smp-pico/telem` (binary frame out, 5 Hz),
+`mtk3smp-pico/cmd` (binary command in), `mtk3smp-pico/heartbeat` (text, 1 s).
+S1 edits two shared library files to carry them: `lib/liblwip/sysdepend/pico_rp2040/mqtt_utk.c/.h`
+(weak hooks `mqtt_app_tx` and `mqtt_app_rx`, 1 s heartbeat, reconnect guard) and
+`lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.c` (re-join retry made level-triggered).
 
 Safety path: S5 confirms an obstacle and reports it to VC; VC sets
 `EVG_stop`; S2 stops the motors and the encoders confirm stationary;
@@ -214,12 +220,12 @@ in the code; replace them as each owner creates the objects in section 5.
 
 | Object | Limit | S1 | S2 | S3 | S4 | S5 |
 |---|---|---|---|---|---|---|
-| Task | 32 | 1 | 1 | 1 | 1 | |
+| Task | 32 | 2 | 1 | 1 | 1 | |
 | Semaphore | 16 | | 1 | | | |
 | Event flag | 16 | | | | 1 | |
 | Mailbox | 12 | | | 1 | | |
 | Mutex | 12 | | | 1 | | |
-| Message buffer | 12 | | | | 1 | |
+| Message buffer | 12 | 2 | | | 1 | |
 | Fixed memory pool | 12 | | 1 | | | |
 | Variable memory pool | 12 | | | | | |
 | Cyclic handler | 12 | 1 | | | | |
@@ -239,3 +245,10 @@ in the code; replace them as each owner creates the objects in section 5.
 5. Encoder distance word from Motion to IMU (IF-10).
 6. Core assignment for each task.
 7. MQTT code inside `cyw43_utk_task` needs team and instructor agreement.
+   S1's changes are listed under section 5 and are ready for review in the PR.
+8. Known limit: after a WiFi drop the link re-joins by itself in about 35 s,
+   but MQTT reconnects only about 58 s after the link is back, because the
+   MQTT keepalive is 60 s. Lowering it trades recovery time against false
+   disconnects on short WiFi stalls.
+9. The forced WiFi reconnect with motion and line tasks running (design
+   review A1) needs the Motion task; run it at integration.

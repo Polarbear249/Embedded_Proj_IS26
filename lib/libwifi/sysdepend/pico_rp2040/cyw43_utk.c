@@ -307,6 +307,17 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
                         time_us_64() + WIFI_REJOIN_DELAY_US: 0;
         }
 
+        /* Level-triggered backstop: the arming above only happens on a
+         * status *change*. If a failed link is ever seen with no retry
+         * pending, arm one now, so a missed edge cannot leave the radio
+         * stuck in FAIL until the next power cycle. */
+        if(radio_status.link_status < 0 && rejoin_at == 0) {
+            rejoin_at = time_us_64() + WIFI_REJOIN_DELAY_US;
+            tm_printf((UB*)"wifi: retry armed (link %d), re-joining in %d s\n",
+                      (int)radio_status.link_status,
+                      (int)(WIFI_REJOIN_DELAY_US / 1000000ull));
+        }
+
         if(rejoin_at != 0 && time_us_64() >= rejoin_at) {
             rejoin_at = 0;
             if(radio_status.link_status < 0) {
