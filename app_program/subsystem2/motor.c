@@ -1,9 +1,8 @@
 
-#include <bsp/libbsp.h>
+#include <sys/machine.h>
 #include <tk/tkernel.h>
-
+#include <bsp/libbsp.h>
 #include <stdint.h>
-
 /*
  * Buddy 2 - Motor Driver
  * Raspberry Pi Pico W / Robo Pico
