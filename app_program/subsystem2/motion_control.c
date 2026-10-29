@@ -13,26 +13,46 @@
  * Intended execution model:
  * - One task owns motion commands and motion_update().
  * - encoder_sample() runs separately at a faster rate.
- * - motion_update() runs every 100 ms.
+ * - motion_update() runs approximately every 100 ms.
  *
- * Current implementation supports forward wheel-speed
- * control only. Distance and turning are not implemented.
+ * Current implementation:
+ * - Forward wheel-speed control
+ * - PI speed regulation
+ * - Encoder RPM feedback
+ * - Motor stopping
+ * - Encoder feedback timeout detection
+ *
+ * Distance and turning are not yet implemented.
  */
 
-#define MOTION_UPDATE_MS        100U
-#define MOTION_DT_SECONDS       0.1f
+#define MOTION_UPDATE_MS          100U
+#define MOTION_DT_SECONDS         0.1f
 
 /* Preliminary bench-test settings */
-#define MOTION_KP               2.0f
-#define MOTION_KI               2.0f
+#define MOTION_KP                 2.0f
+#define MOTION_KI                 2.0f
 
-#define MOTION_BASE_PWM         85.0f
-#define MOTION_MAX_PWM          200.0f
+#define MOTION_BASE_PWM           85.0f
+#define MOTION_MAX_PWM            200.0f
 
-#define MOTION_START_PWM        150U
-#define MOTION_START_CYCLES     2U
+#define MOTION_START_PWM          150U
+#define MOTION_START_CYCLES       2U
 
-#define MOTION_MAX_TARGET_RPM   30.0f
+#define MOTION_MAX_TARGET_RPM     30.0f
+
+/*
+ * Encoder feedback watchdog.
+ *
+ * If a wheel is commanded to move but no encoder
+ * count changes are observed for approximately
+ * 1000 ms, stop both motors and enter FAULT.
+ *
+ * This threshold is preliminary.
+ */
+#define MOTION_ENCODER_TIMEOUT_MS 1000U
+
+static uint32_t left_no_pulse_ms = 0U;
+static uint32_t right_no_pulse_ms = 0U;
 
 static int motion_ready = 0;
 
@@ -54,8 +74,8 @@ static pi_controller_t left_pi;
 static pi_controller_t right_pi;
 
 /*
- * Convert a floating-point PWM command into an
- * integer motor-driver command.
+ * Convert floating-point PWM to an integer
+ * motor-driver command.
  */
 static uint16_t motion_pwm_value(float value)
 {
@@ -82,12 +102,13 @@ static void motion_enter_fault(void)
     target_left_rpm = 0.0f;
     target_right_rpm = 0.0f;
 
+    startup_cycles = 0U;
+
     motion_state = MOTION_STATE_FAULT;
 }
 
 /*
- * Initialise the motor driver, encoder inputs
- * and two independent PI controllers.
+ * Initialise motors, encoders and PI controllers.
  */
 motion_result_t motion_init(void)
 {
@@ -140,7 +161,11 @@ motion_result_t motion_init(void)
     actual_left_rpm = 0.0f;
     actual_right_rpm = 0.0f;
 
+    left_no_pulse_ms = 0U;
+    right_no_pulse_ms = 0U;
+
     startup_cycles = 0U;
+
     motion_state = MOTION_STATE_STOPPED;
     motion_ready = 1;
 
@@ -148,10 +173,12 @@ motion_result_t motion_init(void)
 }
 
 /*
- * Request forward wheel speeds.
+ * Request independent forward wheel speeds.
  *
- * Negative or excessive speeds are rejected.
- * Actual PWM changes occur in motion_update().
+ * Valid range: 0 to 30 RPM per wheel.
+ *
+ * Commands are intended to be serialised by
+ * the motion-control task.
  */
 motion_result_t motion_set_speed(
     float left_rpm,
@@ -168,7 +195,7 @@ motion_result_t motion_set_speed(
     }
 
     /*
-     * These comparisons also reject NaN.
+     * Reject negative, excessive and NaN inputs.
      */
     if (!(left_rpm >= 0.0f &&
           left_rpm <= MOTION_MAX_TARGET_RPM &&
@@ -188,12 +215,31 @@ motion_result_t motion_set_speed(
         pi_reset(&left_pi);
         pi_reset(&right_pi);
 
+        left_no_pulse_ms = 0U;
+        right_no_pulse_ms = 0U;
+
         encoder_get_counts(
             &previous_left_count,
             &previous_right_count
         );
 
         startup_cycles = MOTION_START_CYCLES;
+    }
+
+    /*
+     * Reset the watchdog for any wheel that has
+     * been commanded to stop.
+     */
+    if (left_rpm == 0.0f)
+    {
+        left_no_pulse_ms = 0U;
+        pi_reset(&left_pi);
+    }
+
+    if (right_rpm == 0.0f)
+    {
+        right_no_pulse_ms = 0U;
+        pi_reset(&right_pi);
     }
 
     target_left_rpm = left_rpm;
@@ -205,10 +251,10 @@ motion_result_t motion_set_speed(
 }
 
 /*
- * Stop both motors and reset controller state.
+ * Stop both motors.
  *
- * A zero-PWM stop does not guarantee that the
- * car stops physically without coasting.
+ * Zero PWM does not guarantee an immediate
+ * physical stop because the wheels can coast.
  */
 motion_result_t motion_stop(void)
 {
@@ -231,6 +277,9 @@ motion_result_t motion_stop(void)
 
     startup_cycles = 0U;
 
+    left_no_pulse_ms = 0U;
+    right_no_pulse_ms = 0U;
+
     if (motion_state != MOTION_STATE_FAULT)
     {
         motion_state = MOTION_STATE_STOPPED;
@@ -240,7 +289,7 @@ motion_result_t motion_stop(void)
 }
 
 /*
- * Return current wheel status.
+ * Return latest wheel-speed and encoder status.
  */
 motion_result_t motion_get_status(
     motion_status_t *status)
@@ -269,11 +318,12 @@ motion_result_t motion_get_status(
 }
 
 /*
- * Periodic 100 ms speed-control update.
+ * Periodic speed-control update.
  *
- * IMPORTANT:
- * Encoder sampling must happen independently
- * and much more frequently than this function.
+ * Intended call interval: 100 ms.
+ *
+ * Encoder sampling must occur independently
+ * at a much faster rate.
  */
 void motion_update(void)
 {
@@ -283,8 +333,8 @@ void motion_update(void)
     int32_t delta_left;
     int32_t delta_right;
 
-    float left_pwm;
-    float right_pwm;
+    float left_pwm = 0.0f;
+    float right_pwm = 0.0f;
 
     ER er;
 
@@ -293,7 +343,14 @@ void motion_update(void)
         return;
     }
 
-    encoder_get_counts(&left_count, &right_count);
+    /*
+     * Obtain encoder counts and calculate the
+     * number of counts observed since last update.
+     */
+    encoder_get_counts(
+        &left_count,
+        &right_count
+    );
 
     delta_left = left_count - previous_left_count;
     delta_right = right_count - previous_right_count;
@@ -301,6 +358,9 @@ void motion_update(void)
     previous_left_count = left_count;
     previous_right_count = right_count;
 
+    /*
+     * Convert count changes into wheel RPM.
+     */
     actual_left_rpm = encoder_calculate_left_rpm(
         delta_left,
         MOTION_UPDATE_MS
@@ -317,8 +377,64 @@ void motion_update(void)
     }
 
     /*
-     * Preliminary startup boost.
-     * Applies for two control updates.
+     * Encoder feedback watchdog.
+     *
+     * Only monitor wheels with a positive
+     * target speed.
+     */
+    if (target_left_rpm > 0.0f)
+    {
+        if (delta_left == 0)
+        {
+            if (left_no_pulse_ms < MOTION_ENCODER_TIMEOUT_MS)
+            {
+                left_no_pulse_ms += MOTION_UPDATE_MS;
+            }
+        }
+        else
+        {
+            left_no_pulse_ms = 0U;
+        }
+    }
+    else
+    {
+        left_no_pulse_ms = 0U;
+    }
+
+    if (target_right_rpm > 0.0f)
+    {
+        if (delta_right == 0)
+        {
+            if (right_no_pulse_ms < MOTION_ENCODER_TIMEOUT_MS)
+            {
+                right_no_pulse_ms += MOTION_UPDATE_MS;
+            }
+        }
+        else
+        {
+            right_no_pulse_ms = 0U;
+        }
+    }
+    else
+    {
+        right_no_pulse_ms = 0U;
+    }
+
+    /*
+     * Enter FAULT if either moving wheel
+     * has stopped providing feedback.
+     */
+    if ((left_no_pulse_ms >= MOTION_ENCODER_TIMEOUT_MS) ||
+        (right_no_pulse_ms >= MOTION_ENCODER_TIMEOUT_MS))
+    {
+        motion_enter_fault();
+        return;
+    }
+
+    /*
+     * Preliminary startup PWM boost.
+     *
+     * Runs for two 100 ms update cycles.
      */
     if (startup_cycles > 0U)
     {
@@ -345,12 +461,13 @@ void motion_update(void)
         }
 
         startup_cycles--;
+
         return;
     }
 
-    left_pwm = 0.0f;
-    right_pwm = 0.0f;
-
+    /*
+     * Left-wheel PI speed control.
+     */
     if (target_left_rpm > 0.0f)
     {
         left_pwm = MOTION_BASE_PWM + pi_update(
@@ -365,6 +482,9 @@ void motion_update(void)
         pi_reset(&left_pi);
     }
 
+    /*
+     * Right-wheel PI speed control.
+     */
     if (target_right_rpm > 0.0f)
     {
         right_pwm = MOTION_BASE_PWM + pi_update(
@@ -379,6 +499,9 @@ void motion_update(void)
         pi_reset(&right_pi);
     }
 
+    /*
+     * Apply PWM outputs.
+     */
     er = motor_set_left_pwm(
         motion_pwm_value(left_pwm)
     );
@@ -400,7 +523,7 @@ void motion_update(void)
 }
 
 /*
- * Navigation commands reserved for future work.
+ * Navigation APIs not implemented yet.
  */
 motion_result_t motion_move_forward(float distance_cm)
 {
