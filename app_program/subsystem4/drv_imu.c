@@ -46,10 +46,26 @@ imu_read_reg (uint8_t reg, uint8_t *p_value)
 }
 
 /*!
- * One accelerometer + magnetometer sample.
+ * One accelerometer + magnetometer sample (two bursts).
  */
 i2c1_result_t
 imu_read (imu_sample_t *p_sample)
+{
+    i2c1_result_t result = imu_read_acc(p_sample);
+
+    if (I2C1_OK == result)
+    {
+        result = imu_read_mag(p_sample);
+    }
+
+    return (result);
+}
+
+/*!
+ * Accelerometer only: one 6-byte burst. Fills acc_*_mg, leaves mag_*.
+ */
+i2c1_result_t
+imu_read_acc (imu_sample_t *p_sample)
 {
     i2c1_result_t result = I2C1_BAD_PARAM;
     uint8_t       raw[IMU_AXES_BYTES] = {0U};
@@ -69,7 +85,22 @@ imu_read (imu_sample_t *p_sample)
                              * IMU_ACC_UG_PER_LSB) / IMU_UG_PER_MG);
         p_sample->acc_z_mg = (int16_t)(((int32_t)imu_le16(&raw[4])
                              * IMU_ACC_UG_PER_LSB) / IMU_UG_PER_MG);
+    }
 
+    return (result);
+}
+
+/*!
+ * Magnetometer only: one 6-byte burst. Fills mag_*, leaves acc_*_mg.
+ */
+i2c1_result_t
+imu_read_mag (imu_sample_t *p_sample)
+{
+    i2c1_result_t result = I2C1_BAD_PARAM;
+    uint8_t       raw[IMU_AXES_BYTES] = {0U};
+
+    if (NULL != p_sample)
+    {
         result = i2c1_write_read(IMU_ADDR, IMU_OUT_X_L_M | IMU_AUTO_INC,
                                  raw, IMU_AXES_BYTES);
     }
