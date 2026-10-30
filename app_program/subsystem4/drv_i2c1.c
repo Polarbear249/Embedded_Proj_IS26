@@ -34,7 +34,8 @@
 #define I2C1_PAD_CFG            (GPIO_IE | GPIO_PUE | GPIO_SHEMITT \
                                  | GPIO_DRIVE_4MA)
 
-static uint32_t g_last_abort = 0U;
+static uint32_t    g_last_abort = 0U;
+static i2c1_diag_t g_diag = {0U, 0U, 0U, 0U, 0U, 0U, 0U};
 
 static void          i2c1_bus_recover(void);
 static i2c1_result_t i2c1_wait_raw(uint32_t bits);
@@ -145,6 +146,18 @@ i2c1_write_read (uint8_t addr, uint8_t reg, uint8_t *p_data, uint32_t len)
     }
 
     return (result);
+}
+
+/*!
+ * Copy of the block state at the last timeout (count 0 = none yet).
+ */
+void
+i2c1_timeout_diag (i2c1_diag_t *p_diag)
+{
+    if (NULL != p_diag)
+    {
+        *p_diag = g_diag;
+    }
 }
 
 /*!
@@ -277,6 +290,18 @@ i2c1_wait_raw (uint32_t bits)
             (void)tk_get_tim(&now);
             b_done = ((uint32_t)(now.lo - start.lo) > I2C1_TIMEOUT_MS);
         }
+    }
+
+    if (I2C1_TIMEOUT == result)
+    {
+        // Snapshot while still stuck, before the caller disables the block
+        g_diag.status = in_w(I2C1_REG(I2Cx_STATUS));
+        g_diag.txflr = in_w(I2C1_REG(I2Cx_TXFLR));
+        g_diag.enable_status = in_w(I2C1_REG(I2Cx_ENABLE_STATUS));
+        g_diag.raw_intr = in_w(I2C1_REG(I2Cx_RAW_INTR_STAT));
+        g_diag.sda = gpio_get_val(I2C1_SDA_PIN);
+        g_diag.scl = gpio_get_val(I2C1_SCL_PIN);
+        g_diag.count++;
     }
 
     return (result);

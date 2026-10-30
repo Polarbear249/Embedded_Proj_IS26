@@ -166,6 +166,9 @@ imu_calib_mag_default (imu_calib_mag_t *p_mag)
         p_mag->offset[0] = IMU_CALIB_MAG_OFF_X;
         p_mag->offset[1] = IMU_CALIB_MAG_OFF_Y;
         p_mag->offset[2] = IMU_CALIB_MAG_OFF_Z;
+        p_mag->scale_x1000[0] = IMU_CALIB_MAG_SCALE_X;
+        p_mag->scale_x1000[1] = IMU_CALIB_MAG_SCALE_Y;
+        p_mag->scale_x1000[2] = IMU_CALIB_MAG_SCALE_Z;
     }
 }
 
@@ -186,7 +189,39 @@ imu_calib_mag_from_spin (int32_t const p_min[], int32_t const p_max[],
 }
 
 /*!
- * corrected = raw - offset, per axis, raw counts.
+ * Soft-iron scale from a flat spin: the two horizontal axes h_one and
+ * h_two (the ones that turn) are scaled to their mean span, so the
+ * ellipse becomes a circle. Assumes the ellipse is aligned with the
+ * axes (not rotated). Leaves the offsets and the vertical axis alone.
+ */
+void
+imu_calib_mag_scale_from_spin (int32_t const p_min[], int32_t const p_max[],
+                               uint32_t h_one, uint32_t h_two,
+                               imu_calib_mag_t *p_mag)
+{
+    int32_t span_one = 0;
+    int32_t span_two = 0;
+    int32_t mean = 0;
+
+    if ((NULL != p_min) && (NULL != p_max) && (NULL != p_mag)
+        && (h_one < IMU_CALIB_AXES) && (h_two < IMU_CALIB_AXES))
+    {
+        span_one = p_max[h_one] - p_min[h_one];
+        span_two = p_max[h_two] - p_min[h_two];
+        mean = (span_one + span_two) / 2;
+    }
+
+    if ((span_one > 0) && (span_two > 0))
+    {
+        p_mag->scale_x1000[h_one] = (mean * IMU_CALIB_MAG_SCALE_ONE)
+                                    / span_one;
+        p_mag->scale_x1000[h_two] = (mean * IMU_CALIB_MAG_SCALE_ONE)
+                                    / span_two;
+    }
+}
+
+/*!
+ * corrected = (raw - offset) x scale / 1000, per axis, raw counts.
  */
 void
 imu_calib_mag_apply (imu_calib_mag_t const *p_mag, int32_t const p_raw[],
@@ -198,7 +233,9 @@ imu_calib_mag_apply (imu_calib_mag_t const *p_mag, int32_t const p_raw[],
     {
         for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
         {
-            p_out[axis] = p_raw[axis] - p_mag->offset[axis];
+            p_out[axis] = ((p_raw[axis] - p_mag->offset[axis])
+                           * p_mag->scale_x1000[axis])
+                          / IMU_CALIB_MAG_SCALE_ONE;
         }
     }
 }

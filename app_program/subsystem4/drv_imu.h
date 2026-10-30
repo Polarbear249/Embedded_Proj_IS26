@@ -61,6 +61,7 @@ typedef struct
 } imu_sample_t;
 
 i2c1_result_t imu_init(void);
+i2c1_result_t imu_configure(void);
 i2c1_result_t imu_read_reg(uint8_t reg, uint8_t *p_value);
 i2c1_result_t imu_read(imu_sample_t *p_sample);
 i2c1_result_t imu_read_acc(imu_sample_t *p_sample);

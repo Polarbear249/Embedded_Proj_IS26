@@ -85,6 +85,7 @@ static void     imu_terrain_cyc_handler(void *p_exinf);
 static void     imu_terrain_task(INT stacd, void *p_exinf);
 static void     imu_set_state(imu_terrain_state_t state);
 static void     imu_start_device(void);
+static void     imu_recover(void);
 static void     imu_cycle(uint32_t cycle, uint32_t *p_acc_us,
                           uint32_t *p_mag_us);
 static bool     imu_sample(uint32_t cycle, int32_t p_acc[],
@@ -254,8 +255,13 @@ imu_set_state (imu_terrain_state_t state)
 static void
 imu_start_device (void)
 {
+    // Line levels (GPIO_IN, read without changing the pin function), for
+    // the fault message: shows which line is stuck when a restart fails
+    UINT          sda_before = gpio_get_val(I2C1_SDA_PIN);
+    UINT          scl_before = gpio_get_val(I2C1_SCL_PIN);
     i2c1_result_t result = imu_init();
     uint8_t       who = 0U;
+    i2c1_diag_t   diag;
 
     if (I2C1_OK == result)
     {
@@ -271,9 +277,58 @@ imu_start_device (void)
     }
     else
     {
-        tm_printf((UB*)"[IMU] start failed: %s, WHO_AM_I 0x%x\n",
-                  i2c1_result_name(result), (UINT)who);
+        i2c1_timeout_diag(&diag);
+        tm_printf((UB*)"[IMU] start failed: %s, WHO_AM_I 0x%x | lines"
+                  " (1 = high) before SDA %u SCL %u, after SDA %u SCL %u\n",
+                  i2c1_result_name(result), (UINT)who, sda_before,
+                  scl_before, gpio_get_val(I2C1_SDA_PIN),
+                  gpio_get_val(I2C1_SCL_PIN));
+        tm_printf((UB*)"[IMU] last I2C timeout (#%u): STATUS 0x%x TXFLR %u"
+                  " ENABLE_STATUS 0x%x RAW_INTR 0x%x SDA %u SCL %u\n",
+                  (UINT)diag.count, (UINT)diag.status, (UINT)diag.txflr,
+                  (UINT)diag.enable_status, (UINT)diag.raw_intr,
+                  (UINT)diag.sda, (UINT)diag.scl);
         imu_set_state(IMU_TERRAIN_FAULT);
+    }
+}
+
+/*
+ * Once a second in FAULT. A sensor that dropped off the bus (loose wire)
+ * usually comes back by itself on the existing I2C1 set-up (run 17), and
+ * a full re-init after such a drop never recovered (runs 22, 29, 30). So
+ * first just probe WHO_AM_I; if it answers, rewrite the configuration
+ * (it may have power-cycled) and go back. Re-initialise the block (with
+ * bus recovery) only if SDA is held low, i.e. the bus is really stuck.
+ */
+static void
+imu_recover (void)
+{
+    uint8_t       who = 0U;
+    i2c1_result_t result = imu_read_reg(IMU_WHO_AM_I, &who);
+
+    if ((I2C1_OK == result) && (IMU_WHO_AM_I_VAL == who))
+    {
+        result = imu_configure();
+    }
+
+    if ((I2C1_OK == result) && (IMU_WHO_AM_I_VAL == who))
+    {
+        tm_printf((UB*)"[IMU] sensor answers again (probe, no re-init)\n");
+        g_bad_reads = 0U;
+        imu_set_state(g_b_level_valid ? IMU_TERRAIN_ACTIVE
+                                      : IMU_TERRAIN_CALIBRATING);
+    }
+    else if (0U == gpio_get_val(I2C1_SDA_PIN))
+    {
+        tm_printf((UB*)"[IMU] probe %s, SDA held low: full re-init\n",
+                  i2c1_result_name(result));
+        imu_start_device();
+    }
+    else
+    {
+        tm_printf((UB*)"[IMU] probe: %s (SDA %u SCL %u), retry in 1 s\n",
+                  i2c1_result_name(result), gpio_get_val(I2C1_SDA_PIN),
+                  gpio_get_val(I2C1_SCL_PIN));
     }
 }
 
@@ -304,7 +359,7 @@ imu_cycle (uint32_t cycle, uint32_t *p_acc_us, uint32_t *p_mag_us)
         case IMU_TERRAIN_FAULT:
             if (0U == (cycle % IMU_TERRAIN_RETRY_CYC))
             {
-                imu_start_device();
+                imu_recover();
             }
             break;
 

@@ -44,6 +44,18 @@
  * readings trace a circle whose centre is the car's own magnetic offset
  * (motor magnets, steel). A second spin with the offset removed must
  * give a circle centred on zero, i.e. a near-constant radius.
+ *
+ * Part 5b (S4-U33..U34, only with IMU_TEST_BARE_MAG 1): the same two
+ * spins with the bare GY-511 off the car, flat on a wooden or plastic
+ * table, away from steel, the laptop and phones. No motors or car steel
+ * nearby, so a good sensor must give a round, repeatable circle. If it
+ * does and the car spins do not, the car or the room is the problem;
+ * if it does not, the sensor or this code is.
+ * Both modes also print the RMS radius spread (every sample, not only
+ * min/max) and warn when Z moved, i.e. the spin was not flat. The first
+ * spin also gives a soft-iron scale per horizontal axis; the check spin
+ * reports offset only and offset + scale side by side, and passes on
+ * offset + scale.
  */
 
 #include "imu_unit_test.h"
@@ -106,6 +118,10 @@
 // 14 and 18), so those poses are only tilted and the fit is nonsense.
 // The stored bare-module values (S4-U27..U29) are used instead.
 #define IMU_TEST_CAR_CAL        (0)
+
+// 1 = magnetometer spin with the bare module off the car (S4-U33..U34):
+// bench tests, then the two flat spins only (no level zero, no car).
+#define IMU_TEST_BARE_MAG       (0)
 #define IMU_BARE_FACES          (6U)
 #define IMU_BARE_MAX_POSES      (12U)       // tries to collect 6 faces
 #define IMU_BARE_MOVE_MS        (8000)      // time to turn the module
@@ -153,6 +169,11 @@
 #define IMU_MAG_MIN_SPAN        (2000)      // counts = 0.16 gauss: the
                                             //   car really turned
 #define IMU_MAG_ROUND_PCT       (25)        // radius spread, % of mean
+#define IMU_MAG_MAX_ERR_PCT     (2)         // read errors, % of samples
+#define IMU_MAG_Z_FLAT_MAX      (500)       // Z range in a flat spin:
+                                            //   more = tilted about 7 deg
+                                            //   (derived, 4000-count
+                                            //   horizontal field)
 #define IMU_PERCENT             (100)
 
 typedef struct
@@ -163,15 +184,35 @@ typedef struct
     uint32_t raw_r_max;
     uint32_t cal_r_min;         // X/Y radius with the offset removed
     uint32_t cal_r_max;
+    uint64_t cal_r_sum;         // for the RMS spread over all samples
+    uint64_t cal_r_sq_sum;
+    uint32_t sc_r_min;          // radius with offset AND soft-iron scale
+    uint32_t sc_r_max;
+    uint64_t sc_r_sum;
+    uint64_t sc_r_sq_sum;
+    uint32_t good;              // successful reads
     uint32_t errors;            // failed reads
     bool     b_saturated;
 } imu_mag_spin_t;
 
-static char const * const g_spin_prompt[IMU_MAG_SPINS] =
+static char const * const g_spin_prompt[2][IMU_MAG_SPINS] =
 {
-    "SPIN: car flat on the floor, away from steel, laptop and phone",
-    "SPIN again (check): same place, same way"
+    {
+        "SPIN: car flat on the floor, away from steel, laptop and phone",
+        "SPIN again (check): same place, same way"
+    },
+    {
+        "SPIN: bare module flat on a wooden/plastic table, turn it on"
+        " the spot",
+        "SPIN again (check): same spot, same way, keep it flat"
+    }
 };
+
+// Test IDs: [0] car (Part 5), [1] bare module (Part 5b)
+static char const * const g_mag_id_offset[2] = {"S4-U25", "S4-U33"};
+static char const * const g_mag_id_round[2] = {"S4-U26", "S4-U34"};
+static char const * const g_mag_what[2] = {"the car", "the module"};
+static char const         g_axis_char[IMU_AXES] = {'X', 'Y', 'Z'};
 
 typedef struct
 {
@@ -258,11 +299,18 @@ static void     imu_calib_tests(imu_calib_t *p_cal);
 static bool     imu_capture_square(uint32_t idx, int32_t p_avg[]);
 #endif
 static void     imu_level_tests(imu_calib_t const *p_cal);
-static void     imu_mag_tests(void);
+static void     imu_mag_tests(bool b_bare);
 #endif
-static void     imu_mag_spin(uint32_t num, imu_calib_mag_t const *p_mag,
+static void     imu_mag_spin(uint32_t num, bool b_bare, uint32_t vert,
+                             imu_calib_mag_t const *p_mag,
+                             imu_calib_mag_t const *p_mag_sc,
                              imu_mag_spin_t *p_spin);
 static uint32_t imu_round_pct(uint32_t r_min, uint32_t r_max);
+static uint32_t imu_rms_pct(uint64_t sum, uint64_t sq_sum, uint32_t count);
+static void     imu_mag_z_check(imu_mag_spin_t const *p_spin,
+                                uint32_t vert);
+static uint32_t imu_mag_vertical_axis(void);
+static bool     imu_mag_errors_ok(imu_mag_spin_t const *p_spin);
 static bool     imu_capture_pose(char const *p_prompt, uint32_t num,
                                  uint32_t total, int32_t move_ms,
                                  int32_t p_avg[]);
@@ -297,8 +345,19 @@ imu_unit_test (void)
 #if IMU_TEST_CAR_CAL
     imu_calib_tests(&cal);
 #endif
-    imu_level_tests(&cal);
-    imu_mag_tests();
+    // Constant condition on purpose: both paths stay compiled (no unused
+    // function warnings), the dead one is removed by the compiler.
+    if (0 != IMU_TEST_BARE_MAG)
+    {
+        tm_printf((UB*)"[IMU] BARE MODULE MAG: module off the car, on a"
+                  " wooden/plastic table\n");
+        imu_mag_tests(true);
+    }
+    else
+    {
+        imu_level_tests(&cal);
+        imu_mag_tests(false);
+    }
 #endif // IMU_TEST_BARE
 }
 
@@ -973,80 +1032,150 @@ imu_level_tests (imu_calib_t const *p_cal)
  * spin to check that the corrected X/Y circle is centred (round).
  */
 static void
-imu_mag_tests (void)
+imu_mag_tests (bool b_bare)
 {
     imu_mag_spin_t  spin;
     imu_calib_mag_t stored;
     imu_calib_mag_t measured;
-    int32_t         span_x;
-    int32_t         span_y;
+    imu_calib_mag_t scaled;             // measured + soft-iron scale
+    int32_t         span_one;
+    int32_t         span_two;
+    uint32_t        vert;
+    uint32_t        h_one;
+    uint32_t        h_two;
     uint32_t        raw_pct;
     uint32_t        cal_pct;
+    uint32_t        rms_pct;
+    uint32_t        sc_pct;
+    uint32_t        sc_rms_pct;
+    uint32_t        sel = b_bare ? 1U : 0U;
     bool            b_cal_ok;
 
     TEST_INIT();
     imu_calib_mag_default(&stored);
 
-    tm_printf((UB*)"[IMU] ----- magnetometer: turn the car slowly by hand,"
-              " flat, 2 full turns -----\n[IMU] hold it by the edges, no"
-              " phone or tools in that hand, motors off\n");
+    if (b_bare)
+    {
+        // The stored offset is the car's: meaningless for the bare chip
+        stored.offset[0] = 0;
+        stored.offset[1] = 0;
+        stored.offset[2] = 0;
+    }
 
-    // S4-U25: offset = centre of the X/Y circle
-    imu_mag_spin(1U, &stored, &spin);
-    span_x = spin.max[0] - spin.min[0];
-    span_y = spin.max[1] - spin.min[1];
-    imu_calib_mag_from_spin(spin.min, spin.max, &measured);
-    b_cal_ok = (0U == spin.errors) && (false == spin.b_saturated)
-               && (span_x >= IMU_MAG_MIN_SPAN) && (span_y >= IMU_MAG_MIN_SPAN);
+    tm_printf((UB*)"[IMU] ----- magnetometer: turn %s slowly by hand,"
+              " flat, 2 full turns -----\n[IMU] no watch, ring or phone on"
+              " that hand, power bank away, motors off\n",
+              g_mag_what[sel]);
+
+    // The spin is about the axis that carries gravity (on the car: Z up;
+    // a bare module may lie upside down or on an edge). The circle is
+    // traced by the other two axes.
+    vert = imu_mag_vertical_axis();
+    h_one = (vert + 1U) % IMU_AXES;
+    h_two = (vert + 2U) % IMU_AXES;
+    tm_printf((UB*)"[IMU] vertical axis %c: the circle is in %c/%c\n",
+              g_axis_char[vert], g_axis_char[h_one], g_axis_char[h_two]);
+
+    // Offset = centre of the circle in the two horizontal axes
+    imu_mag_spin(1U, b_bare, vert, &stored, NULL, &spin);
+    span_one = spin.max[h_one] - spin.min[h_one];
+    span_two = spin.max[h_two] - spin.min[h_two];
+    measured = stored;
+    measured.offset[h_one] = (spin.max[h_one] + spin.min[h_one]) / 2;
+    measured.offset[h_two] = (spin.max[h_two] + spin.min[h_two]) / 2;
+    b_cal_ok = imu_mag_errors_ok(&spin) && (false == spin.b_saturated)
+               && (span_one >= IMU_MAG_MIN_SPAN)
+               && (span_two >= IMU_MAG_MIN_SPAN);
 
     tm_printf((UB*)"[IMU] mag range x=%d..%d y=%d..%d z=%d..%d"
               "  (%u read errors%s)\n", (int)spin.min[0], (int)spin.max[0],
               (int)spin.min[1], (int)spin.max[1], (int)spin.min[2],
               (int)spin.max[2], (unsigned)spin.errors,
               spin.b_saturated ? ", SATURATED" : "");
-    tm_printf((UB*)"[IMU] span x=%d y=%d counts (x/y = %d %%, 100 = no"
-              " soft-iron)\n", (int)span_x, (int)span_y,
-              (0 != span_y) ? (int)((span_x * IMU_PERCENT) / span_y) : 0);
-    tm_printf((UB*)"[IMU] paste into imu_calib.h: MAG_OFF x=%d y=%d\n",
-              (int)measured.offset[0], (int)measured.offset[1]);
-    TEST_CHECK("S4-U25", b_cal_ok,
-               "flat spin: 0 errors, no saturation, X and Y span >= 2000");
+    tm_printf((UB*)"[IMU] span %c=%d %c=%d counts (ratio %d %%, 100 = no"
+              " soft-iron)\n", g_axis_char[h_one], (int)span_one,
+              g_axis_char[h_two], (int)span_two,
+              (0 != span_two) ? (int)((span_one * IMU_PERCENT) / span_two)
+                              : 0);
+    tm_printf((UB*)"[IMU] %s: MAG_OFF x=%d y=%d z=%d\n",
+              b_bare ? "bare chip offset (do NOT paste, car only)"
+                     : "paste into imu_calib.h",
+              (int)measured.offset[0], (int)measured.offset[1],
+              (int)measured.offset[2]);
+    scaled = measured;
+    imu_calib_mag_scale_from_spin(spin.min, spin.max, h_one, h_two, &scaled);
+    tm_printf((UB*)"[IMU] soft-iron scale x1000: %c=%d %c=%d (1000 ="
+              " none)\n", g_axis_char[h_one], (int)scaled.scale_x1000[h_one],
+              g_axis_char[h_two], (int)scaled.scale_x1000[h_two]);
+    imu_mag_z_check(&spin, vert);
+    TEST_CHECK(g_mag_id_offset[sel], b_cal_ok,
+               "flat spin: read errors <= 2 %, no saturation, both"
+               " horizontal spans >= 2000");
 
-    // S4-U26: a fresh spin, corrected with the new offset
-    imu_mag_spin(2U, b_cal_ok ? &measured : &stored, &spin);
+    // A fresh spin, corrected with the new offset
+    // A fresh spin: each sample corrected twice, offset only and offset +
+    // scale, so one run shows what the scale adds
+    imu_mag_spin(2U, b_bare, vert, b_cal_ok ? &measured : &stored,
+                 b_cal_ok ? &scaled : &stored, &spin);
     raw_pct = imu_round_pct(spin.raw_r_min, spin.raw_r_max);
     cal_pct = imu_round_pct(spin.cal_r_min, spin.cal_r_max);
-    tm_printf((UB*)"[IMU] X/Y radius raw %u..%u (spread %u %%)  corrected"
+    rms_pct = imu_rms_pct(spin.cal_r_sum, spin.cal_r_sq_sum, spin.good);
+    sc_pct = imu_round_pct(spin.sc_r_min, spin.sc_r_max);
+    sc_rms_pct = imu_rms_pct(spin.sc_r_sum, spin.sc_r_sq_sum, spin.good);
+    tm_printf((UB*)"[IMU] radius raw %u..%u (spread %u %%)  corrected"
               " %u..%u (spread %u %%)\n", (unsigned)spin.raw_r_min,
               (unsigned)spin.raw_r_max, (unsigned)raw_pct,
               (unsigned)spin.cal_r_min, (unsigned)spin.cal_r_max,
               (unsigned)cal_pct);
-    TEST_CHECK("S4-U26", b_cal_ok && (0U == spin.errors)
+    tm_printf((UB*)"[IMU] over all %u samples, spread of the radius:\n"
+              "[IMU]   offset only     RMS %u %%  min/max %u %%\n"
+              "[IMU]   offset + scale  RMS %u %%  min/max %u %%\n",
+              (unsigned)spin.good, (unsigned)rms_pct, (unsigned)cal_pct,
+              (unsigned)sc_rms_pct, (unsigned)sc_pct);
+    if (false == b_bare)
+    {
+        tm_printf((UB*)"[IMU] paste into imu_calib.h: MAG_SCALE x=%d y=%d"
+                  " z=%d\n", (int)scaled.scale_x1000[0],
+                  (int)scaled.scale_x1000[1], (int)scaled.scale_x1000[2]);
+    }
+    imu_mag_z_check(&spin, vert);
+    TEST_CHECK(g_mag_id_round[sel], b_cal_ok && imu_mag_errors_ok(&spin)
                && (false == spin.b_saturated)
-               && (cal_pct <= IMU_MAG_ROUND_PCT),
-               "corrected X/Y radius spread <= 25 % of its mean");
+               && (sc_pct <= IMU_MAG_ROUND_PCT),
+               "radius spread (offset + scale) <= 25 % of its mean");
 
     TEST_SUMMARY("subsystem4 IMU magnetometer");
 }
 
 /*
  * One flat spin: prompt, then sample for IMU_MAG_SPIN_MS while the car
- * is turned. Records the raw min/max per axis and the X/Y radius with
- * and without the offset *p_mag, in *p_spin.
+ * is turned. Records the raw min/max per axis and the radius in the
+ * plane of the two axes other than vert, with and without the offset
+ * *p_mag, in *p_spin.
  */
 static void
-imu_mag_spin (uint32_t num, imu_calib_mag_t const *p_mag,
+imu_mag_spin (uint32_t num, bool b_bare, uint32_t vert,
+              imu_calib_mag_t const *p_mag, imu_calib_mag_t const *p_mag_sc,
               imu_mag_spin_t *p_spin)
 {
     imu_sample_t sample = {0};
     int32_t      raw[IMU_AXES] = {0, 0, 0};
     int32_t      fixed[IMU_AXES] = {0, 0, 0};
+    int32_t      fixed_sc[IMU_AXES] = {0, 0, 0};
     uint32_t     raw_r;
     uint32_t     cal_r;
+    uint32_t     sc_r;
     uint32_t     idx;
     uint32_t     axis;
-    uint32_t     good = 0U;
+    uint32_t     sel = b_bare ? 1U : 0U;
 
+    p_spin->good = 0U;
+    p_spin->cal_r_sum = 0U;
+    p_spin->cal_r_sq_sum = 0U;
+    p_spin->sc_r_min = UINT32_MAX;
+    p_spin->sc_r_max = 0U;
+    p_spin->sc_r_sum = 0U;
+    p_spin->sc_r_sq_sum = 0U;
     p_spin->errors = 0U;
     p_spin->b_saturated = false;
     p_spin->raw_r_min = UINT32_MAX;
@@ -1061,7 +1190,7 @@ imu_mag_spin (uint32_t num, imu_calib_mag_t const *p_mag,
     }
 
     tm_printf((UB*)"\n[IMU] >>> spin %u/%u  %s  (%u s)\n", (unsigned)num,
-              (unsigned)IMU_MAG_SPINS, g_spin_prompt[num - 1U],
+              (unsigned)IMU_MAG_SPINS, g_spin_prompt[sel][num - 1U],
               (unsigned)(IMU_POSE_MOVE_MS / 1000));
     tk_dly_tsk(IMU_POSE_MOVE_MS);
     tm_printf((UB*)"[IMU] TURN NOW: slowly, 2 full turns, keep it flat"
@@ -1088,12 +1217,22 @@ imu_mag_spin (uint32_t num, imu_calib_mag_t const *p_mag,
                                     ? raw[axis] : p_spin->max[axis];
             }
 
-            // Radius in the X/Y plane only: Z does not turn
+            // Radius in the horizontal plane only: vert does not turn
             imu_calib_mag_apply(p_mag, raw, fixed);
-            raw[2] = 0;
-            fixed[2] = 0;
+            imu_calib_mag_apply((NULL != p_mag_sc) ? p_mag_sc : p_mag, raw,
+                                fixed_sc);
+            raw[vert] = 0;
+            fixed[vert] = 0;
+            fixed_sc[vert] = 0;
             raw_r = imu_len(raw);
             cal_r = imu_len(fixed);
+            sc_r = imu_len(fixed_sc);
+            p_spin->sc_r_min = (sc_r < p_spin->sc_r_min)
+                               ? sc_r : p_spin->sc_r_min;
+            p_spin->sc_r_max = (sc_r > p_spin->sc_r_max)
+                               ? sc_r : p_spin->sc_r_max;
+            p_spin->sc_r_sum += sc_r;
+            p_spin->sc_r_sq_sum += (uint64_t)sc_r * sc_r;
             p_spin->raw_r_min = (raw_r < p_spin->raw_r_min)
                                 ? raw_r : p_spin->raw_r_min;
             p_spin->raw_r_max = (raw_r > p_spin->raw_r_max)
@@ -1102,7 +1241,9 @@ imu_mag_spin (uint32_t num, imu_calib_mag_t const *p_mag,
                                 ? cal_r : p_spin->cal_r_min;
             p_spin->cal_r_max = (cal_r > p_spin->cal_r_max)
                                 ? cal_r : p_spin->cal_r_max;
-            good++;
+            p_spin->cal_r_sum += cal_r;
+            p_spin->cal_r_sq_sum += (uint64_t)cal_r * cal_r;
+            p_spin->good++;
         }
         else
         {
@@ -1119,13 +1260,103 @@ imu_mag_spin (uint32_t num, imu_calib_mag_t const *p_mag,
         tk_dly_tsk(IMU_MAG_SAMPLE_MS);
     }
 
-    if (0U == good)
+    if (0U == p_spin->good)
     {
         p_spin->raw_r_min = 0U;
         p_spin->cal_r_min = 0U;
+        p_spin->sc_r_min = 0U;
     }
 
-    tm_printf((UB*)"[IMU] stop, put the car down\n");
+    tm_printf((UB*)"[IMU] stop, put %s down\n", g_mag_what[sel]);
+}
+
+/*
+ * Warn when the vertical axis moved during a flat spin: the spin was
+ * tilted, which bends the circle. Information only, not pass/fail.
+ */
+static void
+imu_mag_z_check (imu_mag_spin_t const *p_spin, uint32_t vert)
+{
+    int32_t v_range = p_spin->max[vert] - p_spin->min[vert];
+
+    if (v_range > IMU_MAG_Z_FLAT_MAX)
+    {
+        tm_printf((UB*)"[IMU] WARNING: vertical axis %c moved %d counts"
+                  " (flat spin: <= %d): it was tilted while turned\n",
+                  g_axis_char[vert], (int)v_range, (int)IMU_MAG_Z_FLAT_MAX);
+    }
+}
+
+/*
+ * Axis that carries gravity right now (largest |acc|), read once before
+ * the spin. Falls back to Z (the car's up axis) if the read fails.
+ */
+static uint32_t
+imu_mag_vertical_axis (void)
+{
+    imu_sample_t sample = {0};
+    int32_t      acc[IMU_AXES] = {0, 0, 0};
+    uint32_t     vert = IMU_CALIB_Z;
+    uint32_t     axis;
+
+    if (I2C1_OK == imu_read_acc(&sample))
+    {
+        acc[0] = imu_abs(sample.acc_x_mg);
+        acc[1] = imu_abs(sample.acc_y_mg);
+        acc[2] = imu_abs(sample.acc_z_mg);
+        vert = 0U;
+
+        for (axis = 1U; axis < IMU_AXES; axis++)
+        {
+            vert = (acc[axis] > acc[vert]) ? axis : vert;
+        }
+    }
+
+    return (vert);
+}
+
+/*
+ * A few failed reads while the module is turned on its wires do not spoil
+ * a spin (min/max and the sums use good samples only): allow up to
+ * IMU_MAG_MAX_ERR_PCT of all samples.
+ */
+static bool
+imu_mag_errors_ok (imu_mag_spin_t const *p_spin)
+{
+    uint32_t total = p_spin->good + p_spin->errors;
+
+    return ((0U != p_spin->good)
+            && ((p_spin->errors * IMU_PERCENT)
+                <= (total * IMU_MAG_MAX_ERR_PCT)));
+}
+
+/*
+ * Standard deviation of a radius over every sample (from its sum and sum
+ * of squares), as a % of the mean. Unlike min/max, one odd sample barely
+ * moves it.
+ */
+static uint32_t
+imu_rms_pct (uint64_t sum, uint64_t sq_sum, uint32_t count)
+{
+    uint64_t mean = 0U;
+    uint64_t mean_sq = 0U;
+    uint64_t var = 0U;
+    uint32_t pct = IMU_PERCENT;
+
+    if (0U != count)
+    {
+        mean = sum / count;
+        mean_sq = sq_sum / count;
+        var = (mean_sq > (mean * mean)) ? (mean_sq - (mean * mean)) : 0U;
+    }
+
+    if (0U != mean)
+    {
+        pct = (uint32_t)(((uint64_t)imu_calib_isqrt(var) * IMU_PERCENT)
+                         / mean);
+    }
+
+    return (pct);
 }
 
 // (max - min) as a percentage of the mean radius

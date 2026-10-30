@@ -1,0 +1,158 @@
+Date:    2026-10-30
+Run:     22 (imu_terrain task, normal build, after a power cycle)
+Branch:  integrate/s4-onto-main, e44344f or later (same image as run 21).
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8, no NET/MQTT)
+Setup:   Board unplugged and replugged (not booted straight from BOOTSEL
+         like run 21). Car still at start, then pushed back and forth a
+         few cm (slid, wheels not rolling far), turned 360 deg by hand,
+         then the SDA jumper pulled and NOT put back before the log ended.
+Result:
+  Timer:  every us figure is about 42.5x too small (period 218..253
+          "us" for a 10 ms period, run 21: 9340..10719). Real time was
+          normal (S1 kpolls rose about 262 per 5 lines, as in run 21), so
+          the RP2040 TIMER block ran slow, not the task. Cause: the kernel
+          port never starts the watchdog tick that clocks TIMER; only the
+          bootrom's USB boot had set it, and the setting survives a reboot
+          but not a power cycle. 12 MHz / 511 = 23.5 kHz fits the 42.5x
+          ratio (derived). Fixed in kernel/sysdepend/pico_rp2040/
+          cpu_clock.c (WATCHDOG_TICK = enable | 12), not yet flashed.
+          Scaled by 42.5 the numbers match run 21 (acc burst about 0.9 ms,
+          acc+mag loop about 1.87 ms, period 9.3..10.8 ms): derived only.
+  S4-U30: level zero restarted 6 times (car moved), then pitch -1.9 roll
+          0.4 deg, state ACTIVE.
+  S4-U32: detection PASS: "5 bad reads in a row, last NACK_ADDR:
+          IMU_FAULT", state FAULT. Recovery NOT TESTED: SDA was not put
+          back; every 1 s retry then failed with TIMEOUT (expected with
+          SDA floating). Each failed retry blocks the task about 1866
+          ticks = about 79 ms (derived, x42.5). Pitch/roll in the report
+          freeze at the last value while in FAULT (stale).
+  INT-10: not run properly (car slid a few cm): d drifted 0 -> -16 mm.
+  Heading: during the hand turn hdg went -173 -> (wrap) 179 -> ... ->
+          -156 deg; start and end differ by about 18 deg. Not a clean test
+          (car also slid).
+
+---- console ----
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+all subsystems started
+
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+[IMU] state CALIBRATING
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: pitch -19 roll 4 (0.1 deg)
+[IMU] state ACTIVE
+s1: link down, status=0 kpolls=0
+[IMU] t ACTIVE acc 21-27 mag 27 loop 21-58 wcet 58 per 24-127974 late 1 err 0 | p 3 r 0 hdg -1732 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 142-326 late 0 err 0 | p 2 r 2 hdg -1745 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 220-250 late 0 err 0 | p 4 r 2 hdg -1734 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 219-250 late 0 err 0 | p 1 r 1 hdg -1738 d 0
+s1: link down, status=0 kpolls=173
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 0 r -1 hdg -1732 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 220-249 late 0 err 0 | p -2 r 1 hdg -1735 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p 1 r 0 hdg -1737 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 12 r -3 hdg -1737 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 9 r -4 hdg -1732 d 0
+s1: link down, status=0 kpolls=436
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p -44 r 1 hdg -1712 d 0
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 224-248 late 0 err 0 | p 3 r 6 hdg -1691 d -1
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 218-252 late 0 err 0 | p 27 r -16 hdg -1694 d -1
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p -53 r 9 hdg -1682 d -1
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 33 r -14 hdg -1668 d -2
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 52 r 46 hdg -1673 d -3
+s1: link down, status=0 kpolls=698
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -40 r 9 hdg -1705 d -2
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 6 r 9 hdg -1772 d -3
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -13 r 21 hdg 1774 d -2
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 1 r 4 hdg 1727 d -3
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p 16 r -2 hdg 1732 d -3
+s1: link down, status=0 kpolls=961
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-249 late 0 err 0 | p -15 r 5 hdg -1788 d -4
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-249 late 0 err 0 | p -32 r 3 hdg -1749 d -5
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 218-252 late 0 err 0 | p -43 r 14 hdg -1703 d -5
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p 3 r -1 hdg -1680 d -6
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 219-250 late 0 err 0 | p 48 r 3 hdg -1673 d -7
+s1: link down, status=0 kpolls=1223
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p 1 r -21 hdg -1681 d -7
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 220-250 late 0 err 0 | p 0 r 1 hdg -1688 d -8
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p -33 r 22 hdg -1707 d -9
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p 25 r -10 hdg -1729 d -9
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p -9 r 10 hdg -1732 d -9
+s1: link down, status=0 kpolls=1486
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -38 r -2 hdg -1721 d -9
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 47 r 11 hdg -1719 d -9
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 223-248 late 0 err 0 | p 20 r 11 hdg -1682 d -9
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 219-251 late 0 err 0 | p -10 r -15 hdg -1681 d -10
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 220-248 late 0 err 0 | p 12 r 13 hdg -1661 d -10
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 11 r 1 hdg -1670 d -10
+s1: link down, status=0 kpolls=1748
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p -9 r 6 hdg 1789 d -11
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 0 r 19 hdg 1680 d -11
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -6 r -1 hdg 1599 d -12
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 1 r 7 hdg 1488 d -12
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 27 r 11 hdg 1355 d -12
+s1: link down, status=0 kpolls=2011
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 30 r 23 hdg 1245 d -12
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 20 r -14 hdg 1064 d -12
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 223-249 late 0 err 0 | p 35 r 16 hdg 823 d -13
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 218-252 late 0 err 0 | p 23 r 3 hdg 842 d -13
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 218-249 late 0 err 0 | p 29 r 0 hdg 549 d -14
+s1: link down, status=0 kpolls=2273
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-248 late 0 err 0 | p 31 r -1 hdg 315 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p 46 r 10 hdg 76 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 27 r -3 hdg 50 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 20 r -3 hdg 41 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 232 r -19 hdg -133 d -14
+s1: link down, status=0 kpolls=2536
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 16 r -15 hdg -339 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 32 r -14 hdg -575 d -14
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -3 r -26 hdg -752 d -15
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 223-249 late 0 err 0 | p 20 r -11 hdg -1012 d -15
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 218-252 late 0 err 0 | p 7 r -13 hdg -1162 d -15
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 220-248 late 0 err 0 | p 1 r -2 hdg -1183 d -15
+s1: link down, status=0 kpolls=2798
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 11 r -9 hdg -1375 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 220-250 late 0 err 0 | p -5 r -12 hdg -1440 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p -1 r -1 hdg -1627 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 2 r -1 hdg -1616 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p -1 r 0 hdg -1635 d -16
+s1: link down, status=0 kpolls=3061
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-249 late 0 err 0 | p -1 r -3 hdg -1559 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 1 r 0 hdg -1560 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 2 r 0 hdg -1569 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 224-248 late 0 err 0 | p 0 r 0 hdg -1552 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 217-253 late 0 err 0 | p 3 r -1 hdg -1580 d -16
+s1: link down, status=0 kpolls=3323
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-248 late 0 err 0 | p 2 r 0 hdg -1561 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 220-249 late 0 err 0 | p -2 r 0 hdg -1569 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 3 r 0 hdg -1545 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-247 late 0 err 0 | p 2 r 0 hdg -1554 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 2 r 0 hdg -1583 d -16
+s1: link down, status=0 kpolls=3586
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 1 r 1 hdg -1549 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 222-248 late 0 err 0 | p 1 r -1 hdg -1554 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 0 r 4 hdg -1562 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 221-249 late 0 err 0 | p 3 r 0 hdg -1567 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 223-249 late 0 err 0 | p 0 r 0 hdg -1561 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 219-251 late 0 err 0 | p 1 r -2 hdg -1578 d -16
+s1: link down, status=0 kpolls=3848
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 220-248 late 0 err 0 | p -6 r -4 hdg -1567 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-43 wcet 58 per 221-249 late 0 err 0 | p 1 r -17 hdg -1567 d -16
+[IMU] t ACTIVE acc 21-22 mag 22 loop 21-44 wcet 58 per 220-250 late 0 err 0 | p 3 r -2 hdg -1620 d -16
+[IMU] 5 bad reads in a row, last NACK_ADDR (no device at address): IMU_FAULT
+[IMU] state FAULT
+[IMU] t FAULT acc 3-22 mag 22 loop 0-44 wcet 58 per 221-249 late 0 err 5 | p -127 r 43 hdg -1590 d -16
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0
+[IMU] t FAULT acc 0-0 mag 0 loop 0-1866 wcet 1866 per 226-1867 late 0 err 0 | p -127 r 43 hdg -1590 d -16
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0
+s1: link down, status=0 kpolls=4111
+[IMU] t FAULT acc 0-0 mag 0 loop 0-1878 wcet 1878 per 224-1879 late 0 err 0 | p -127 r 43 hdg -1590 d -16
+(... the same two lines repeat about once a second, 20 more times,
+ loop max 1865..1879, until the log ends ...)
+[IMU] t FAULT acc 0-0 mag 0 loop 0-1866 wcet 1879 per 228-1867 late 0 err 0 | p -127 r 43 hdg -1590 d -16

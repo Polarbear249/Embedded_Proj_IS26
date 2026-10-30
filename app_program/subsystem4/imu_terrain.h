@@ -16,9 +16,12 @@
  * printed once a second as one "[IMU] t ..." line.
  *
  * Fault: WHO_AM_I mismatch at start, or IMU_TERRAIN_FAULT_COUNT
- * consecutive failed reads, puts the task in IMU_TERRAIN_FAULT. It then
- * tries i2c1_init() + imu_init() once a second; the level reference is
- * kept (the mount did not move), so it goes straight back to ACTIVE.
+ * consecutive failed reads, puts the task in IMU_TERRAIN_FAULT. Once a
+ * second it then probes WHO_AM_I on the existing I2C1 set-up and, if the
+ * sensor answers, rewrites its configuration; it re-initialises I2C1
+ * (bus recovery + imu_init) only when SDA is held low. The level
+ * reference is kept (the mount did not move), so it goes straight back
+ * to ACTIVE.
  *
  * Priority: team table P9 (TEAM.md section 4). Pinned to core 0: the
  * motion tasks (S2) are pinned to core 1 and still use the template

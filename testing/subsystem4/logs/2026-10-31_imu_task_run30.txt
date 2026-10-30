@@ -1,0 +1,31 @@
+Date:    2026-10-31
+Run:     30 (imu_terrain task, normal build, S4-U32 with line diagnostic)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted (line-level print)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8)
+Setup:   Car still until ACTIVE, then SDA jumper pulled and plugged back.
+Result:  Timing normal (period 9.10..10.89 ms, WCET 2.17 ms).
+         Level zero took pitch -37.1 roll 12.8 deg: the car was NOT flat
+         when it finished (held or tilted); every pitch/roll after that is
+         relative to that pose.
+         S4-U32: detection PASS (5 bad reads, last ARB_LOST -> IMU_FAULT).
+         Recovery FAIL again, but the lines are free: before and after
+         every failed re-init SDA=1 SCL=1, except one retry where SDA read
+         0 before (sensor holding it), cleared by the 9-clock recovery
+         (that retry took 120 ms instead of 80). So the bus is idle and the
+         wiring is fine, yet the freshly reset I2C1 block never completes
+         the first byte (TIMEOUT). Run 17 (unit test: plain retries, no
+         re-init) recovered from a loose jumper by itself.
+         Change after this run: in FAULT the task first probes WHO_AM_I on
+         the existing set-up and only re-inits when SDA is held low; on a
+         timeout the driver now saves IC_STATUS / TXFLR / ENABLE_STATUS /
+         RAW_INTR and the line levels for the fault message.
+
+---- console: key lines ----
+[IMU] level zero: pitch -371 roll 128 (0.1 deg)
+[IMU] 5 bad reads in a row, last ARB_LOST: IMU_FAULT
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0 | lines (1 = high) before SDA 1 SCL 1, after SDA 1 SCL 1
+[IMU] t FAULT acc 0-0 mag 0 loop 1-80312 wcet 80312 per 9431-80376 late 1 err 0 | p -4 r -3 hdg -1688 d 0
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0 | lines (1 = high) before SDA 0 SCL 1, after SDA 1 SCL 1
+[IMU] t FAULT acc 0-0 mag 0 loop 1-119760 wcet 119760 per 9359-119821 late 1 err 0 | p -4 r -3 hdg -1688 d 0
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0 | lines (1 = high) before SDA 1 SCL 1, after SDA 1 SCL 1
+(... repeats every second, lines always 1/1 ...)

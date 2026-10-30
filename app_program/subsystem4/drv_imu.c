@@ -18,6 +18,18 @@ static int16_t       imu_le16(uint8_t const *p_bytes);
 i2c1_result_t
 imu_init (void)
 {
+    i2c1_init();
+
+    return (imu_configure());
+}
+
+/*!
+ * Write the sensor configuration only, on the I2C1 set-up as it is (no
+ * block reset). Used to recover after the sensor dropped off the bus.
+ */
+i2c1_result_t
+imu_configure (void)
+{
     static uint8_t const init_regs[IMU_INIT_STEPS][2] =
     {
         {IMU_CTRL1, IMU_CTRL1_VAL},
@@ -28,8 +40,6 @@ imu_init (void)
     };
     i2c1_result_t result = I2C1_OK;
     uint32_t      step;
-
-    i2c1_init();
 
     for (step = 0U; (step < IMU_INIT_STEPS) && (I2C1_OK == result); step++)
     {

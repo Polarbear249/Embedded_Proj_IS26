@@ -104,6 +104,12 @@ EXPORT void startup_clock(ATR clkatr)
 
 	out_w(CLK_REF+CLK_x_DIV, div);
 
+	/* Watchdog tick: 1 us from clk_ref (12 MHz XOSC / 12).  It clocks the
+	   TIMER block (TIMERAWL, used by knl_arch_time_us).  Not reset by a
+	   reboot; only the bootrom's USB boot set it before, so after a power
+	   cycle TIMER ran about 42x slow (IS26 run 22, 2026-10-30). */
+	out_w(WATCHDOG_TICK, WATCHDOG_TICK_ENABLE | XOSC_MHz);
+
 	/* CLK SYS settings */
 	div = (TMCLK_MHz << 8) / TMCLK_MHz;
 	if (div > in_w(CLK_SYS+CLK_x_DIV)) out_w(CLK_SYS+CLK_x_DIV, div);

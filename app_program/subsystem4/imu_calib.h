@@ -52,17 +52,33 @@
 // does not turn Z, so Z keeps its stored value (0: needs a tilted spin,
 // not done). Only the car's own magnets (motors, steel) are removed;
 // fields from motor current while driving are not.
-// X/Y measured 2026-10-30 on the car (S4-U25 PASS, run 18). Not stable:
-// run 14 in another spot gave -421/1946, and the check spin (S4-U26)
-// still read 33 % out of round (limit 25 %): heading from the
-// magnetometer is a cross-check only, about +-10 deg (derived).
-#define IMU_CALIB_MAG_OFF_X     (-649)
-#define IMU_CALIB_MAG_OFF_Y     (843)
+// X/Y measured 2026-10-31 on the car after the remount, 2 full turns
+// (S4-U25/U26 PASS, run 28): span ratio 102 %, check spin RMS 2 %,
+// min/max 12 %, so heading error about +-3 deg here (derived). Earlier
+// car spins (runs 14-27) were partial turns and gave biased offsets.
+// Valid for this mount and this room only: steel nearby shifts it, so
+// spin again at the venue before relying on heading.
+#define IMU_CALIB_MAG_OFF_X     (-1176)
+#define IMU_CALIB_MAG_OFF_Y     (790)
 #define IMU_CALIB_MAG_OFF_Z     (0)
+
+// Magnetometer soft-iron scale, x1000 (1000 = no change). Steel and
+// motor magnets near the sensor squash the flat-spin circle into an
+// ellipse (run 26 on the car: X/Y span ratio 77 %; bare chip run 25:
+// 104 %), which an offset alone cannot correct. scale = mean span /
+// axis span stretches it back into a circle. Run 28 (full turns, car):
+// X=989 Y=1010, within 1-2 % of 1000 and no better than offset alone
+// (RMS 2 % both), so kept at 1000. Run 26/27's 77 % "ellipse" came from
+// partial turns, not soft iron.
+#define IMU_CALIB_MAG_SCALE_ONE (1000)
+#define IMU_CALIB_MAG_SCALE_X   (IMU_CALIB_MAG_SCALE_ONE)
+#define IMU_CALIB_MAG_SCALE_Y   (IMU_CALIB_MAG_SCALE_ONE)
+#define IMU_CALIB_MAG_SCALE_Z   (IMU_CALIB_MAG_SCALE_ONE)
 
 typedef struct
 {
     int32_t offset[IMU_CALIB_AXES];         // raw counts
+    int32_t scale_x1000[IMU_CALIB_AXES];    // soft iron, always > 0
 } imu_calib_mag_t;
 
 typedef struct
@@ -94,6 +110,10 @@ void     imu_calib_mag_default(imu_calib_mag_t *p_mag);
 void     imu_calib_mag_from_spin(int32_t const p_min[],
                                  int32_t const p_max[],
                                  imu_calib_mag_t *p_mag);
+void     imu_calib_mag_scale_from_spin(int32_t const p_min[],
+                                       int32_t const p_max[],
+                                       uint32_t h_one, uint32_t h_two,
+                                       imu_calib_mag_t *p_mag);
 void     imu_calib_mag_apply(imu_calib_mag_t const *p_mag,
                              int32_t const p_raw[], int32_t p_out[]);
 int32_t  imu_calib_atan2_ddeg(int32_t y_val, int32_t x_val);
