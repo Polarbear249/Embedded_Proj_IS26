@@ -1,0 +1,101 @@
+Date:    2026-10-30
+Run:     21 (first run of the imu_terrain task, normal build)
+Branch:  integrate/s4-onto-main, e44344f or later ("d" column present).
+         Exact commit not stated.
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8, no NET/MQTT),
+         stored accel calibration, MAG_OFF -649/843/0 (run 18, other spot)
+Setup:   GY-511 on the car. Console pasted from "[IMU] state CALIBRATING"
+         (kernel banner not copied). Car still at start, then handled,
+         then turned 360 deg by hand (tester's note) in the second half.
+Result:  S4-U30 PASS: level zero restarted once (car moved), then pitch
+         -0.9 roll 0.2 deg (run 20 S4-U23: -1.0/-0.1), state ACTIVE.
+         S4-U31 (60 s, measured, us):
+           acc burst   905..933 typical, max 3252 (preempted)
+           mag burst   907..911 typical, 1328 in the first window
+           loop        914..922 (acc only), 1847..1963 (acc + mag)
+           WCET        3278 over the whole run (33 % of the 10 ms period)
+           period      9340..10719 after the first two windows
+           late        1, in the first window only (one 130.5 ms gap at
+                       start-up, cause not proven: the WiFi driver's
+                       cyw43_init runs on the same core at priority 4)
+           errors      0
+         At rest after handling: pitch 1.1..1.5 deg, roll -0.1..-0.3 deg
+         (noise about +-0.2 deg); heading 977..1050 (+-4 deg).
+         360 deg turn: heading fell steadily 100 -> -170 -> (wrap) 148 ->
+         -92 deg, about 553 deg in total, and did not come back to the
+         start value (193 deg off). d stayed 0, then -3 mm (wheels rolled
+         slightly). S4-U32 and INT-10 not run.
+
+---- console ----
+[IMU] state CALIBRATING
+[IMU] level zero: car moved, restarting
+[IMU] level zero: pitch -9 roll 2 (0.1 deg)
+[IMU] state ACTIVE
+[IMU] t ACTIVE acc 906-2161 mag 1328 loop 914-2299 wcet 2299 per 1085-130545 late 1 err 0 | p -3 r -3 hdg -1687 d 0
+[IMU] t ACTIVE acc 908-930 mag 909 loop 918-1847 wcet 2299 per 7385-12620 late 0 err 0 | p 1 r -2 hdg -1741 d 0
+[IMU] t ACTIVE acc 906-3252 mag 909 loop 917-3278 wcet 3278 per 9880-10136 late 0 err 0 | p 27 r -52 hdg -1683 d 0
+[IMU] t ACTIVE acc 908-932 mag 909 loop 917-1866 wcet 3278 per 9512-10558 late 0 err 0 | p -181 r -57 hdg 1367 d 0
+s1: link down, status=0 kpolls=184
+[IMU] t ACTIVE acc 906-927 mag 910 loop 916-1863 wcet 3278 per 9612-10554 late 0 err 0 | p -150 r 49 hdg 1052 d 0
+[IMU] t ACTIVE acc 908-933 mag 909 loop 918-1954 wcet 3278 per 9494-10576 late 0 err 0 | p -137 r -10 hdg 1008 d 0
+[IMU] t ACTIVE acc 907-931 mag 909 loop 918-1859 wcet 3278 per 9519-10486 late 0 err 0 | p 74 r 14 hdg 1116 d 0
+[IMU] t ACTIVE acc 907-921 mag 909 loop 917-1850 wcet 3278 per 9526-10540 late 0 err 0 | p 8 r -2 hdg 1060 d 0
+[IMU] t ACTIVE acc 907-929 mag 908 loop 916-1860 wcet 3278 per 9557-10528 late 0 err 0 | p 16 r -4 hdg 1025 d 0
+[IMU] t ACTIVE acc 908-928 mag 909 loop 917-1861 wcet 3278 per 9518-10570 late 0 err 0 | p -3 r 0 hdg 1037 d 0
+s1: link down, status=0 kpolls=447
+[IMU] t ACTIVE acc 907-927 mag 908 loop 916-1858 wcet 3278 per 9528-10555 late 0 err 0 | p 15 r -3 hdg 1033 d 0
+[IMU] t ACTIVE acc 907-927 mag 909 loop 916-1858 wcet 3278 per 9525-10540 late 0 err 0 | p 12 r -2 hdg 1022 d 0
+[IMU] t ACTIVE acc 907-923 mag 909 loop 915-1855 wcet 3278 per 9592-10547 late 0 err 0 | p -11 r 5 hdg 1036 d 0
+[IMU] t ACTIVE acc 907-926 mag 908 loop 922-1949 wcet 3278 per 9612-10454 late 0 err 0 | p 10 r -8 hdg 1035 d 0
+[IMU] t ACTIVE acc 907-926 mag 909 loop 920-1862 wcet 3278 per 9542-10528 late 0 err 0 | p 15 r -2 hdg 1020 d 0
+s1: link down, status=0 kpolls=709
+[IMU] t ACTIVE acc 907-926 mag 908 loop 920-1862 wcet 3278 per 9628-10541 late 0 err 0 | p 12 r -2 hdg 977 d 0
+[IMU] t ACTIVE acc 907-926 mag 908 loop 921-1862 wcet 3278 per 9340-10719 late 0 err 0 | p 11 r -2 hdg 987 d 0
+[IMU] t ACTIVE acc 906-925 mag 911 loop 921-1864 wcet 3278 per 9537-10467 late 0 err 0 | p 15 r -2 hdg 1050 d 0
+[IMU] t ACTIVE acc 906-927 mag 908 loop 919-1859 wcet 3278 per 9538-10531 late 0 err 0 | p 7 r -2 hdg 1042 d 0
+[IMU] t ACTIVE acc 905-928 mag 909 loop 919-1867 wcet 3278 per 9538-10519 late 0 err 0 | p 13 r -3 hdg 999 d 0
+s1: link down, status=0 kpolls=972
+[IMU] t ACTIVE acc 907-921 mag 908 loop 921-1856 wcet 3278 per 9514-10505 late 0 err 0 | p 12 r -2 hdg 1009 d 0
+[IMU] t ACTIVE acc 907-924 mag 909 loop 921-1860 wcet 3278 per 9535-10534 late 0 err 0 | p 13 r -2 hdg 1005 d 0
+[IMU] t ACTIVE acc 906-928 mag 908 loop 920-1866 wcet 3278 per 9530-10542 late 0 err 0 | p 12 r -2 hdg 1009 d 0
+[IMU] t ACTIVE acc 906-927 mag 909 loop 920-1865 wcet 3278 per 9560-10525 late 0 err 0 | p 14 r -2 hdg 998 d 0
+[IMU] t ACTIVE acc 907-927 mag 908 loop 919-1861 wcet 3278 per 9541-10537 late 0 err 0 | p 13 r -2 hdg 1015 d 0
+s1: link down, status=0 kpolls=1234
+[IMU] t ACTIVE acc 907-925 mag 908 loop 921-1862 wcet 3278 per 9535-10537 late 0 err 0 | p 12 r -1 hdg 1002 d 0
+[IMU] t ACTIVE acc 908-928 mag 908 loop 920-1950 wcet 3278 per 9729-10442 late 0 err 0 | p 11 r -2 hdg 1004 d 0
+[IMU] t ACTIVE acc 906-925 mag 909 loop 921-1865 wcet 3278 per 9385-10665 late 0 err 0 | p 12 r -2 hdg 1015 d 0
+[IMU] t ACTIVE acc 906-925 mag 908 loop 920-1955 wcet 3278 per 9613-10384 late 0 err 0 | p 11 r -1 hdg 998 d 0
+[IMU] t ACTIVE acc 907-927 mag 908 loop 920-1867 wcet 3278 per 9524-10540 late 0 err 0 | p 129 r 72 hdg 944 d 0
+[IMU] t ACTIVE acc 907-933 mag 909 loop 920-1872 wcet 3278 per 9549-10525 late 0 err 0 | p -10 r 6 hdg 638 d 0
+s1: link down, status=0 kpolls=1497
+[IMU] t ACTIVE acc 907-932 mag 908 loop 921-1871 wcet 3278 per 9541-10534 late 0 err 0 | p 8 r -3 hdg 437 d 0
+[IMU] t ACTIVE acc 907-925 mag 909 loop 921-1864 wcet 3278 per 9540-10537 late 0 err 0 | p -56 r 4 hdg 233 d 0
+[IMU] t ACTIVE acc 907-926 mag 909 loop 921-1861 wcet 3278 per 9576-10548 late 0 err 0 | p 3 r -10 hdg 30 d 0
+[IMU] t ACTIVE acc 906-928 mag 909 loop 921-1863 wcet 3278 per 9543-10541 late 0 err 0 | p -26 r -8 hdg -160 d 0
+[IMU] t ACTIVE acc 907-919 mag 907 loop 922-1857 wcet 3278 per 9514-10543 late 0 err 0 | p 6 r -7 hdg -332 d 0
+s1: link down, status=0 kpolls=1759
+[IMU] t ACTIVE acc 905-1047 mag 909 loop 920-1868 wcet 3278 per 9539-10542 late 0 err 0 | p 28 r -35 hdg -487 d 0
+[IMU] t ACTIVE acc 906-932 mag 908 loop 920-1870 wcet 3278 per 9594-10618 late 0 err 0 | p 53 r -13 hdg -676 d 0
+[IMU] t ACTIVE acc 907-924 mag 908 loop 922-1861 wcet 3278 per 9420-10667 late 0 err 0 | p 5 r -7 hdg -656 d 0
+[IMU] t ACTIVE acc 906-925 mag 909 loop 920-1940 wcet 3278 per 9635-10390 late 0 err 0 | p 10 r -12 hdg -642 d 0
+[IMU] t ACTIVE acc 907-929 mag 908 loop 921-1862 wcet 3278 per 9546-10545 late 0 err 0 | p 10 r -3 hdg -645 d 0
+s1: link down, status=0 kpolls=2022
+[IMU] t ACTIVE acc 907-927 mag 909 loop 921-1861 wcet 3278 per 9547-10498 late 0 err 0 | p 38 r -13 hdg -815 d 0
+[IMU] t ACTIVE acc 907-928 mag 909 loop 920-1864 wcet 3278 per 9542-10556 late 0 err 0 | p 19 r -7 hdg -926 d 0
+[IMU] t ACTIVE acc 907-926 mag 909 loop 921-1861 wcet 3278 per 9542-10552 late 0 err 0 | p 66 r 4 hdg -1225 d 0
+[IMU] t ACTIVE acc 907-929 mag 909 loop 922-1960 wcet 3278 per 9624-10466 late 0 err 0 | p 33 r 8 hdg -1465 d 0
+[IMU] t ACTIVE acc 907-925 mag 910 loop 921-1950 wcet 3278 per 9623-10465 late 0 err 0 | p -26 r -31 hdg -1701 d 0
+s1: link down, status=0 kpolls=2284
+[IMU] t ACTIVE acc 906-921 mag 908 loop 921-1853 wcet 3278 per 9534-10559 late 0 err 0 | p 25 r 10 hdg 1475 d 0
+[IMU] t ACTIVE acc 907-933 mag 908 loop 922-1872 wcet 3278 per 9558-10535 late 0 err 0 | p 12 r -1 hdg 1259 d 0
+[IMU] t ACTIVE acc 907-928 mag 908 loop 921-1862 wcet 3278 per 9647-10538 late 0 err 0 | p 3 r -3 hdg 1231 d 0
+[IMU] t ACTIVE acc 906-924 mag 907 loop 921-1856 wcet 3278 per 9415-10646 late 0 err 0 | p 40 r -7 hdg 1132 d 0
+[IMU] t ACTIVE acc 907-930 mag 908 loop 922-1868 wcet 3278 per 9533-10494 late 0 err 0 | p -106 r 13 hdg 864 d 0
+[IMU] t ACTIVE acc 907-930 mag 909 loop 922-1871 wcet 3278 per 9538-10544 late 0 err 0 | p 16 r -3 hdg 459 d 0
+s1: link down, status=0 kpolls=2547
+[IMU] t ACTIVE acc 907-929 mag 908 loop 922-1870 wcet 3278 per 9536-10547 late 0 err 0 | p 63 r -2 hdg 143 d -1
+[IMU] t ACTIVE acc 906-926 mag 908 loop 921-1862 wcet 3278 per 9564-10525 late 0 err 0 | p 14 r -22 hdg -433 d -2
+[IMU] t ACTIVE acc 906-922 mag 909 loop 921-1948 wcet 3278 per 9686-10465 late 0 err 0 | p 71 r 3 hdg -865 d -3
+[IMU] t ACTIVE acc 907-922 mag 908 loop 921-1859 wcet 3278 per 9540-10562 late 0 err 0 | p 9 r -7 hdg -922 d -3
+[IMU] t ACTIVE acc 907-1028 mag 909 loop 920-1963 wcet 3278 per 9646-10457 late 0 err 0 | p -4 r -7 hdg -923 d -3
+s1: link down, status=0 kpolls=2809
