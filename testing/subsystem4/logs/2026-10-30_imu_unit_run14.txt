@@ -1,0 +1,185 @@
+Date:    2026-10-30
+Run:     14 (5-position calibration on the car, level zero, magnetometer)
+Branch:  IMU_Branch, 86632fe + uncommitted imu_calib.c/h, imu_unit_test.c
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2 (make TEST=1 -j8)
+Setup:   GY-511 (LSM303D) on the car. Upside-down pose removed (parts on
+         top of the car). Console pasted by the tester.
+Result:  calibration poses were tilted only 8-21 deg (Z stayed ~1000 mg in
+         every "side" pose): the car cannot be stood on its tail or side, so
+         S4-U20..U22 FAIL. X signs in poses 2/3 opposite to the prompts
+         (other end lifted, axis map from run 12 unchanged). Level zero
+         S4-U23/U24 PASS: mount tilt pitch 0.0 roll -1.0 deg, floor slope
+         pitch -0.9 deg. Magnetometer S4-U25 PASS (offset x=-421 y=1946),
+         S4-U26 FAIL: corrected radius spread 50 %, X/Y span 158 % (soft
+         iron or local disturbance). Led to the bare-module calibration.
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+IMU_Branch: subsystem 4 only
+
+[TEST] === test run start ===
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the car flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=-19 y=-19 z=1030  mag x=-3455 y=1074 z=-2027
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- 5-position calibration: each pose puts one axis straight up or down -----
+[IMU] square the car against a wall or box edge; prop it, do not hold it
+
+[IMU] >>> pose 1/5  +Z UP: car on its wheels, flat on the floor  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-17 y=-21 z=1030  |a|=1030  spread 36 mg  (50/50 reads ok)
+
+[IMU] >>> pose 2/5  +X UP: car standing on its rear end, ball caster at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-18 y=-21 z=1029  |a|=1029  spread 24 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 2/5  +X UP: car standing on its rear end, ball caster at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-140 y=43 z=1024  |a|=1034  spread 23 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 2/5  +X UP: car standing on its rear end, ball caster at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-145 y=15 z=1024  |a|=1034  spread 27 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 3/5  -X UP: car standing on its nose, rear end at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=108 y=-16 z=1012  |a|=1017  spread 1491 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 1491 mg (limit 60) min -991 max 500
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 3/5  -X UP: car standing on its nose, rear end at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=259 y=-26 z=996  |a|=1029  spread 23 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 3/5  -X UP: car standing on its nose, rear end at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=257 y=-26 z=997  |a|=1029  spread 40 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 3/5  -X UP: car standing on its nose, rear end at the ceiling  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=364 y=-27 z=964  |a|=1030  spread 16 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 4/5  +Y UP: car lying on its RIGHT side (left side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=242 y=-17 z=938  |a|=968  spread 2117 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 2117 mg (limit 60) min -1420 max 697
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 4/5  +Y UP: car lying on its RIGHT side (left side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-102 y=185 z=1008  |a|=1029  spread 31 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 4/5  +Y UP: car lying on its RIGHT side (left side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-104 y=185 z=1008  |a|=1030  spread 26 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 4/5  +Y UP: car lying on its RIGHT side (left side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-102 y=185 z=1006  |a|=1027  spread 22 mg  (50/50 reads ok)
+[IMU] not square (or wrong side up): line the car up against a wall or box edge, again
+
+[IMU] >>> pose 5/5  -Y UP: car lying on its LEFT side (right side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-115 y=-235 z=1011  |a|=1044  spread 1398 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 1398 mg (limit 60) min -1205 max 193
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 5/5  -Y UP: car lying on its LEFT side (right side at the ceiling)  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-97 y=-219 z=1003  |a|=1031  spread 19 mg  (50/50 reads ok)
+[TEST] S4-U20 FAIL  all 5 poses still and square (other axes <= 100 mg)   (../app_program/subsystem4/imu_unit_test.c:512)
+[IMU] Z level in side poses: 964..1024 mg, mean 999 (agree within 60)
+[IMU] up   mg x=-145 y=185 z=1030
+[IMU] down mg x=364 y=-219 (z not measured)
+[IMU] paste into imu_calib.h: OFF x=0 y=0 z=0  SPAN x=2000 y=2000 z=2000
+[TEST] S4-U21 FAIL  offset <= 150 mg, span 2000 mg +-10 %, side Z within 60   (../app_program/subsystem4/imu_unit_test.c:540)
+
+[IMU] >>> pose 1/1  CHECK: car back on its wheels, flat on the floor  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-19 y=-19 z=1030  |a|=1030  spread 35 mg  (50/50 reads ok)
+[IMU] corrected mg x=-19 y=-19 z=1030  |a| raw=1030 corrected=1030 (1 g = 1000)
+[TEST] S4-U22 FAIL  corrected |a| on a new flat pose = 1000 mg +-15 mg   (../app_program/subsystem4/imu_unit_test.c:552)
+[TEST] subsystem4 IMU calibration SUMMARY 0 passed, 3 failed
+[IMU] calibration rejected: level test uses the values stored in imu_calib.h
+[IMU] ----- level zero: you need tape to mark where the car stands -----
+
+[IMU] >>> pose 1/3  FLAT: car on the floor, mark both wheels and the ball with tape  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-17 y=-20 z=1030  |a|=1030  spread 18 mg  (50/50 reads ok)
+[IMU] level reference (mount + floor)  pitch -0.9 deg  roll -1.1 deg
+[TEST] S4-U23 PASS  level zero captured (car flat, still)
+
+[IMU] >>> pose 2/3  TURNED: same spot, car turned 180 deg (nose where the tail was)  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=21 y=-40 z=1025  |a|=1025  spread 900 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 900 mg (limit 60) min -331 max 569
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 2/3  TURNED: same spot, car turned 180 deg (nose where the tail was)  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=17 y=-17 z=1030  |a|=1030  spread 45 mg  (50/50 reads ok)
+[IMU] turned 180  pitch 0.9 deg  roll -0.9 deg
+[IMU] mount tilt  (ref + turned) / 2  pitch 0.0 deg  roll -1.0 deg
+[IMU] floor slope (ref - turned) / 2  pitch -0.9 deg  roll -0.1 deg
+
+[IMU] >>> pose 3/3  FLAT again: original direction, wheels and ball on the tape marks  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-23 y=-79 z=1035  |a|=1038  spread 3001 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 3001 mg (limit 60) min -1624 max 1377
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 3/3  FLAT again: original direction, wheels and ball on the tape marks  (5 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-17 y=-21 z=1030  |a|=1030  spread 22 mg  (50/50 reads ok)
+[IMU] flat again vs level  pitch 0.0 deg  roll -0.1 deg
+[TEST] S4-U24 PASS  flat again reads pitch and roll 0 +-0.5 deg
+[TEST] subsystem4 IMU level zero SUMMARY 2 passed, 0 failed
+[IMU] ----- magnetometer: turn the car slowly by hand, flat, 2 full turns -----
+[IMU] hold it by the edges, no phone or tools in that hand, motors off
+
+[IMU] >>> spin 1/2  SPIN: car flat on the floor, away from steel, laptop and phone  (5 s)
+[IMU] TURN NOW: slowly, 2 full turns, keep it flat (20 s)
+[IMU] 5 s
+[IMU] 10 s
+[IMU] 15 s
+[IMU] 20 s
+[IMU] stop, put the car down
+[IMU] mag range x=-3561..2718 y=-40..3932 z=-2472..-1962  (0 read errors)
+[IMU] span x=6279 y=3972 counts (x/y = 158 %, 100 = no soft-iron)
+[IMU] paste into imu_calib.h: MAG_OFF x=-421 y=1946
+[TEST] S4-U25 PASS  flat spin: 0 errors, no saturation, X and Y span >= 2000
+
+[IMU] >>> spin 2/2  SPIN again (check): same place, same way  (5 s)
+[IMU] TURN NOW: slowly, 2 full turns, keep it flat (20 s)
+[IMU] 5 s
+[IMU] 10 s
+[IMU] 15 s
+[IMU] 20 s
+[IMU] stop, put the car down
+[IMU] X/Y radius raw 2061..4161 (spread 67 %)  corrected 1731..2904 (spread 50 %)
+[TEST] S4-U26 FAIL  corrected X/Y radius spread <= 25 % of its mean   (../app_program/subsystem4/imu_unit_test.c:685)
+[TEST] subsystem4 IMU magnetometer SUMMARY 1 passed, 1 failed
+[TEST] === test run end ===
