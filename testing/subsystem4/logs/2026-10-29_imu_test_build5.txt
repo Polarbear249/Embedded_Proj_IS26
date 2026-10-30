@@ -1,0 +1,7 @@
+# S4 IMU calibration image (build 5), 2026-10-29
+# base 86632fe + uncommitted imu_calib.c/h, imu_unit_test.c (S4-U20..U26)
+# command: make TEST=1 -j8 (exit 0, no warnings); make -j8 also exit 0
+# image: build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2
+
+   text	   data	    bss	    dec	    hex	filename
+ 284288	     88	  24416	 308792	  4b638	mtk3pico_smp1_usb_cdc_wifi_test.elf
