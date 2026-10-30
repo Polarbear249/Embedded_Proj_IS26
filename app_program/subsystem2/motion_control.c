@@ -548,3 +548,11 @@ motion_result_t motion_turn_right(float angle_deg)
     (void)angle_deg;
     return MOTION_NOT_IMPLEMENTED;
 }
+
+/*
+ * IF-10: see motion_control.h.
+ */
+int32_t motion_get_distance_mm(void)
+{
+    return encoder_get_distance_mm();
+}

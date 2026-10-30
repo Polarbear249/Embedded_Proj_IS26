@@ -28,12 +28,23 @@
  */
 static void encoder_sampling_task(INT stacd, void *exinf)
 {
+    uint32_t samples = 0U;
+
     (void)stacd;
     (void)exinf;
 
     for (;;)
     {
         encoder_sample();
+
+        /* IF-10: publish distance every 10 samples. tk_dly_tsk(1)
+           waits at least 1 ms, so this is every 10 ms or more. */
+        samples++;
+        if (samples >= S2_DIST_PUBLISH_SAMPLES)
+        {
+            encoder_publish_distance();
+            samples = 0U;
+        }
 
         tk_dly_tsk(1);
     }

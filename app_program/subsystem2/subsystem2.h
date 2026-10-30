@@ -13,6 +13,7 @@
 #include "motion_control.h"
 
 #define S2_PRI_PRODUCER		14	/* priority band 14-15 (TEAM.md) */
+#define S2_DIST_PUBLISH_SAMPLES	10U	/* IF-10 publish, encoder samples */
 
 /* Private to subsystem 2 */
 

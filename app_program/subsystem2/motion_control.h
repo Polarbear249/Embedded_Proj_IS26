@@ -88,6 +88,14 @@ motion_result_t motion_stop(void);
 motion_result_t motion_get_status(motion_status_t *status);
 
 /*
+ * IF-10: cumulative distance travelled in mm since power-up
+ * (mean of both wheels, forward positive). Updated about
+ * every 10 ms by the encoder task. Never blocks; safe from
+ * any task on either core. Used by S4 for hump height.
+ */
+int32_t motion_get_distance_mm(void);
+
+/*
  * Future navigation functions.
  *
  * These are part of the planned interface.

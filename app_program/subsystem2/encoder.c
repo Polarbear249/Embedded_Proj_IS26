@@ -20,6 +20,22 @@
 static int32_t left_count = 0;
 static int32_t right_count = 0;
 
+/*
+ * IF-10 odometer. Same counts as above but never reset.
+ * Overflows after about 2^31 counts = 350 km.
+ */
+#define ENCODER_WHEEL_CIRC_UM    207345   /* pi x 66 mm, in um */
+#define ENCODER_LEFT_CPR_INT     1271     /* = ENCODER_LEFT_CPR */
+#define ENCODER_RIGHT_CPR_INT    1266     /* = ENCODER_RIGHT_CPR */
+#define ENCODER_UM_PER_MM_X2     2000     /* mean of 2 wheels, um->mm */
+
+static int32_t left_total = 0;
+static int32_t right_total = 0;
+
+/* Written only by encoder_publish_distance(). Aligned 32-bit
+   store and load are single instructions on the M0+. */
+static volatile int32_t distance_mm = 0;
+
 static UINT previous_left_a = 0;
 static UINT previous_right_a = 0;
 
@@ -89,12 +105,14 @@ void encoder_sample(void)
     if (left_a != previous_left_a)
     {
         left_count += (left_a == left_b) ? -1 : 1;
+        left_total += (left_a == left_b) ? -1 : 1;
         previous_left_a = left_a;
     }
 
     if (right_a != previous_right_a)
     {
         right_count += (right_a == right_b) ? 1 : -1;
+        right_total += (right_a == right_b) ? 1 : -1;
         previous_right_a = right_a;
     }
 }
@@ -169,4 +187,28 @@ float encoder_right_distance_cm(int32_t counts)
 {
     return ((float)counts / ENCODER_RIGHT_CPR) *
            WHEEL_CIRCUMFERENCE_CM;
+}
+
+/*
+ * IF-10: convert the odometer counts to mm and publish.
+ * Integer only (no FPU): counts x circumference_um / CPR,
+ * in 64 bits so it cannot overflow.
+ */
+void encoder_publish_distance(void)
+{
+    int64_t left_um;
+    int64_t right_um;
+
+    left_um = ((int64_t)left_total * ENCODER_WHEEL_CIRC_UM) /
+              ENCODER_LEFT_CPR_INT;
+    right_um = ((int64_t)right_total * ENCODER_WHEEL_CIRC_UM) /
+               ENCODER_RIGHT_CPR_INT;
+
+    distance_mm = (int32_t)((left_um + right_um) /
+                            ENCODER_UM_PER_MM_X2);
+}
+
+int32_t encoder_get_distance_mm(void)
+{
+    return distance_mm;
 }

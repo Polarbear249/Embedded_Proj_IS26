@@ -48,4 +48,19 @@ float encoder_right_distance_cm(int32_t counts);
 
 /* Sample both encoder inputs and update counts. */
 void encoder_sample(void);
+
+/*
+ * IF-10: cumulative distance travelled, in mm.
+ *
+ * Mean of the left and right wheel travel since power-up.
+ * Forward adds, reverse subtracts. Not cleared by
+ * encoder_reset_counts(), so readers can take differences.
+ *
+ * encoder_publish_distance(): called only by the encoder
+ * sampling task (single writer).
+ * encoder_get_distance_mm(): any task, any core. One
+ * aligned 32-bit load, so no lock is needed.
+ */
+void    encoder_publish_distance(void);
+int32_t encoder_get_distance_mm(void);
 #endif /* ENCODER_H */

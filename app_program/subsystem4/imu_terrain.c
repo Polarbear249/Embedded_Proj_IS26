@@ -18,6 +18,7 @@
 #include "imu_terrain.h"
 #include "drv_imu.h"
 #include "imu_calib.h"
+#include "../subsystem2/motion_control.h"     // IF-10 distance (reader)
 
 #define IMU_TICK_BIT            (0x1U)
 #define IMU_WAIT_TMO_MS         (100)   // 10 missed ticks: cyclic dead
@@ -457,6 +458,7 @@ imu_timing_reset (void)
  * One line per second, built first and printed once (tm_printf is
  * atomic per call). Times in us; pitch/roll in 0.1 deg against level;
  * hdg = magnetometer heading, 0.1 deg, cross-check only.
+ * d = IF-10 cumulative distance from S2, mm (hump height input).
  */
 static void
 imu_report (void)
@@ -482,7 +484,7 @@ imu_report (void)
 
     (void)tm_sprintf(line, (UB*)"[IMU] t %s acc %u-%u mag %u loop %u-%u"
                      " wcet %u per %u-%u late %u err %u | p %d r %d"
-                     " hdg %d\n",
+                     " hdg %d d %d\n",
                      g_state_name[g_state],
                      (UINT)g_tim.acc_min_us, (UINT)g_tim.acc_max_us,
                      (UINT)g_tim.mag_max_us,
@@ -490,7 +492,8 @@ imu_report (void)
                      (UINT)g_wcet_us,
                      (UINT)g_tim.per_min_us, (UINT)g_tim.per_max_us,
                      (UINT)g_tim.late, (UINT)g_tim.errors,
-                     (INT)pitch, (INT)roll, (INT)heading);
+                     (INT)pitch, (INT)roll, (INT)heading,
+                     (INT)motion_get_distance_mm());
     tm_printf(line);
 }
 
