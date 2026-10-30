@@ -10,8 +10,9 @@ Define a test here before running it. Test IDs never change.
 
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
 |---|---|---|---|---|---|
-| INT-01 | samples flow from S2 to S3 (≥ 5 in 2 s) | IF-01, IF-02 | auto | `subsystem3_test.c` | `[TEST] INT-01 PASS` |
-| INT-02 | summary lines flow from S3 to S4 (≥ 2 in 3.5 s) | IF-03 | auto | `subsystem4_test.c` | `[TEST] INT-02 PASS` |
+| INT-01 | *retired 2026-10-30 (template S2 producer / S3 consumer removed on `integrate/s4-onto-main`):* samples flow from S2 to S3 (≥ 5 in 2 s) | old template IF-01, IF-02 | auto | — | — |
+| INT-02 | *retired 2026-10-30 (template S3 → S4 monitor removed):* summary lines flow from S3 to S4 (≥ 2 in 3.5 s) | old template IF-03 | auto | — | — |
+| INT-10 | S2 distance reaches S4: push the car by hand along a ruler, `d` in the `[IMU] t` line grows by the pushed distance | IF-10 | manual | 1. Flash the normal `make -j8` image, car still for 2 s (IMU level zero). 2. Note `d`. 3. Push the car straight 1000 mm along a tape measure, wheels on the floor. 4. Note `d` again. 5. Push back 1000 mm. Repeat 3 times. | `d` rises by 1000 mm ± 5 % (limit to confirm with Buddy 2) and returns to the start ± 5 %; never jumps backwards while pushing forward. If it reads about 0 or negative, one encoder's sign is reversed |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).

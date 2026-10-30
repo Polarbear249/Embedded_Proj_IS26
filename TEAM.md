@@ -163,11 +163,11 @@ code still uses 12–21). Write down every task you create.
 
 | Task | Subsystem | Priority | Period | Core |
 |---|---|---|---|---|
-| Motion Control | 2 | 5 | 10 ms | |
+| Motion Control | 2 | 5 (code still 14: `motion_control_task`, 100 ms; and 12: `encoder_sampling_task`, 1 ms polling) | 10 ms | core 1 (`TP_PRC2`) |
 | Line / Barcode | 3 | 6 | 10 ms | |
 | Vehicle Controller | shared | 7 | event-driven + 20 ms supervisory tick | |
 | Obstacle Scan | 5 | 8 | >= 60 ms between ultrasonic triggers | |
-| IMU / Terrain | 4 | 9 | 10 ms | |
+| IMU / Terrain (`imu_terrain`) | 4 | 9 | 10 ms (cyclic handler + event flag) | core 0 (`TP_PRC1`) |
 | WiFi / MQTT | 1 | 10 | 200 ms telemetry, 1 s heartbeat | |
 | Liveness LED | **CONFIRM** owner | | | |
 
@@ -195,7 +195,7 @@ object but the µT-Kernel object type is not yet chosen.
 | IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `mbf_telem` (`Q_telem`) | 13-byte packed snapshot, frame v1, layout in `app_program/subsystem1/telemetry_frame.h`; VC calls `s1_telem_send()` | Tribunal 1 |
 | IF-08 | S1 → VC | message buffer (created by S1 until the VC exists; then move to VC) | `mbf_cmd` (`Q_cmd`) | validated 3-byte command frame (`CMD_STOP`, `CMD_START`, `CMD_SET_SPEED`, `CMD_PING`); VC calls `s1_cmd_recv()` | Tribunal 1 (buffer type and temporary owner: S1) |
 | IF-09 | S5 → VC | queue (kernel type TBD, owned by VC) | `Q_profile` | packed `ObstacleProfile_t`: three 9-bit distances in 32 bits | Tribunal 1 |
-| IF-10 | S2 → S4 | aligned 32-bit word, single writer, no lock | **TBD** | encoder distance for hump height, every 10 ms | **PROPOSED** |
+| IF-10 | S2 → S4 | aligned 32-bit word, single writer (S2 encoder task), no lock; read with `motion_get_distance_mm()` (`subsystem2/motion_control.h`) | `distance_mm` (static in `subsystem2/encoder.c`) | `int32_t` cumulative distance since power-up in mm, mean of both wheels, forward positive, never reset; published every 10 encoder samples (≥ 10 ms). Host test `testing/subsystem2/host/`; on target INT-10 | **PROPOSED** (implemented by Buddy 4 in Buddy 2's folder on `integrate/s4-onto-main`; Buddy 2 to confirm) |
 | IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer, no lock | **TBD** | hump result, 8-bit height clamped (mm), written on hump end | Tribunal 1 |
 
 MQTT topics (broker on the laptop): `mtk3smp-pico/telem` (binary frame out, 5 Hz),

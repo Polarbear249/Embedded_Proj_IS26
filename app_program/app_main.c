@@ -16,22 +16,16 @@
  *	and then puts the initial task to sleep forever.
  *	If usermain() RETURNS, the kernel shuts the whole system down.
  *
- *	The example system: one subsystem per folder, one task each
- *	------------------------------------------------------------
- *	  subsystem1/  LED       blinks GP19, paced by a cyclic handler
- *	  subsystem2/  Producer  makes a "sample" every 300 ms     (core 1)
- *	  subsystem3/  Consumer  collects samples into statistics  (core 0)
- *	  subsystem4/  Monitor   prints reports, pauses/resumes the LED
- *	  subsystem5/  (empty template for the fifth student)
+ *	The system: one subsystem per folder (TEAM.md section 1)
+ *	--------------------------------------------------------
+ *	  subsystem1/  WiFi, MQTT telemetry and commands
+ *	  subsystem2/  Motion control: motors, encoders, PI speed  (core 1)
+ *	  subsystem3/  Line following and barcode (stub for now)
+ *	  subsystem4/  IMU and terrain: imu_terrain task           (core 0)
+ *	  subsystem5/  Ultrasonic scan and obstacle profiling
  *
- *	How they talk to each other (the interfaces, see TEAM.md section 5):
- *	  IF-01  S2 -> S3  mailbox mbx_samples      (owned by S3)
- *	  IF-02  S3 -> S2  semaphore sem_slots + memory pool mpf_samples
- *	                   (owned by S2: S3 hands slots and blocks back)
- *	  IF-03  S3 -> S4  message buffer mbf_summary + event flag flg_events
- *	                   (owned by S4)
- *	  IF-04  S4 -> S3  reads app_stats under mutex mtx_stats (owned by S3)
- *	  IF-05  S4 -> S1  suspends/resumes the LED task tid_led (owned by S1)
+ *	The interfaces between them are listed in TEAM.md section 5
+ *	(the template's producer/consumer/monitor chain was removed).
  *	The subsystem that RECEIVES or OWNS the data creates the object and
  *	publishes its ID in its header; the other side just uses it.
  *
