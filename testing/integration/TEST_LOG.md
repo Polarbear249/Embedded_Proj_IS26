@@ -24,3 +24,4 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | INT-01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-10-31 | INT-10 | `70823b4`+ (uncommitted) | Buddy 4 | PASS | `../subsystem4/logs/2026-10-31_int10_run34.txt` | 1 m push along a tape measure: d 990 mm (-1.0 %). Needs the GPIO edge-interrupt encoder counting (gpio_irq.c, subsystem2/encoder.c); with S2's old polling it read -11 mm (run 29). Buddy 2 to sign off |

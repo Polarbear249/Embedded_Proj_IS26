@@ -1,0 +1,31 @@
+Date:    2026-10-31
+Runs:    32 (encoder check) and 33 (distance check), normal build
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted: GPIO edge-interrupt
+         encoder counting (app_program/gpio_irq.c, subsystem2/encoder.c),
+         L/R raw counts added to the [IMU] t line
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8)
+Setup:   Right encoder fixed by the tester (it read 0 in the previous run,
+         wiring). Run 32: wheels turned about one turn. Run 33: car pushed
+         along the floor (tester: distance check).
+Result:
+  Run 32: L 0 -> 1239, R 0 -> 1248 (one turn = 1271 / 1266 by Buddy 2's
+          calibration: 97.5 % / 98.6 %, i.e. slightly under one turn or a
+          small CPR difference), both counting UP, d 203 mm (one turn =
+          207 mm). Counts rose smoothly, no jumps: interrupt counting works
+          on both wheels and both directions are correct (forward = +).
+  Run 33: L 2111, R 2104 (within 0.3 % of each other: straight push), d
+          344 mm at the last pasted line and still rising: the paste ends
+          before the push finished, or the push was about 34 cm. d/count =
+          344 / 2107.5 = 0.163 mm per count (207.3 / 1271 = 0.163): the
+          IF-10 conversion is consistent. INT-10 (1 m) result still needed
+          against the tape measure.
+
+---- run 32 key lines ----
+[IMU] t ACTIVE ... d 2 L 10 R 23
+[IMU] t ACTIVE ... d 102 L 617 R 636
+[IMU] t ACTIVE ... d 203 L 1240 R 1248
+[IMU] t ACTIVE ... d 203 L 1239 R 1248
+---- run 33 key lines ----
+[IMU] t ACTIVE ... d 5 L 27 R 45
+[IMU] t ACTIVE ... d 203 L 1246 R 1248
+[IMU] t ACTIVE ... d 344 L 2111 R 2104

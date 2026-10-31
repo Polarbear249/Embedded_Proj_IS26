@@ -52,23 +52,23 @@
 // does not turn Z, so Z keeps its stored value (0: needs a tilted spin,
 // not done). Only the car's own magnets (motors, steel) are removed;
 // fields from motor current while driving are not.
-// X/Y measured 2026-10-31 on the car after the remount, 2 full turns
-// (S4-U25/U26 PASS, run 28): span ratio 102 %, check spin RMS 2 %,
-// min/max 12 %, so heading error about +-3 deg here (derived). Earlier
-// car spins (runs 14-27) were partial turns and gave biased offsets.
-// Valid for this mount and this room only: steel nearby shifts it, so
-// spin again at the venue before relying on heading.
-#define IMU_CALIB_MAG_OFF_X     (-1176)
-#define IMU_CALIB_MAG_OFF_Y     (790)
+// X/Y measured 2026-10-31 on the car, module in its original (run 12)
+// orientation, 2 full turns on a chair (S4-U25/U26 PASS, run 36): span
+// ratio 98 %, check spin RMS 1 %, min/max 8 %, so heading error about
+// +-2.3 deg there (derived). Run 28's -1176/790 was for a different
+// mounting (runs 26-29); runs 14-27 were partial turns. Valid for this
+// mount and roughly this place only: spin again at the venue.
+#define IMU_CALIB_MAG_OFF_X     (-1141)
+#define IMU_CALIB_MAG_OFF_Y     (1597)
 #define IMU_CALIB_MAG_OFF_Z     (0)
 
 // Magnetometer soft-iron scale, x1000 (1000 = no change). Steel and
 // motor magnets near the sensor squash the flat-spin circle into an
 // ellipse (run 26 on the car: X/Y span ratio 77 %; bare chip run 25:
 // 104 %), which an offset alone cannot correct. scale = mean span /
-// axis span stretches it back into a circle. Run 28 (full turns, car):
-// X=989 Y=1010, within 1-2 % of 1000 and no better than offset alone
-// (RMS 2 % both), so kept at 1000. Run 26/27's 77 % "ellipse" came from
+// axis span stretches it back into a circle. Runs 28 and 36 (full
+// turns, car): 989/1010 and 1008/991, within 2 % of 1000 and no better
+// than offset alone (run 36: RMS 1 % vs 2 %), so kept at 1000. Run 26/27's 77 % "ellipse" came from
 // partial turns, not soft iron.
 #define IMU_CALIB_MAG_SCALE_ONE (1000)
 #define IMU_CALIB_MAG_SCALE_X   (IMU_CALIB_MAG_SCALE_ONE)

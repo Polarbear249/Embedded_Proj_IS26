@@ -1,0 +1,23 @@
+Date:    2026-10-31
+Run:     34 (INT-10: 1 m push, normal build)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted (GPIO edge-interrupt
+         encoder counting, L/R counts in the [IMU] t line)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8)
+Setup:   Car pushed 1 m along a tape measure by hand, wheels on the floor.
+Result:  INT-10 PASS.
+           d: 0 -> 990 mm, steady at 990 after the stop (limit 950..1050):
+              -1.0 % against the tape
+           L 6084, R 6034 counts (0.8 % apart); expected for 1000 mm with
+              Buddy 2's calibration: 6130 / 6106 (derived)
+           counts rose smoothly every second, no jumps
+         The heading drifted about 18 deg during the push (hdg 910 -> 1093)
+         and pitch spiked to 15.8 deg once (car tipped while pushed by
+         hand), so part of the 1 % may be a slightly curved or uneven push.
+         IF-10 (S2 -> S4 distance word) works end to end on the car.
+
+---- key lines ----
+[IMU] t ACTIVE ... d 1 L 0 R 14
+[IMU] t ACTIVE ... d 494 L 3025 R 3024
+[IMU] t ACTIVE ... d 951 L 5843 R 5795
+[IMU] t ACTIVE ... d 990 L 6084 R 6034
+[IMU] t ACTIVE ... d 990 L 6084 R 6034

@@ -39,7 +39,7 @@
 #define IMU_IIR_DIV             (4)
 
 #define IMU_LATE_US             (15000U)    // period > 1.5 x 10 ms
-#define IMU_LINE_LEN            (192U)
+#define IMU_LINE_LEN            (224U)
 
 typedef struct
 {
@@ -514,6 +514,8 @@ imu_timing_reset (void)
  * atomic per call). Times in us; pitch/roll in 0.1 deg against level;
  * hdg = magnetometer heading, 0.1 deg, cross-check only.
  * d = IF-10 cumulative distance from S2, mm (hump height input).
+ * L / R = raw encoder counts per wheel from S2 (diagnostic: one wheel
+ * turn is about 1270 counts; forward should count up).
  */
 static void
 imu_report (void)
@@ -523,6 +525,7 @@ imu_report (void)
     int32_t pitch = 0;
     int32_t roll = 0;
     int32_t heading = imu_calib_atan2_ddeg(g_mag[1], g_mag[0]);
+    motion_status_t motion = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
     uint32_t axis;
 
     for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
@@ -531,6 +534,7 @@ imu_report (void)
     }
 
     imu_calib_level_tilt(&g_level, filt_mg, &pitch, &roll);
+    (void)motion_get_status(&motion);       // counts stay 0 if not ready
 
     if (UINT32_MAX == g_tim.acc_min_us)
     {
@@ -539,7 +543,7 @@ imu_report (void)
 
     (void)tm_sprintf(line, (UB*)"[IMU] t %s acc %u-%u mag %u loop %u-%u"
                      " wcet %u per %u-%u late %u err %u | p %d r %d"
-                     " hdg %d d %d\n",
+                     " hdg %d d %d L %d R %d\n",
                      g_state_name[g_state],
                      (UINT)g_tim.acc_min_us, (UINT)g_tim.acc_max_us,
                      (UINT)g_tim.mag_max_us,
@@ -548,7 +552,9 @@ imu_report (void)
                      (UINT)g_tim.per_min_us, (UINT)g_tim.per_max_us,
                      (UINT)g_tim.late, (UINT)g_tim.errors,
                      (INT)pitch, (INT)roll, (INT)heading,
-                     (INT)motion_get_distance_mm());
+                     (INT)motion_get_distance_mm(),
+                     (INT)motion.left_encoder_count,
+                     (INT)motion.right_encoder_count);
     tm_printf(line);
 }
 
