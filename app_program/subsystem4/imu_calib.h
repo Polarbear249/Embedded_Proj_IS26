@@ -68,8 +68,8 @@
 // 104 %), which an offset alone cannot correct. scale = mean span /
 // axis span stretches it back into a circle. Runs 28 and 36 (full
 // turns, car): 989/1010 and 1008/991, within 2 % of 1000 and no better
-// than offset alone (run 36: RMS 1 % vs 2 %), so kept at 1000. Run 26/27's 77 % "ellipse" came from
-// partial turns, not soft iron.
+// than offset alone (run 36: RMS 1 % vs 2 %), so kept at 1000. Run
+// 26/27's 77 % "ellipse" came from partial turns, not soft iron.
 #define IMU_CALIB_MAG_SCALE_ONE (1000)
 #define IMU_CALIB_MAG_SCALE_X   (IMU_CALIB_MAG_SCALE_ONE)
 #define IMU_CALIB_MAG_SCALE_Y   (IMU_CALIB_MAG_SCALE_ONE)
@@ -117,6 +117,7 @@ void     imu_calib_mag_scale_from_spin(int32_t const p_min[],
 void     imu_calib_mag_apply(imu_calib_mag_t const *p_mag,
                              int32_t const p_raw[], int32_t p_out[]);
 int32_t  imu_calib_atan2_ddeg(int32_t y_val, int32_t x_val);
+int32_t  imu_calib_sin_x10000(int32_t angle_ddeg);
 uint32_t imu_calib_isqrt(uint64_t value);
 
 #endif // IMU_CALIB_H

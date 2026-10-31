@@ -33,9 +33,17 @@
 #define MOTION_KI                 2.0f
 
 #define MOTION_BASE_PWM           85.0f
+#if MOTOR_TEST_HIGH_POWER
+#define MOTION_MAX_PWM            500.0f    /* test only, see motor.h */
+#else
 #define MOTION_MAX_PWM            200.0f
+#endif
 
+#if MOTOR_TEST_HIGH_POWER
+#define MOTION_START_PWM          350U      /* test only, see motor.h */
+#else
 #define MOTION_START_PWM          150U
+#endif
 #define MOTION_START_CYCLES       2U
 
 #define MOTION_MAX_TARGET_RPM     30.0f

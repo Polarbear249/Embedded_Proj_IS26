@@ -3,6 +3,11 @@
 #include <tk/tkernel.h>
 #include <bsp/libbsp.h>
 #include <stdint.h>
+#include "motor.h"
+
+#ifndef MOTOR_TEST_HIGH_POWER
+#error "MOTOR_TEST_HIGH_POWER must come from motor.h"
+#endif
 /*
  * Buddy 2 - Motor Driver
  * Raspberry Pi Pico W / Robo Pico
@@ -23,7 +28,28 @@
 #define RIGHT_MOTOR_B     9U
 
 #define MOTOR_PWM_WRAP  999U
+#if MOTOR_TEST_HIGH_POWER
+#define MOTOR_PWM_MAX   500U    /* test only, see motor.h */
+#else
 #define MOTOR_PWM_MAX   200U
+#endif
+
+/*
+ * PWM clock divider = SYSCLK in MHz (125): the counter runs at 1 MHz,
+ * so with WRAP 999 the motor PWM is 1 kHz. That is the frequency the
+ * bench PI tuning used (testing/subsystem2/dual_motor_pid_test,
+ * PWM_CLKDIV 125), so BASE 85 / START 150 / MAX 200 keep their meaning.
+ * Without it the slices ran at 125 kHz, above the Robo Pico driver's
+ * 20 kHz limit: the motors did not move or even hum (2026-10-31).
+ * libbsp has no divider call, so the DIV register is written directly
+ * (integer part in bits 11:4).
+ */
+#define MOTOR_PWM_DIV_INT    ((UW)SYSCLK)
+#define MOTOR_PWM_DIV_SHIFT  4U
+#define MOTOR_PWM_SLICE(pin) (((UW)(pin) >> 1) & 0x07U)
+#define MOTOR_PWM_CH_STRIDE  0x14U
+#define MOTOR_PWM_DIV_REG(pin) \
+    (PWM_BASE + PWM_CHx_DIV + (MOTOR_PWM_SLICE(pin) * MOTOR_PWM_CH_STRIDE))
 
 static int motor_ready = 0;
 
@@ -39,6 +65,22 @@ ER motor_init(void)
     if (motor_ready)
     {
         return E_OK;
+    }
+
+    /*
+     * Take the PWM block out of reset. The kernel releases it only when
+     * its physical timer uses PWM (config/config.h USE_PTMR, 0 here), so
+     * until now every PWM register write was ignored and the motor driver
+     * inputs got no signal (2026-10-31: the Robo Pico motor test buttons
+     * turned the wheels, the software did not). Release only, no reset
+     * pulse: safe to repeat, so S5's servo code can do the same without
+     * wiping this set-up.
+     */
+    clr_w(RESETS_RESET, RESETS_RESET_PWM);
+
+    while (0U == (in_w(RESETS_RESET_DONE) & RESETS_RESET_PWM))
+    {
+        /* wait for the PWM block to leave reset */
     }
 
     /* Configure motor pins for PWM */
@@ -60,6 +102,12 @@ ER motor_init(void)
 
     er = pwm_set_wrap(RIGHT_MOTOR_A, MOTOR_PWM_WRAP);
     if (er < E_OK) return er;
+
+    /* 1 kHz PWM (see MOTOR_PWM_DIV_INT) */
+    out_w(MOTOR_PWM_DIV_REG(LEFT_MOTOR_A),
+          MOTOR_PWM_DIV_INT << MOTOR_PWM_DIV_SHIFT);
+    out_w(MOTOR_PWM_DIV_REG(RIGHT_MOTOR_A),
+          MOTOR_PWM_DIV_INT << MOTOR_PWM_DIV_SHIFT);
 
     /* Set all motor channels to zero duty */
     pwm_set_cc(LEFT_MOTOR_A, 0U);

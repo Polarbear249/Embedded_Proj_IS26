@@ -9,7 +9,9 @@
  * Each cycle: accelerometer burst (every cycle), magnetometer burst
  * (every IMU_TERRAIN_MAG_DIV cycles), stored calibration, fixed-point
  * IIR low-pass, pitch/roll against the start-up level reference.
- * Hump / impact / turn detection is not here yet (handoff step 5).
+ * Then hump detection and height (imu_hump.c) from the pitch and the
+ * IF-10 wheel distance; the result is the IF-11 hump word. Impact and
+ * turn detection are not here yet.
  *
  * Timing (A7 evidence): burst time, loop time (WCET over the window)
  * and period jitter are measured on the RP2040 1 us hardware timer and
@@ -39,18 +41,22 @@
 #define IMU_TERRAIN_PRC         (TP_PRC1)   // core 0, see above
 #define IMU_TERRAIN_PERIOD_MS   (10U)
 
-// Task state, 4 bits (CLAUDE.md section 6). The hump states are added
-// with the statechart.
+// State, 4 bits (CLAUDE.md section 6). The task runs INIT, CALIBRATING,
+// ACTIVE and FAULT; HUMP_UP / HUMP_DOWN are what the IF-11 word reports
+// while ACTIVE and on a hump (FR8: climbing / descending).
 typedef enum
 {
     IMU_TERRAIN_INIT = 0,
     IMU_TERRAIN_CALIBRATING,    // level zero, car must be still
     IMU_TERRAIN_ACTIVE,
-    IMU_TERRAIN_FAULT
+    IMU_TERRAIN_FAULT,
+    IMU_TERRAIN_HUMP_UP,
+    IMU_TERRAIN_HUMP_DOWN
 } imu_terrain_state_t;
 
 ER                  imu_terrain_init(void);
 ER                  imu_terrain_start(void);
 imu_terrain_state_t imu_terrain_get_state(void);
+uint32_t            imu_terrain_get_hump_word(void);
 
 #endif // IMU_TERRAIN_H

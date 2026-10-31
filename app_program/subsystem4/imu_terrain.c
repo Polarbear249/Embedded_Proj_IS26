@@ -18,6 +18,7 @@
 #include "imu_terrain.h"
 #include "drv_imu.h"
 #include "imu_calib.h"
+#include "imu_hump.h"
 #include "../subsystem2/motion_control.h"     // IF-10 distance (reader)
 
 #define IMU_TICK_BIT            (0x1U)
@@ -39,7 +40,7 @@
 #define IMU_IIR_DIV             (4)
 
 #define IMU_LATE_US             (15000U)    // period > 1.5 x 10 ms
-#define IMU_LINE_LEN            (224U)
+#define IMU_LINE_LEN            (256U)
 
 typedef struct
 {
@@ -61,6 +62,11 @@ static ID                   g_cyc_tick = 0;
 // atomic on the M0+, so imu_terrain_get_state() needs no lock.
 static volatile uint32_t    g_state = (uint32_t)IMU_TERRAIN_INIT;
 
+// IF-11 hump word (TEAM.md section 5). Single writer: imu_publish() in
+// this task. One aligned 32-bit store, so readers on any core need no
+// lock: imu_terrain_get_hump_word().
+static volatile uint32_t    g_hump_word = 0U;
+
 // Task-private (only imu_terrain_task touches these)
 static imu_calib_t          g_cal;
 static imu_calib_mag_t      g_mag_cal;
@@ -75,10 +81,15 @@ static int32_t              g_lvl_count = 0;
 static uint32_t             g_bad_reads = 0U;
 static uint32_t             g_wcet_us = 0U;     // whole run, not reset
 static imu_timing_t         g_tim;
+static imu_hump_t           g_hump;
+static int32_t              g_pitch_ddeg = 0;   // filtered, vs level
+static uint32_t             g_hump_seq = 0U;
+static uint32_t             g_last_event = (uint32_t)IMU_EVT_NONE;
+static uint32_t             g_rep_state = (uint32_t)IMU_TERRAIN_INIT;
 
 static char const * const   g_state_name[] =
 {
-    "INIT", "CALIBRATING", "ACTIVE", "FAULT"
+    "INIT", "CALIBRATING", "ACTIVE", "FAULT", "HUMP_UP", "HUMP_DOWN"
 };
 
 static void     imu_terrain_cyc_handler(void *p_exinf);
@@ -92,6 +103,9 @@ static bool     imu_sample(uint32_t cycle, int32_t p_acc[],
                            uint32_t *p_acc_us, uint32_t *p_mag_us);
 static void     imu_level_add(int32_t const p_acc[]);
 static void     imu_filter(int32_t const p_acc[]);
+static void     imu_hump_cycle(void);
+static uint32_t imu_reported_state(void);
+static void     imu_publish(void);
 static void     imu_read_failed(i2c1_result_t result);
 static void     imu_timing_reset(void);
 static void     imu_report(void);
@@ -156,6 +170,15 @@ imu_terrain_get_state (void)
     return ((imu_terrain_state_t)g_state);
 }
 
+/*!
+ * IF-11 hump word; unpack with the IMU_HUMP_W_* macros (imu_hump.h).
+ */
+uint32_t
+imu_terrain_get_hump_word (void)
+{
+    return (g_hump_word);
+}
+
 // Cyclic handler: never blocks, only wakes the task.
 static void
 imu_terrain_cyc_handler (void *p_exinf)
@@ -182,6 +205,7 @@ imu_terrain_task (INT stacd, void *p_exinf)
 
     imu_calib_default(&g_cal);
     imu_calib_mag_default(&g_mag_cal);
+    imu_hump_init(&g_hump);
     imu_timing_reset();
     imu_start_device();
     last_wake_us = imu_now_us();
@@ -243,8 +267,21 @@ imu_set_state (imu_terrain_state_t state)
 {
     if ((uint32_t)state != g_state)
     {
+        if ((uint32_t)IMU_TERRAIN_FAULT == g_state)
+        {
+            // Pitch was unknown during the fault: drop any hump in
+            // progress, keep the results
+            imu_hump_resync(&g_hump);
+        }
+
+        if (IMU_TERRAIN_FAULT == state)
+        {
+            g_last_event = (uint32_t)IMU_EVT_FAULT;
+        }
+
         g_state = (uint32_t)state;
         tm_printf((UB*)"[IMU] state %s\n", g_state_name[state]);
+        imu_publish();
     }
 }
 
@@ -353,6 +390,7 @@ imu_cycle (uint32_t cycle, uint32_t *p_acc_us, uint32_t *p_mag_us)
             if (imu_sample(cycle, acc, p_acc_us, p_mag_us))
             {
                 imu_filter(acc);
+                imu_hump_cycle();
             }
             break;
 
@@ -481,6 +519,94 @@ imu_filter (int32_t const p_acc[])
     }
 }
 
+/*
+ * Hump detection, every good sample while ACTIVE: pitch of the filtered
+ * gravity vector against level, plus the IF-10 wheel distance.
+ */
+static void
+imu_hump_cycle (void)
+{
+    int32_t     filt_mg[IMU_CALIB_AXES] = {0, 0, 0};
+    int32_t     roll = 0;
+    int32_t     dist_mm = motion_get_distance_mm();
+    imu_event_t event = IMU_EVT_NONE;
+    uint32_t    axis;
+
+    for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
+    {
+        filt_mg[axis] = g_filt_q[axis] / IMU_IIR_Q;
+    }
+
+    imu_calib_level_tilt(&g_level, filt_mg, &g_pitch_ddeg, &roll);
+    event = imu_hump_update(&g_hump, g_pitch_ddeg, dist_mm);
+
+    if (IMU_EVT_HUMP_START == event)
+    {
+        tm_printf((UB*)"[IMU] hump start at d %d mm\n", (INT)dist_mm);
+    }
+    else if (IMU_EVT_HUMP_END == event)
+    {
+        tm_printf((UB*)"[IMU] hump end at d %d mm: height %u mm"
+                  " (highest %u mm)\n", (INT)dist_mm,
+                  (UINT)g_hump.last_mm, (UINT)g_hump.max_mm);
+    }
+    else
+    {
+        // no event this sample
+    }
+
+    if (IMU_EVT_NONE != event)
+    {
+        g_last_event = (uint32_t)event;
+    }
+
+    if ((IMU_EVT_NONE != event) || (imu_reported_state() != g_rep_state))
+    {
+        imu_publish();
+    }
+}
+
+/*
+ * State for the IF-11 word: the task state, or HUMP_UP / HUMP_DOWN while
+ * ACTIVE on a hump. Up/down switch only beyond +-IMU_HUMP_OFF_DDEG, so a
+ * flat hump top does not flip the state every sample.
+ */
+static uint32_t
+imu_reported_state (void)
+{
+    uint32_t rep = g_state;
+
+    if (((uint32_t)IMU_TERRAIN_ACTIVE == g_state) && g_hump.b_on_hump)
+    {
+        if (g_pitch_ddeg > IMU_HUMP_OFF_DDEG)
+        {
+            rep = (uint32_t)IMU_TERRAIN_HUMP_UP;
+        }
+        else if (g_pitch_ddeg < -IMU_HUMP_OFF_DDEG)
+        {
+            rep = (uint32_t)IMU_TERRAIN_HUMP_DOWN;
+        }
+        else
+        {
+            rep = ((uint32_t)IMU_TERRAIN_HUMP_DOWN == g_rep_state)
+                  ? (uint32_t)IMU_TERRAIN_HUMP_DOWN
+                  : (uint32_t)IMU_TERRAIN_HUMP_UP;
+        }
+    }
+
+    return (rep);
+}
+
+// Rebuild and store the IF-11 word (one aligned 32-bit store)
+static void
+imu_publish (void)
+{
+    g_rep_state = imu_reported_state();
+    g_hump_seq++;
+    g_hump_word = imu_hump_pack(&g_hump, g_rep_state, g_last_event,
+                                g_hump_seq);
+}
+
 static void
 imu_read_failed (i2c1_result_t result)
 {
@@ -516,6 +642,8 @@ imu_timing_reset (void)
  * d = IF-10 cumulative distance from S2, mm (hump height input).
  * L / R = raw encoder counts per wheel from S2 (diagnostic: one wheel
  * turn is about 1270 counts; forward should count up).
+ * z = ground height under the front contact during a hump, mm;
+ * H = last / highest hump height, mm (IF-11).
  */
 static void
 imu_report (void)
@@ -543,8 +671,8 @@ imu_report (void)
 
     (void)tm_sprintf(line, (UB*)"[IMU] t %s acc %u-%u mag %u loop %u-%u"
                      " wcet %u per %u-%u late %u err %u | p %d r %d"
-                     " hdg %d d %d L %d R %d\n",
-                     g_state_name[g_state],
+                     " hdg %d d %d L %d R %d | z %d H %u/%u\n",
+                     g_state_name[imu_reported_state()],
                      (UINT)g_tim.acc_min_us, (UINT)g_tim.acc_max_us,
                      (UINT)g_tim.mag_max_us,
                      (UINT)g_tim.loop_min_us, (UINT)g_tim.loop_max_us,
@@ -554,7 +682,9 @@ imu_report (void)
                      (INT)pitch, (INT)roll, (INT)heading,
                      (INT)motion_get_distance_mm(),
                      (INT)motion.left_encoder_count,
-                     (INT)motion.right_encoder_count);
+                     (INT)motion.right_encoder_count,
+                     (INT)imu_hump_now_mm(&g_hump),
+                     (UINT)g_hump.last_mm, (UINT)g_hump.max_mm);
     tm_printf(line);
 }
 

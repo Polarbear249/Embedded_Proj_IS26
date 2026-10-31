@@ -6,7 +6,7 @@
  */
 
 #include "imu_calib.h"
-#include "../app.h"     // NULL
+#include <stddef.h>     // NULL (no kernel headers: host-testable)
 
 // Integer atan from a tan(k deg) x 10000 table, k = 0..45
 #define IMU_TAN_SCALE           (10000U)
@@ -22,6 +22,24 @@ static uint16_t const g_tan_x10000[IMU_TAN_STEPS + 1U] =
     3640U, 3839U, 4040U, 4245U, 4452U, 4663U, 4877U, 5095U, 5317U, 5543U,
     5774U, 6009U, 6249U, 6494U, 6745U, 7002U, 7265U, 7536U, 7813U, 8098U,
     8391U, 8693U, 9004U, 9325U, 9657U, 10000U
+};
+
+// sin(k deg) x 10000, k = 0..90, for imu_calib_sin_x10000()
+#define IMU_SIN_STEPS           (90U)
+
+static uint16_t const g_sin_x10000[IMU_SIN_STEPS + 1U] =
+{
+        0U,   175U,   349U,   523U,   698U,   872U,  1045U,  1219U,  1392U,
+     1564U,  1736U,  1908U,  2079U,  2250U,  2419U,  2588U,  2756U,  2924U,
+     3090U,  3256U,  3420U,  3584U,  3746U,  3907U,  4067U,  4226U,  4384U,
+     4540U,  4695U,  4848U,  5000U,  5150U,  5299U,  5446U,  5592U,  5736U,
+     5878U,  6018U,  6157U,  6293U,  6428U,  6561U,  6691U,  6820U,  6947U,
+     7071U,  7193U,  7314U,  7431U,  7547U,  7660U,  7771U,  7880U,  7986U,
+     8090U,  8192U,  8290U,  8387U,  8480U,  8572U,  8660U,  8746U,  8829U,
+     8910U,  8988U,  9063U,  9135U,  9205U,  9272U,  9336U,  9397U,  9455U,
+     9511U,  9563U,  9613U,  9659U,  9703U,  9744U,  9781U,  9816U,  9848U,
+     9877U,  9903U,  9925U,  9945U,  9962U,  9976U,  9986U,  9994U,  9998U,
+    10000U
 };
 
 static uint32_t imu_angle_ddeg(uint64_t opposite, uint64_t adjacent);
@@ -343,4 +361,35 @@ static uint64_t
 imu_abs64 (int64_t value)
 {
     return ((value < 0) ? (uint64_t)(-value) : (uint64_t)value);
+}
+
+/*!
+ * sin(angle) x 10000 for an angle in 0.1 deg, clamped to -90..90 deg.
+ * 1-deg table plus linear interpolation: error below 0.0002 (derived).
+ */
+int32_t
+imu_calib_sin_x10000 (int32_t angle_ddeg)
+{
+    uint32_t mag = (uint32_t)((angle_ddeg < 0) ? -angle_ddeg : angle_ddeg);
+    uint32_t idx = 0U;
+    uint32_t frac = 0U;
+    uint32_t value = 0U;
+    int32_t  result = 0;
+
+    if (mag >= (IMU_SIN_STEPS * IMU_DDEG_PER_DEG))
+    {
+        value = IMU_TAN_SCALE;              // sin 90 deg = 1.0000
+    }
+    else
+    {
+        idx = mag / IMU_DDEG_PER_DEG;
+        frac = mag % IMU_DDEG_PER_DEG;
+        value = g_sin_x10000[idx]
+                + (((g_sin_x10000[idx + 1U] - g_sin_x10000[idx]) * frac)
+                   / IMU_DDEG_PER_DEG);
+    }
+
+    result = (int32_t)value;
+
+    return ((angle_ddeg < 0) ? -result : result);
 }
