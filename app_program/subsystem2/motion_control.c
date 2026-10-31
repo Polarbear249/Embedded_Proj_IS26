@@ -12,7 +12,7 @@
  *
  * Intended execution model:
  * - One task owns motion commands and motion_update().
- * - encoder_sample() runs separately at a faster rate.
+ * - encoder counts come from GPIO edge interrupts.
  * - motion_update() runs approximately every 100 ms.
  *
  * Current implementation:

@@ -46,8 +46,6 @@ float encoder_calculate_right_rpm(int32_t delta, uint32_t interval_ms);
 float encoder_left_distance_cm(int32_t counts);
 float encoder_right_distance_cm(int32_t counts);
 
-/* Sample both encoder inputs and update counts. */
-void encoder_sample(void);
 
 /*
  * IF-10: cumulative distance travelled, in mm.
@@ -57,7 +55,7 @@ void encoder_sample(void);
  * encoder_reset_counts(), so readers can take differences.
  *
  * encoder_publish_distance(): called only by the encoder
- * sampling task (single writer).
+ * publish task in subsystem2.c (single writer).
  * encoder_get_distance_mm(): any task, any core. One
  * aligned 32-bit load, so no lock is needed.
  */

@@ -1,6 +1,7 @@
 /*
- * Host test for IF-10 (S2 -> S4 cumulative distance, mm).
- * Runs the production encoder.c against fake GPIO pins.
+ * Host test for the interrupt-driven encoder counting and IF-10
+ * (S2 -> S4 cumulative distance, mm). Runs the production encoder.c; the
+ * test calls its edge callbacks directly, as the GPIO interrupt would.
  * Build and run: ./run_tests.sh
  */
 #include <assert.h>
@@ -11,25 +12,43 @@
 #include <bsp/libbsp.h>
 
 UINT host_gpio[32];
+static int attached;
+
+#include "../../../app_program/gpio_irq.h"
+
+/* Stand-in for the shared dispatcher: just record the attach. */
+ER gpio_irq_attach(uint32_t pin, uint32_t events, gpio_irq_cb_t p_cb)
+{
+    (void)pin;
+    assert(events == GPIO_IRQ_EDGE_BOTH && p_cb != 0);
+    attached++;
+    return E_OK;
+}
 
 #include "../../../app_program/subsystem2/encoder.c"
 
-/* One channel-A edge per wheel; dir +1 = forward, -1 = reverse. */
+static UINT left_a, right_a;
+
+/* One A edge per wheel (alternating rise/fall); dir +1 forward, -1 back,
+   B set the way the real quadrature signal would be at that edge. */
 static void step(int left_dir, int right_dir)
 {
+    uint32_t ev;
+
     if (left_dir != 0) {
-        host_gpio[ENCODER_LEFT_A_PIN] ^= 1U;
-        /* encoder.c: left counts +1 when A != B */
-        host_gpio[ENCODER_LEFT_B_PIN] = (left_dir > 0)
-            ? !host_gpio[ENCODER_LEFT_A_PIN] : host_gpio[ENCODER_LEFT_A_PIN];
+        left_a ^= 1U;
+        ev = left_a ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL;
+        /* left forward = +1: needs A != B after the edge */
+        host_gpio[ENCODER_LEFT_B_PIN] = (left_dir > 0) ? !left_a : left_a;
+        encoder_left_edge(ENCODER_LEFT_A_PIN, ev);
     }
     if (right_dir != 0) {
-        host_gpio[ENCODER_RIGHT_A_PIN] ^= 1U;
-        /* encoder.c: right counts +1 when A == B */
-        host_gpio[ENCODER_RIGHT_B_PIN] = (right_dir > 0)
-            ? host_gpio[ENCODER_RIGHT_A_PIN] : !host_gpio[ENCODER_RIGHT_A_PIN];
+        right_a ^= 1U;
+        ev = right_a ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL;
+        /* right forward = +1: needs A == B after the edge */
+        host_gpio[ENCODER_RIGHT_B_PIN] = (right_dir > 0) ? right_a : !right_a;
+        encoder_right_edge(ENCODER_RIGHT_A_PIN, ev);
     }
-    encoder_sample();
 }
 
 static void move(int32_t left_counts, int32_t right_counts)
@@ -54,26 +73,33 @@ static double ref_mm(int32_t left, int32_t right)
 
 int main(void)
 {
-    int32_t lt = 0, rt = 0;
+    int32_t lt = 0, rt = 0, cl = 0, cr = 0;
 
     assert(encoder_init() == E_OK);
+    assert(attached == 2);
     encoder_publish_distance();
     assert(encoder_get_distance_mm() == 0);
 
-    /* 5 wheel turns forward each: ~1036.7 mm */
+    /* 5 wheel turns forward each: ~1036.7 mm, counts +6355 / +6330 */
     move(5 * 1271, 5 * 1266); lt += 5 * 1271; rt += 5 * 1266;
+    encoder_get_counts(&cl, &cr);
+    assert(cl == lt && cr == rt);
     encoder_publish_distance();
     printf("5 turns: %d mm (ref %.1f)\n", encoder_get_distance_mm(),
            ref_mm(lt, rt));
     assert(fabs(encoder_get_distance_mm() - ref_mm(lt, rt)) <= 1.0);
 
-    /* reset_counts (used by S2 for speed) must not move the odometer */
+    /* reset_counts zeroes the task's view but not the odometer */
     encoder_reset_counts();
+    encoder_get_counts(&cl, &cr);
+    assert(cl == 0 && cr == 0);
     encoder_publish_distance();
     assert(fabs(encoder_get_distance_mm() - ref_mm(lt, rt)) <= 1.0);
 
     /* reverse 1 turn subtracts */
     move(-1271, -1266); lt -= 1271; rt -= 1266;
+    encoder_get_counts(&cl, &cr);
+    assert(cl == -1271 && cr == -1266);
     encoder_publish_distance();
     assert(fabs(encoder_get_distance_mm() - ref_mm(lt, rt)) <= 1.0);
 
@@ -82,6 +108,16 @@ int main(void)
     encoder_publish_distance();
     assert(fabs(encoder_get_distance_mm() - ref_mm(lt, rt)) <= 1.0);
 
+    /* both edges pending at once (A went there and back): no count */
+    encoder_get_counts(&cl, &cr);
+    encoder_left_edge(ENCODER_LEFT_A_PIN, GPIO_IRQ_EDGE_BOTH);
+    encoder_right_edge(ENCODER_RIGHT_A_PIN, GPIO_IRQ_EDGE_BOTH);
+    {
+        int32_t l2, r2;
+        encoder_get_counts(&l2, &r2);
+        assert(l2 == cl && r2 == cr);
+    }
+
     /* long run: 2,000,000 counts (~327 m) without 32-bit overflow */
     move(2000000, 2000000); lt += 2000000; rt += 2000000;
     encoder_publish_distance();
@@ -89,7 +125,7 @@ int main(void)
            ref_mm(lt, rt));
     assert(fabs(encoder_get_distance_mm() - ref_mm(lt, rt)) <= 1.0);
 
-    puts("PASS: IF-10 distance: zero, forward, reset-safe, reverse,"
-         " spin, long run");
+    puts("PASS: IRQ encoder counting + IF-10: zero, forward, reset "
+         "baseline, reverse, spin, double edge, long run");
     return 0;
 }

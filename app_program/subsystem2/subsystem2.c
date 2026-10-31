@@ -17,36 +17,22 @@
 #include "encoder.h"
 
 /*
- * Encoder Sampling Task
+ * Encoder Publish Task
  *
- * Reads wheel encoder signals approximately every 1 ms.
- *
- * IMPORTANT:
- * Polling is provisional and may miss encoder edges.
- * An interrupt-based implementation is preferred
- * for reliable high-speed operation.
+ * The encoder counts now come from GPIO edge interrupts
+ * (encoder.c), so this task no longer samples pins. It only
+ * publishes the IF-10 distance word every S2_DIST_PERIOD_MS.
  */
-static void encoder_sampling_task(INT stacd, void *exinf)
+static void encoder_publish_task(INT stacd, void *exinf)
 {
-    uint32_t samples = 0U;
-
     (void)stacd;
     (void)exinf;
 
     for (;;)
     {
-        encoder_sample();
+        encoder_publish_distance();
 
-        /* IF-10: publish distance every 10 samples. tk_dly_tsk(1)
-           waits at least 1 ms, so this is every 10 ms or more. */
-        samples++;
-        if (samples >= S2_DIST_PUBLISH_SAMPLES)
-        {
-            encoder_publish_distance();
-            samples = 0U;
-        }
-
-        tk_dly_tsk(1);
+        tk_dly_tsk(S2_DIST_PERIOD_MS);
     }
 }
 
@@ -94,7 +80,7 @@ EXPORT ER subsystem2_init(void)
  *
  * Both tasks are pinned to core 1 (TP_PRC2).
  *
- * Encoder task priority: 12
+ * Encoder publish task priority: 12
  * Motion task priority: S2_PRI_PRODUCER (14)
  *
  * Smaller priority numbers indicate higher
@@ -105,12 +91,12 @@ EXPORT ER subsystem2_start(void)
     ID encoder_tid;
     ID motion_tid;
 
-    /* Start the higher-priority encoder sampling task */
+    /* Start the IF-10 distance publish task */
     encoder_tid = app_start_task(
-        encoder_sampling_task,
+        encoder_publish_task,
         12,
         TP_PRC2,
-        "encoder_sampling_task"
+        "encoder_publish_task"
     );
 
     if (encoder_tid < E_OK)
