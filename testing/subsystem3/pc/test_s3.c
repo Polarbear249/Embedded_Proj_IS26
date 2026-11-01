@@ -441,8 +441,8 @@ static void test_line_logic(void)
 
     /* Centre loses the line, right never saw it: line went left */
     steps(&ctx, 2, false, false, false, &e, &m);
-    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U - LINE_ERR_SIDE,
-          "centre lost, right white: steer left");
+    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U - LINE_ERR_GUESS,
+          "centre lost, right white: guess left, gently");
     steps(&ctx, 2, true, false, false, &e, &m);
     CHECK("S3-P13", e == 64U, "centre back on the line: straight");
 
@@ -460,8 +460,10 @@ static void test_line_logic(void)
     steps(&ctx, 2, false, true, false, &e, &m);
     steps(&ctx, 2, true, false, false, &e, &m);
     steps(&ctx, 2, false, false, false, &e, &m);
-    CHECK("S3-P13", e == 64U - LINE_ERR_SIDE,
-          "line crossed the centre leftward: steer left");
+    CHECK("S3-P13", e == 64U - LINE_ERR_GUESS,
+          "line crossed the centre leftward: gentle left");
+    CHECK("S3-P13", LINE_ERR_GUESS < LINE_ERR_SIDE,
+          "a guessed turn is gentler than a seen one");
 
     /* The barcode sensor alone never steers */
     steps(&ctx, 2, true, false, true, &e, &m);

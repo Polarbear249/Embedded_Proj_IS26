@@ -17,6 +17,7 @@ _Static_assert(LINE_DEBOUNCE_TICKS <= 3U, "debounce counter width");
 _Static_assert(LINE_JUNCTION_TICKS <= 3U, "junction counter width");
 _Static_assert(LINE_ERR_FULL < LINE_IF_ERROR_CENTRE, "error range");
 _Static_assert(LINE_ERR_NEAR < LINE_ERR_SIDE, "near is the smaller");
+_Static_assert(LINE_ERR_GUESS <= LINE_ERR_SIDE, "a guess is gentler");
 
 static void    line_debounce(bool b_raw, unsigned *p_b_state,
                              unsigned *p_count);
@@ -293,9 +294,15 @@ line_error (line_logic_t const *p_ctx)
         {
             // on the line: straight ahead
         }
-        else if (LINE_SIDE_NONE != side)
+        else if (LINE_SIDE_RIGHT == side)
         {
-            error = line_toward(side, LINE_ERR_SIDE);
+            // the right sensor saw it last: certain, steer firmly
+            error = line_toward(LINE_SIDE_RIGHT, LINE_ERR_SIDE);
+        }
+        else if (LINE_SIDE_LEFT == side)
+        {
+            // no left sensor: only a guess, steer gently
+            error = line_toward(LINE_SIDE_LEFT, LINE_ERR_GUESS);
         }
         else
         {

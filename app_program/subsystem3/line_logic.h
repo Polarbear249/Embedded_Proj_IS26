@@ -12,14 +12,19 @@
  *   B      W       on the line                      64
  *   B      B       line slightly right of centre    64 + NEAR
  *   W      B       line under the right sensor      64 + SIDE
- *   W      W       line off to one side (or lost)   64 -/+ SIDE, toward
- *                                                   the last side seen
+ *   W      W       line beyond the right sensor     64 + SIDE
+ *                   (right sensor saw it last)
+ *   W      W       line went left (a GUESS: there   64 - GUESS
+ *                   is no left sensor)
  *
  * Which side for white/white: the line can only reach the right sensor
  * by passing it, so if the centre sensor loses the line and the right
  * sensor did not pick it up, the line went LEFT. If the right sensor
- * saw it last, the line is to the RIGHT. Mount the right sensor so its
- * spot is just outside the line edge when the car is centred (about
+ * saw it last, the line is to the RIGHT. "Left" is only a guess (the
+ * car may have drifted left, the line passing through the gap before
+ * the right sensor), so it steers more gently (GUESS < SIDE): a wrong
+ * guess costs a small wobble, not a sharp turn. Mount the right sensor
+ * so its spot is just outside the line edge when the car is centred (about
  * 12-15 mm centre to centre): a gap there would briefly steer the
  * wrong way.
  *
@@ -48,7 +53,8 @@
 
 // Error offsets from the centre value 64 (7-bit field, 0..127)
 #define LINE_ERR_NEAR           (10U)   // centre + right black TODO_TUNE
-#define LINE_ERR_SIDE           (32U)   // line off one side    TODO_TUNE
+#define LINE_ERR_SIDE           (32U)   // right sensor saw it  TODO_TUNE
+#define LINE_ERR_GUESS          (16U)   // guessed left         TODO_TUNE
 #define LINE_ERR_FULL           (63U)   // search: 1 or 127
 
 // Debounce: a sensor must read the same this many cycles in a row
