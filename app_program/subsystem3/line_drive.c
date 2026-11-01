@@ -37,6 +37,7 @@ line_drive_step (line_drive_t *p_ctx, uint8_t error, uint8_t mode,
 {
     bool    b_drive = false;
     int32_t err_signed;
+    int32_t gain;
     int32_t turn;
 
     if ((NULL != p_ctx) && (NULL != p_left) && (NULL != p_right))
@@ -50,7 +51,18 @@ line_drive_step (line_drive_t *p_ctx, uint8_t error, uint8_t mode,
         {
             // Cast: error is 0..127, widened before the subtraction
             err_signed = (int32_t)error - (int32_t)LINE_IF_ERROR_CENTRE;
-            turn       = (err_signed * DRIVE_KP_NUM) / DRIVE_KP_DEN;
+
+            if ((LINE_MODE_SEARCH_NEAR == mode)
+                || (LINE_MODE_SEARCH_FAR == mode))
+            {
+                gain = DRIVE_KP_SEARCH_NUM;     // turn on the spot
+            }
+            else
+            {
+                gain = DRIVE_KP_NUM;            // gentle corrections
+            }
+
+            turn = (err_signed * gain) / DRIVE_KP_DEN;
 
             // JUNCTION reports error 64, so it simply drives straight
             *p_left  = line_drive_clamp(DRIVE_BASE_DUTY + turn);

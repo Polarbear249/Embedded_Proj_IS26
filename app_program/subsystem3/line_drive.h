@@ -12,8 +12,18 @@
  *   e     = error - 64           -64..+63, > 0 = line to the right
  *   left  = BASE + e * KP        line right -> left wheel faster
  *   right = BASE - e * KP
- * both clamped to +-DRIVE_DUTY_MAX. A search (error 1 or 127) makes the
- * inner wheel run backwards, i.e. the car turns on the spot.
+ * both clamped to +-DRIVE_DUTY_MAX. While tracking the gain is small
+ * (DRIVE_KP_NUM), so every correction is a gentle one (owner asked
+ * 2026-11-01: no sharp turns while following). Only a search for a lost
+ * line uses DRIVE_KP_SEARCH_NUM, which makes the inner wheel run
+ * backwards, i.e. the car turns on the spot.
+ *
+ *   situation              error  wheels L/R (BASE 120)
+ *   centre on the line       64   120 / 120
+ *   centre + right           74   130 / 110
+ *   right only               96   152 /  88
+ *   guessed left             48   104 / 136
+ *   search (lost 1.5 s)    1/127  spin on the spot
  *
  * Safety:
  *   - not ARMED until the centre sensor has seen black for
@@ -38,8 +48,9 @@
 // +-200 for bring-up (MOTION_MAX_DUTY, checked in task_line.c).
 #define DRIVE_DUTY_MAX          (200)
 #define DRIVE_BASE_DUTY         (120)   // straight-ahead speed TODO_TUNE
-#define DRIVE_KP_NUM            (3)     // gain = NUM / DEN     TODO_TUNE
-#define DRIVE_KP_DEN            (1)
+#define DRIVE_KP_NUM            (1)     // tracking gain        TODO_TUNE
+#define DRIVE_KP_SEARCH_NUM     (3)     // search gain (spin)   TODO_TUNE
+#define DRIVE_KP_DEN            (1)     // gain = NUM / DEN
 
 #define DRIVE_ARM_TICKS         (200U)  // 2 s on the line before moving
 #define DRIVE_LEASE_MS          (100U)  // motors stop 100 ms after the

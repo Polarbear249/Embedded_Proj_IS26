@@ -557,6 +557,13 @@ static void test_line_drive(void)
           "line a little right: left wheel faster");
     b = drive_n(&d, 1, 32U, LINE_MODE_TRACKING, false, &l, &r);
     CHECK("S3-P20", b && l < r, "line left: right wheel faster");
+    b = drive_n(&d, 1, 96U, LINE_MODE_TRACKING, false, &l, &r);
+    CHECK("S3-P20", b && l > r && r > 0 && (l - r) <= 64,
+          "right sensor only: gentle right, both wheels forward");
+    b = drive_n(&d, 1, 64U - LINE_ERR_GUESS, LINE_MODE_TRACKING, false,
+                &l, &r);
+    CHECK("S3-P20", b && r > l && l > 0 && (r - l) <= 64,
+          "guessed left: gentle left, both wheels forward");
     b = drive_n(&d, 1, 127U, LINE_MODE_SEARCH_NEAR, false, &l, &r);
     CHECK("S3-P20", b && l == DRIVE_DUTY_MAX && r < 0,
           "search right: clamped, spins on the spot");
