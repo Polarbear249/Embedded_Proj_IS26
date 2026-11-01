@@ -10,13 +10,21 @@
  *   3. finish any barcode run that went quiet; on a decode, update cmd
  *   4. step the line logic (position, junction, line-lost search)
  *   5. publish the IF-06 line_state word with one atomic store
- *   6. update the diagnostics (execution time, overruns)
+ *   6. if S3_DRIVE_ENABLE: steer through Buddy 2's motion API
+ *   7. update the diagnostics (execution time, overruns)
  */
 
 #include "subsystem3.h"
 #include "drv_ir.h"
 #include "line_logic.h"
 #include "barcode_capture.h"
+#if S3_DRIVE_ENABLE
+#include "line_drive.h"
+#include "../subsystem2/motion_control.h"
+
+_Static_assert(DRIVE_DUTY_MAX <= MOTION_MAX_DUTY, "S2 duty limit");
+_Static_assert(DRIVE_LEASE_MS <= MOTION_MAX_LEASE_MS, "S2 lease limit");
+#endif
 
 #define S3_EXEC_MAX_US          (0xFFFFU)   // diag field is 16 bits
 #define S3_COUNT_MAX            (0xFFFFU)   // diag counters saturate
@@ -36,6 +44,13 @@ static struct
 } g_out;
 
 static uint8_t g_seen_overflows = 0U;   // drv_ir_overflows() last seen
+
+#if S3_DRIVE_ENABLE
+static line_drive_t g_drive;
+static bool         g_b_was_driving = false;    // last cycle drove
+
+static void    s3_drive(uint8_t error, uint8_t mode);
+#endif
 
 #if S3_BARCODE_ENABLE
 static void    s3_drain_edges(void);
@@ -94,6 +109,11 @@ line_task (INT stacd, void *exinf)
     g_out.cmd_seq = 0U;
     g_out.seq     = 0U;
     g_seen_overflows = drv_ir_overflows();
+#if S3_DRIVE_ENABLE
+    line_drive_init(&g_drive);
+    tm_printf((UB *)"S3: drive ON: place the car on the line, it starts "
+                    "after 2 s\n");
+#endif
 
     // On the dual-core build this task may run before app_start_task()
     // has returned our ID to subsystem3_start(), so store it ourselves
@@ -114,9 +134,58 @@ line_task (INT stacd, void *exinf)
                         drv_ir_right_black(), drv_ir_barcode_black(),
                         &error, &mode);
         s3_publish(error, mode);
+#if S3_DRIVE_ENABLE
+        s3_drive(error, mode);
+#endif
         s3_update_diag(start_us);
     }
 }
+
+#if S3_DRIVE_ENABLE
+/*!
+ * Steer through Buddy 2's motion API. Each command is renewed every
+ * 10 ms with a DRIVE_LEASE_MS lease, so the motors stop by themselves
+ * if this task ever stops. A failed call (e.g. S2's command mutex busy
+ * for an instant) is simply retried on the next cycle.
+ */
+static void
+s3_drive (uint8_t error, uint8_t mode)
+{
+    int16_t left;
+    int16_t right;
+    bool    b_drive;
+
+    b_drive = line_drive_step(&g_drive, error, mode, drv_ir_centre_black(),
+                              &left, &right);
+
+    if (b_drive)
+    {
+        // Casts: duties are within +-DRIVE_DUTY_MAX (200)
+        (void)motion_set_duty((INT)left, (INT)right, (UINT)DRIVE_LEASE_MS);
+
+        if (!g_b_was_driving)
+        {
+            tm_printf((UB *)"S3: drive armed, following the line\n");
+        }
+        else
+        {
+            // still driving
+        }
+    }
+    else if (g_b_was_driving)
+    {
+        (void)motion_stop();
+        tm_printf((UB *)"S3: drive stopped (mode %u), put the car back "
+                        "on the line\n", (UINT)mode);
+    }
+    else
+    {
+        // stopped and staying stopped; S2's lease has already run out
+    }
+
+    g_b_was_driving = b_drive;
+}
+#endif
 
 #if S3_BARCODE_ENABLE
 /*!

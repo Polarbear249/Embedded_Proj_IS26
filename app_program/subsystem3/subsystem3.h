@@ -36,6 +36,21 @@
  */
 #define S3_BARCODE_ENABLE       (0)
 
+/*
+ * Line-following drive (line_drive.h), a temporary stand-in until
+ * Buddy 2's motion task reads line_state itself. 1 = the Line task
+ * steers the car through Buddy 2's motion_set_duty(); 0 = it never
+ * calls the motion API (the code before 2026-11-01). Never active in
+ * TEST=1 builds, so the bench tests cannot spin the wheels.
+ */
+#define S3_DRIVE_SWITCH         (1)
+
+#if S3_DRIVE_SWITCH && !APP_TEST
+#define S3_DRIVE_ENABLE         (1)
+#else
+#define S3_DRIVE_ENABLE         (0)
+#endif
+
 /*!
  * IF-06: latest line_state word (bit layout in line_if.h). Any task.
  */

@@ -14,6 +14,7 @@
 #include "barcode_code39.h"
 #include "barcode_capture.h"
 #include "line_logic.h"
+#include "line_drive.h"
 #include "line_if.h"
 
 static int g_checks = 0;
@@ -511,6 +512,68 @@ static void test_line_logic(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* Line drive (wheel duties)                                           */
+/* ------------------------------------------------------------------ */
+
+static bool drive_n(line_drive_t *p, int n, uint8_t err, uint8_t mode,
+                    bool c, int16_t *l, int16_t *r)
+{
+    bool b = false;
+    for (int i = 0; i < n; i++) {
+        b = line_drive_step(p, err, mode, c, l, r);
+    }
+    return b;
+}
+
+static void test_line_drive(void)
+{
+    line_drive_t d;
+    int16_t l = 99, r = 99;
+    bool b;
+
+    line_drive_init(&d);
+    b = drive_n(&d, (int)DRIVE_ARM_TICKS - 1, 64U, LINE_MODE_TRACKING,
+                true, &l, &r);
+    CHECK("S3-P19", !b && l == 0 && r == 0,
+          "not armed before 2 s on the line: stopped");
+    b = drive_n(&d, 1, 64U, LINE_MODE_TRACKING, true, &l, &r);
+    CHECK("S3-P19", b && l == DRIVE_BASE_DUTY && r == DRIVE_BASE_DUTY,
+          "armed: centred -> both wheels at base speed");
+
+    line_drive_init(&d);
+    drive_n(&d, 150, 64U, LINE_MODE_TRACKING, true, &l, &r);
+    drive_n(&d, 1, 64U, LINE_MODE_TRACKING, false, &l, &r);
+    b = drive_n(&d, 150, 64U, LINE_MODE_TRACKING, true, &l, &r);
+    CHECK("S3-P19", !b, "leaving the line resets the arm timer");
+
+    line_drive_init(&d);
+    drive_n(&d, (int)DRIVE_ARM_TICKS, 64U, LINE_MODE_TRACKING, true,
+            &l, &r);
+    b = drive_n(&d, 1, 74U, LINE_MODE_TRACKING, true, &l, &r);
+    CHECK("S3-P20", b && l == DRIVE_BASE_DUTY + 10 * DRIVE_KP_NUM
+                    && r == DRIVE_BASE_DUTY - 10 * DRIVE_KP_NUM,
+          "line a little right: left wheel faster");
+    b = drive_n(&d, 1, 32U, LINE_MODE_TRACKING, false, &l, &r);
+    CHECK("S3-P20", b && l < r, "line left: right wheel faster");
+    b = drive_n(&d, 1, 127U, LINE_MODE_SEARCH_NEAR, false, &l, &r);
+    CHECK("S3-P20", b && l == DRIVE_DUTY_MAX && r < 0,
+          "search right: clamped, spins on the spot");
+    b = drive_n(&d, 1, 1U, LINE_MODE_SEARCH_FAR, false, &l, &r);
+    CHECK("S3-P20", b && r == DRIVE_DUTY_MAX && l < 0
+                    && l >= -DRIVE_DUTY_MAX,
+          "search left: clamped, spins the other way");
+    b = drive_n(&d, 1, 64U, LINE_MODE_JUNCTION, true, &l, &r);
+    CHECK("S3-P20", b && l == r, "junction: straight");
+
+    b = drive_n(&d, 1, 64U, LINE_MODE_FAILED, false, &l, &r);
+    CHECK("S3-P21", !b && l == 0 && r == 0, "FAILED: stop");
+    b = drive_n(&d, 5, 64U, LINE_MODE_TRACKING, true, &l, &r);
+    CHECK("S3-P21", !b, "after FAILED: must re-arm (2 s on the line)");
+    b = line_drive_step(NULL, 64U, LINE_MODE_TRACKING, true, &l, &r);
+    CHECK("S3-P21", !b, "NULL context: stop");
+}
+
+/* ------------------------------------------------------------------ */
 /* IF-06 word                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -595,6 +658,7 @@ int main(void)
     test_decode_errors();
     test_capture();
     test_line_logic();
+    test_line_drive();
     test_line_if();
     report_sizes();
     printf("[PC] %d checks, %d failed\n", g_checks, g_failed);
