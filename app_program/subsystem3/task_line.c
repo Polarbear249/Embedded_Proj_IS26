@@ -50,6 +50,15 @@ static line_drive_t g_drive;
 static bool         g_b_was_driving = false;    // last cycle drove
 
 static void    s3_drive(uint8_t error, uint8_t mode);
+
+// 1 = print a drive status line every second (bring-up aid)
+#define S3_DRIVE_DEBUG          (1)
+#define S3_DRIVE_DEBUG_TICKS    (100U)  // 100 x 10 ms = 1 s
+
+#if S3_DRIVE_DEBUG
+static void    s3_drive_debug(uint8_t error, uint8_t mode, int16_t left,
+                              int16_t right, ER err);
+#endif
 #endif
 
 #if S3_BARCODE_ENABLE
@@ -154,14 +163,17 @@ s3_drive (uint8_t error, uint8_t mode)
     int16_t left;
     int16_t right;
     bool    b_drive;
+    ER      err = E_OK;
 
-    b_drive = line_drive_step(&g_drive, error, mode, drv_ir_centre_black(),
-                              &left, &right);
+    // Debounced centre (as the steering uses), so a one-sample flicker
+    // does not restart the 2 s arm time
+    b_drive = line_drive_step(&g_drive, error, mode,
+                              (0U != g_line.b_centre), &left, &right);
 
     if (b_drive)
     {
         // Casts: duties are within +-DRIVE_DUTY_MAX (200)
-        (void)motion_set_duty((INT)left, (INT)right, (UINT)DRIVE_LEASE_MS);
+        err = motion_set_duty((INT)left, (INT)right, (UINT)DRIVE_LEASE_MS);
 
         if (!g_b_was_driving)
         {
@@ -183,8 +195,54 @@ s3_drive (uint8_t error, uint8_t mode)
         // stopped and staying stopped; S2's lease has already run out
     }
 
+#if S3_DRIVE_DEBUG
+    s3_drive_debug(error, mode, left, right, err);
+#else
+    (void)err;
+#endif
     g_b_was_driving = b_drive;
 }
+
+#if S3_DRIVE_DEBUG
+/*!
+ * Once a second: sensors, line logic, arm progress, wheel duties and
+ * the result of the last motion_set_duty() (0 = E_OK).
+ */
+static void
+s3_drive_debug (uint8_t error, uint8_t mode, int16_t left, int16_t right,
+                ER err)
+{
+    static uint8_t ticks = 0U;
+    static ER      worst = E_OK;    // first failure since the last line
+
+    if ((E_OK == worst) && (E_OK != err))
+    {
+        worst = err;
+    }
+    else
+    {
+        // keep the first failure
+    }
+
+    ticks++;
+
+    if (ticks >= S3_DRIVE_DEBUG_TICKS)
+    {
+        ticks = 0U;
+        tm_printf((UB *)"S3 drive: C=%u R=%u mode=%u err=%u arm=%u/%u "
+                        "armed=%u wheels=%d/%d motion=%d\n",
+                  (UINT)drv_ir_centre_black(), (UINT)drv_ir_right_black(),
+                  (UINT)mode, (UINT)error, (UINT)g_drive.arm_count,
+                  (UINT)DRIVE_ARM_TICKS, (UINT)g_drive.b_armed,
+                  (INT)left, (INT)right, (INT)worst);
+        worst = E_OK;
+    }
+    else
+    {
+        // not yet
+    }
+}
+#endif
 #endif
 
 #if S3_BARCODE_ENABLE
