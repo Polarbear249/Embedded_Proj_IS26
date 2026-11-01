@@ -33,9 +33,9 @@ line_if_pack (line_if_state_t const *p_state)
         word |= ((uint32_t)p_state->seq & LINE_IF_SEQ_MASK)
                 << LINE_IF_SEQ_SHIFT;
 
-        if (p_state->b_left_black)
+        if (p_state->b_centre_black)
         {
-            word |= LINE_IF_BIT(LINE_IF_RAW_L_SHIFT);
+            word |= LINE_IF_BIT(LINE_IF_RAW_C_SHIFT);
         }
         else
         {
@@ -89,8 +89,8 @@ line_if_unpack (uint32_t word, line_if_state_t *p_state)
         p_state->seq     = (uint8_t)((word >> LINE_IF_SEQ_SHIFT)
                                      & LINE_IF_SEQ_MASK);
 
-        p_state->b_left_black =
-            (0U != (word & LINE_IF_BIT(LINE_IF_RAW_L_SHIFT)));
+        p_state->b_centre_black =
+            (0U != (word & LINE_IF_BIT(LINE_IF_RAW_C_SHIFT)));
         p_state->b_right_black =
             (0U != (word & LINE_IF_BIT(LINE_IF_RAW_R_SHIFT)));
         p_state->b_barcode_black =

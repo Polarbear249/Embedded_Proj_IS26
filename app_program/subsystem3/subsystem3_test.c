@@ -14,7 +14,7 @@
 
 #if APP_TEST
 
-#define S3_BENCH_TESTS          (0)     // 1 = run S3-U06 / S3-U07
+#define S3_BENCH_TESTS          (1)     // 1 = run S3-U06 / S3-U07
 
 #define S3_T_WINDOW_MS          (200)
 #define S3_T_US_MIN             (195000U)   // 200 ms window, -2.5 %
@@ -27,6 +27,7 @@
 #define S3_BENCH_SENSOR_MS      (15000)
 #define S3_BENCH_BARCODE_MS     (30000)
 #define S3_BENCH_POLL_MS        (20)
+#define S3_BENCH_ALIVE_POLLS    (50)    // status line every 1 s
 #endif
 
 EXPORT void
@@ -37,9 +38,15 @@ subsystem3_test (void)
     uint32_t  word0;
     uint32_t  word1;
     uint8_t   seq_diff;
+    uint16_t  overruns_boot;
+    uint16_t  overruns_new;
     s3_diag_t diag;
 
     TEST_INIT();
+
+    // Overruns before this point happened during boot (WiFi and USB
+    // start-up hold the CPU); S3-U04 judges only the test window.
+    overruns_boot = g_s3_diag.overruns;
 
     // S3-U01: the hardware timer used for barcode widths runs at 1 MHz
     t0_us = in_w(TIMER_TIMERAWL);
@@ -68,10 +75,14 @@ subsystem3_test (void)
 
     // S3-U04 / S3-U05: timing and capture health (NFR11)
     diag = g_s3_diag;
-    tm_printf((UB *)"[TEST] S3 info: max exec %u us, overruns %u\n",
-              (UINT)diag.max_exec_us, (UINT)diag.overruns);
+    // Cast: unsigned 16-bit difference, correct across a wrap
+    overruns_new = (uint16_t)(diag.overruns - overruns_boot);
+    tm_printf((UB *)"[TEST] S3 info: max exec %u us, overruns %u at "
+                    "boot, %u in test window\n",
+              (UINT)diag.max_exec_us, (UINT)overruns_boot,
+              (UINT)overruns_new);
     TEST_CHECK("S3-U04", (diag.max_exec_us < S3_T_EXEC_MAX_US)
-                         && (0U == diag.overruns),
+                         && (0U == overruns_new),
                "cycle < 1 ms and no missed 10 ms slot");
     TEST_CHECK("S3-U05", 0U == diag.edge_overflows,
                "barcode edge ring never overflowed");
@@ -84,27 +95,38 @@ subsystem3_test (void)
         uint16_t        ok_before;
 #endif
         INT             waited;
+        INT             polls;
 
-        // S3-U06 (manual): print every sensor change for 15 s. Move a
-        // black strip under each sensor: 1 = black, 0 = white.
-        tm_printf((UB *)"[TEST] S3-U06 move black under L, R, BC "
+        // S3-U06 (manual): print the start state, every sensor change
+        // and a status line each second, for 15 s. Move a black strip
+        // under each sensor: 1 = black, 0 = white.
+        tm_printf((UB *)"[TEST] S3-U06 move black under C, R, BC "
                         "for 15 s\n");
         line_if_unpack(s3_line_state_read(), &was);
+        tm_printf((UB *)"[TEST] S3 start C=%u R=%u BC=%u mode=%u "
+                        "err=%u\n",
+                  (UINT)was.b_centre_black, (UINT)was.b_right_black,
+                  (UINT)was.b_barcode_black, (UINT)was.mode,
+                  (UINT)was.error);
+        polls = 0;
 
         for (waited = 0; waited < S3_BENCH_SENSOR_MS;
              waited += S3_BENCH_POLL_MS)
         {
             (void)tk_dly_tsk(S3_BENCH_POLL_MS);
             line_if_unpack(s3_line_state_read(), &now);
+            polls++;
 
-            if ((now.b_left_black != was.b_left_black)
+            if ((now.b_centre_black != was.b_centre_black)
                 || (now.b_right_black != was.b_right_black)
                 || (now.b_barcode_black != was.b_barcode_black)
-                || (now.mode != was.mode))
+                || (now.mode != was.mode)
+                || (polls >= S3_BENCH_ALIVE_POLLS))
             {
-                tm_printf((UB *)"[TEST] S3 L=%u R=%u BC=%u mode=%u "
+                polls = 0;
+                tm_printf((UB *)"[TEST] S3 C=%u R=%u BC=%u mode=%u "
                                 "err=%u\n",
-                          (UINT)now.b_left_black, (UINT)now.b_right_black,
+                          (UINT)now.b_centre_black, (UINT)now.b_right_black,
                           (UINT)now.b_barcode_black, (UINT)now.mode,
                           (UINT)now.error);
             }
@@ -115,6 +137,8 @@ subsystem3_test (void)
 
             was = now;
         }
+
+        tm_printf((UB *)"[TEST] S3-U06 done\n");
 
 #if S3_BARCODE_ENABLE
         // S3-U07 (manual): pass a printed A/B/C/D barcode under the

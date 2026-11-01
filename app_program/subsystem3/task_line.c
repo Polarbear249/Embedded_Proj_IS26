@@ -5,7 +5,7 @@
  * Priority 6, every 10 ms (TEAM.md section 4, Tribunal 1), woken by the
  * cyclic handler cyc_line so the period does not drift with execution
  * time. One cycle:
- *   1. read the left / right line sensors
+ *   1. read the centre / right line sensors
  *   2. move barcode edges from the interrupt's ring into the capture
  *   3. finish any barcode run that went quiet; on a decode, update cmd
  *   4. step the line logic (position, junction, line-lost search)
@@ -110,7 +110,8 @@ line_task (INT stacd, void *exinf)
         s3_drain_edges();
         s3_poll_barcode(start_us);
 #endif
-        line_logic_step(&g_line, drv_ir_left_black(), drv_ir_right_black(),
+        line_logic_step(&g_line, drv_ir_centre_black(),
+                        drv_ir_right_black(), drv_ir_barcode_black(),
                         &error, &mode);
         s3_publish(error, mode);
         s3_update_diag(start_us);
@@ -236,7 +237,7 @@ s3_publish (uint8_t error, uint8_t mode)
     state.error           = error;
     state.cmd             = (uint8_t)g_out.cmd;
     state.cmd_seq         = (uint8_t)g_out.cmd_seq;
-    state.b_left_black    = drv_ir_left_black();
+    state.b_centre_black  = drv_ir_centre_black();
     state.b_right_black   = drv_ir_right_black();
     state.b_barcode_black = drv_ir_barcode_black();
 

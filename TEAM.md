@@ -59,7 +59,7 @@ between yourselves; only the *reserved* and *board* rows are fixed.
 | GP3 | S4 | I2C1 SCL, GY-511 IMU (Grove 2 / Maker port) |
 | GP4 | S2 | Left wheel encoder A (Grove 3) |
 | GP5 | S2 | Left wheel encoder B (Grove 3) |
-| GP6 | S3 | Right line IR DOUT (Grove 5; Grove 5's GP26 wire is not connected). TCRT5000, HIGH = black |
+| GP6 | S3 | Right line IR DOUT, just right of the line (Grove 5; Grove 5's GP26 wire is not connected). TCRT5000, HIGH = black |
 | GP7 | S3 | Barcode IR DOUT, left side of the car (Grove 7; AOUT unused). TCRT5000, HIGH = black, edge interrupt |
 | GP8 | S2 | Motor 1 input A (M1A, fixed by Robo Pico) |
 | GP9 | S2 | Motor 1 input B (M1B, fixed by Robo Pico) |
@@ -76,8 +76,8 @@ between yourselves; only the *reserved* and *board* rows are fixed.
 | GP20 | *board* | Programmable button: reserved |
 | GP21 | *board* | Programmable button: reserved |
 | GP22 | *board* | Piezo buzzer: reserved |
-| GP26 | S3 | Left line IR DOUT, used as a digital input (no ADC). TCRT5000, HIGH = black |
-| GP27 | | free (released by S3 2026-11-01) (ADC1 capable) |
+| GP26 | | free (released by S3 2026-11-01). Shared by Grove 5 and Grove 6: only one may drive it |
+| GP27 | S3 | Centre line IR DOUT, over the line (Grove 6), digital input (no ADC). TCRT5000, HIGH = black |
 | GP28 | *board* | VBAT sense or spare ADC2: keep free |
 
 Notes

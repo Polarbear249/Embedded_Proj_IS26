@@ -76,7 +76,7 @@ static void drv_ir_isr(UINT intno);
 void
 drv_ir_init (void)
 {
-    drv_ir_setup_pin(DRV_IR_PIN_LEFT);
+    drv_ir_setup_pin(DRV_IR_PIN_CENTRE);
     drv_ir_setup_pin(DRV_IR_PIN_RIGHT);
     drv_ir_setup_pin(DRV_IR_PIN_BARCODE);
 
@@ -131,9 +131,9 @@ drv_ir_barcode_start (void)
 }
 
 bool
-drv_ir_left_black (void)
+drv_ir_centre_black (void)
 {
-    return drv_ir_is_black(DRV_IR_PIN_LEFT);
+    return drv_ir_is_black(DRV_IR_PIN_CENTRE);
 }
 
 bool

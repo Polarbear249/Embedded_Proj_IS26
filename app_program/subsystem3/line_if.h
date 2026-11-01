@@ -15,8 +15,8 @@
  *   bit 31..24  seq       8  publish counter, +1 every 10 ms, wraps
  *   bit 23..17  reserved  7  always 0
  *   bit 16      raw_bc    1  barcode sensor DOUT now (1 = black)
- *   bit 15      raw_right 1  right line sensor, debounced (1 = black)
- *   bit 14      raw_left  1  left line sensor, debounced (1 = black)
+ *   bit 15      raw_right 1  right line sensor now (1 = black)
+ *   bit 14      raw_c     1  centre line sensor now (1 = black)
  *   bit 13..12  cmd_seq   2  +1 for every newly decoded barcode, wraps
  *   bit 11..10  cmd       2  latest barcode command, LINE_CMD_*
  *   bit  9..7   mode      3  LINE_MODE_*
@@ -51,7 +51,7 @@
 #define LINE_IF_CMD_MASK        (0x03U)     // 2 bits
 #define LINE_IF_CMD_SEQ_SHIFT   (12U)
 #define LINE_IF_CMD_SEQ_MASK    (0x03U)     // 2 bits
-#define LINE_IF_RAW_L_SHIFT     (14U)
+#define LINE_IF_RAW_C_SHIFT     (14U)
 #define LINE_IF_RAW_R_SHIFT     (15U)
 #define LINE_IF_RAW_BC_SHIFT    (16U)
 #define LINE_IF_RAW_MASK        (0x01U)     // 1 bit each
@@ -92,7 +92,7 @@ typedef struct
     uint8_t error;          // 0..127, 64 = centre
     uint8_t cmd;            // LINE_CMD_*
     uint8_t cmd_seq;        // 0..3
-    bool    b_left_black;
+    bool    b_centre_black;
     bool    b_right_black;
     bool    b_barcode_black;
 } line_if_state_t;

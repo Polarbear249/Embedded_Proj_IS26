@@ -3,11 +3,11 @@
  * Subsystem 3 (Buddy 3): three TCRT5000 IR sensor modules, DOUT only.
  *
  * Wiring (TEAM.md section 2, confirmed by the owner 2026-11-01):
- *   GP26  left line sensor DOUT     (connector not yet recorded; AOUT
- *                                    not connected)
- *   GP6   right line sensor DOUT    (Grove 5; GP26 wire of Grove 5 is
- *                                    NOT connected, so GP26 has one
- *                                    driver)
+ *   GP27  centre line sensor DOUT   (Grove 6, over the line; AOUT not
+ *                                    connected, Grove 6's GP26 wire
+ *                                    unused)
+ *   GP6   right line sensor DOUT    (Grove 5, just right of the line;
+ *                                    Grove 5's GP26 wire NOT connected)
  *   GP7   barcode sensor DOUT       (Grove 7; left side of the car;
  *                                    AOUT not connected: Grove 7's
  *                                    second pin is GP28 = VBAT sense)
@@ -32,7 +32,7 @@
 #include <stdint.h>
 #include "../app.h"
 
-#define DRV_IR_PIN_LEFT         (26U)
+#define DRV_IR_PIN_CENTRE       (27U)
 #define DRV_IR_PIN_RIGHT        (6U)
 #define DRV_IR_PIN_BARCODE      (7U)
 
@@ -54,7 +54,7 @@ void     drv_ir_init(void);
  */
 ER       drv_ir_barcode_start(void);
 
-bool     drv_ir_left_black(void);
+bool     drv_ir_centre_black(void);
 bool     drv_ir_right_black(void);
 bool     drv_ir_barcode_black(void);
 

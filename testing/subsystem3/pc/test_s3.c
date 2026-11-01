@@ -412,11 +412,11 @@ static void test_capture(void)
 /* Line logic                                                          */
 /* ------------------------------------------------------------------ */
 
-static void steps(line_logic_t *p, int n, bool l, bool r, uint8_t *e,
-                  uint8_t *m)
+static void steps(line_logic_t *p, int n, bool c, bool r, bool bc,
+                  uint8_t *e, uint8_t *m)
 {
     for (int i = 0; i < n; i++) {
-        line_logic_step(p, l, r, e, m);
+        line_logic_step(p, c, r, bc, e, m);
     }
 }
 
@@ -425,51 +425,89 @@ static void test_line_logic(void)
     line_logic_t ctx;
     uint8_t e = 0, m = 0;
 
+    /* Start: no line seen yet */
     line_logic_init(&ctx);
-    steps(&ctx, 1, false, false, &e, &m);
+    steps(&ctx, 1, false, false, false, &e, &m);
     CHECK("S3-P12", m == LINE_MODE_TRACKING && e == 64U,
           "start on white/white: TRACKING, straight");
 
-    steps(&ctx, 1, true, false, &e, &m);
+    /* Centre over the line */
+    steps(&ctx, 1, true, false, false, &e, &m);
     CHECK("S3-P13", e == 64U, "one-cycle black is debounced away");
-    steps(&ctx, 1, true, false, &e, &m);
-    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U - LINE_ERR_SIDE,
-          "left black for 2 cycles: steer left");
-    steps(&ctx, 2, false, false, &e, &m);
-    CHECK("S3-P13", e == 64U - LINE_ERR_BIAS,
-          "back to white/white: small bias toward the left");
-    steps(&ctx, 2, false, true, &e, &m);
-    CHECK("S3-P13", e == 64U + LINE_ERR_SIDE, "right black: steer right");
-    steps(&ctx, 2, false, false, &e, &m);
-    CHECK("S3-P13", e == 64U + LINE_ERR_BIAS,
-          "white/white: bias toward the right");
+    steps(&ctx, 1, true, false, false, &e, &m);
+    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U,
+          "centre black: on the line, straight");
 
-    steps(&ctx, 2, true, true, &e, &m);
-    steps(&ctx, LINE_JUNCTION_TICKS, true, true, &e, &m);
+    /* Centre loses the line, right never saw it: line went left */
+    steps(&ctx, 2, false, false, false, &e, &m);
+    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U - LINE_ERR_SIDE,
+          "centre lost, right white: steer left");
+    steps(&ctx, 2, true, false, false, &e, &m);
+    CHECK("S3-P13", e == 64U, "centre back on the line: straight");
+
+    /* Line drifts right: centre+right, then right only */
+    steps(&ctx, 2, true, true, false, &e, &m);
+    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U + LINE_ERR_NEAR,
+          "centre and right black: steer a little right");
+    steps(&ctx, 2, false, true, false, &e, &m);
+    CHECK("S3-P13", e == 64U + LINE_ERR_SIDE, "right black: steer right");
+    steps(&ctx, 2, false, false, false, &e, &m);
+    CHECK("S3-P13", e == 64U + LINE_ERR_SIDE,
+          "past the right sensor: keep steering right");
+
+    /* Back over the line from the right, then off to the left */
+    steps(&ctx, 2, false, true, false, &e, &m);
+    steps(&ctx, 2, true, false, false, &e, &m);
+    steps(&ctx, 2, false, false, false, &e, &m);
+    CHECK("S3-P13", e == 64U - LINE_ERR_SIDE,
+          "line crossed the centre leftward: steer left");
+
+    /* The barcode sensor alone never steers */
+    steps(&ctx, 2, true, false, true, &e, &m);
+    CHECK("S3-P13", m == LINE_MODE_TRACKING && e == 64U,
+          "barcode black with centre: still straight");
+
+    /* Junction: all three black */
+    steps(&ctx, 2, true, true, false, &e, &m);
+    CHECK("S3-P14", m == LINE_MODE_TRACKING,
+          "centre+right without barcode: not a junction");
+    steps(&ctx, 2, true, true, true, &e, &m);
+    steps(&ctx, LINE_JUNCTION_TICKS, true, true, true, &e, &m);
     CHECK("S3-P14", m == LINE_MODE_JUNCTION && e == 64U,
-          "both black: JUNCTION, straight");
-    steps(&ctx, 2, false, false, &e, &m);
-    CHECK("S3-P14", m == LINE_MODE_TRACKING, "junction passed: TRACKING");
+          "all three black: JUNCTION, straight");
+    steps(&ctx, 2, true, false, false, &e, &m);
+    CHECK("S3-P14", m == LINE_MODE_TRACKING && e == 64U,
+          "junction passed: TRACKING");
 
     /* Lost: last seen on the right */
     line_logic_init(&ctx);
-    steps(&ctx, 2, false, true, &e, &m);
-    steps(&ctx, 2, false, false, &e, &m);
-    steps(&ctx, LINE_LOST_TICKS - 3, false, false, &e, &m);
+    steps(&ctx, 2, false, true, false, &e, &m);
+    steps(&ctx, 2, false, false, false, &e, &m);
+    steps(&ctx, LINE_LOST_TICKS - 3, false, false, false, &e, &m);
     CHECK("S3-P15", m == LINE_MODE_TRACKING,
           "just under the lost time: still TRACKING");
-    steps(&ctx, 2, false, false, &e, &m);
+    steps(&ctx, 2, false, false, false, &e, &m);
     CHECK("S3-P15", m == LINE_MODE_SEARCH_NEAR && e == 127U,
           "lost: full turn toward the last side (right)");
-    steps(&ctx, LINE_SEARCH1_TICKS, false, false, &e, &m);
+    steps(&ctx, LINE_SEARCH1_TICKS, false, false, false, &e, &m);
     CHECK("S3-P15", m == LINE_MODE_SEARCH_FAR && e == 1U,
           "then full turn the other way (left)");
-    steps(&ctx, LINE_SEARCH2_TICKS, false, false, &e, &m);
+    steps(&ctx, LINE_SEARCH2_TICKS, false, false, false, &e, &m);
     CHECK("S3-P15", m == LINE_MODE_FAILED && e == 64U,
           "then FAILED, error centred");
-    steps(&ctx, 2, true, false, &e, &m);
-    CHECK("S3-P15", m == LINE_MODE_TRACKING && e == 64U - LINE_ERR_SIDE,
-          "black again: back to TRACKING");
+    steps(&ctx, 2, false, false, true, &e, &m);
+    CHECK("S3-P15", m == LINE_MODE_FAILED,
+          "barcode sensor alone does not end FAILED");
+    steps(&ctx, 2, true, false, false, &e, &m);
+    CHECK("S3-P15", m == LINE_MODE_TRACKING && e == 64U,
+          "centre black again: back to TRACKING, straight");
+
+    /* Lost: last seen by the centre only -> search left first */
+    line_logic_init(&ctx);
+    steps(&ctx, 2, true, false, false, &e, &m);
+    steps(&ctx, LINE_LOST_TICKS + 2, false, false, false, &e, &m);
+    CHECK("S3-P15", m == LINE_MODE_SEARCH_NEAR && e == 1U,
+          "lost after centre: full turn left first");
 }
 
 /* ------------------------------------------------------------------ */
@@ -491,7 +529,7 @@ static void test_line_if(void)
                 in.cmd = (uint8_t)cmd;
                 in.cmd_seq = (uint8_t)((cmd + 1U) & 3U);
                 in.seq = (uint8_t)(err * 2U + mode);
-                in.b_left_black = (mode & 1U) != 0U;
+                in.b_centre_black = (mode & 1U) != 0U;
                 in.b_right_black = (cmd & 1U) != 0U;
                 in.b_barcode_black = (err & 1U) != 0U;
                 line_if_unpack(line_if_pack(&in), &out);
