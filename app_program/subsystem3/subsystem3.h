@@ -27,6 +27,15 @@
 #define S3_PRI_LINE             (6)     // TEAM.md section 4 (Tribunal 1)
 #define S3_PERIOD_MS            (10)    // TEAM.md section 4
 
+/*
+ * Barcode on/off. 0 = line following only: no GP7 interrupt, no
+ * decoding, cmd stays STRAIGHT and cmd_seq never changes, so Subsystem 2
+ * never sees a barcode command. raw_bc still shows the GP7 level.
+ * TODO: set back to 1 once the barcode sensor works (2026-11-01: off
+ * while the barcode sensor has hardware issues).
+ */
+#define S3_BARCODE_ENABLE       (0)
+
 /*!
  * IF-06: latest line_state word (bit layout in line_if.h). Any task.
  */

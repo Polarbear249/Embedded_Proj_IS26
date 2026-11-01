@@ -73,16 +73,24 @@ static bool drv_ir_is_black(uint32_t pin);
 static void drv_ir_setup_pin(uint32_t pin);
 static void drv_ir_isr(UINT intno);
 
-ER
+void
 drv_ir_init (void)
+{
+    drv_ir_setup_pin(DRV_IR_PIN_LEFT);
+    drv_ir_setup_pin(DRV_IR_PIN_RIGHT);
+    drv_ir_setup_pin(DRV_IR_PIN_BARCODE);
+
+    g_ring_head = 0U;
+    g_ring_tail = 0U;
+    g_overflows = 0U;
+}
+
+ER
+drv_ir_barcode_start (void)
 {
     T_DINT   dint;
     ER       err;
     uint32_t inte_base;
-
-    drv_ir_setup_pin(DRV_IR_PIN_LEFT);
-    drv_ir_setup_pin(DRV_IR_PIN_RIGHT);
-    drv_ir_setup_pin(DRV_IR_PIN_BARCODE);
 
     g_ring_head = 0U;
     g_ring_tail = 0U;

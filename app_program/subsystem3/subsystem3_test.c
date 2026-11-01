@@ -5,7 +5,8 @@
  *
  * S3-U01..U05 are automatic. S3-U06 / S3-U07 are bench tests that need
  * a person at the car; they run only when S3_BENCH_TESTS is 1, so the
- * team's normal TEST=1 run is not held up.
+ * team's normal TEST=1 run is not held up. S3-U07 is skipped while
+ * S3_BARCODE_ENABLE is 0.
  */
 
 #include "subsystem3.h"
@@ -79,7 +80,9 @@ subsystem3_test (void)
     {
         line_if_state_t now;
         line_if_state_t was;
+#if S3_BARCODE_ENABLE
         uint16_t        ok_before;
+#endif
         INT             waited;
 
         // S3-U06 (manual): print every sensor change for 15 s. Move a
@@ -113,6 +116,7 @@ subsystem3_test (void)
             was = now;
         }
 
+#if S3_BARCODE_ENABLE
         // S3-U07 (manual): pass a printed A/B/C/D barcode under the
         // barcode sensor within 30 s; each decode is printed.
         tm_printf((UB *)"[TEST] S3-U07 pass a barcode under BC (30 s)\n");
@@ -144,6 +148,10 @@ subsystem3_test (void)
 
         TEST_CHECK("S3-U07", g_s3_diag.decode_ok != ok_before,
                    "at least one barcode decoded on the bench");
+#else
+        tm_printf((UB *)"[TEST] S3-U07 SKIPPED: S3_BARCODE_ENABLE "
+                        "is 0\n");
+#endif
     }
 #endif
 

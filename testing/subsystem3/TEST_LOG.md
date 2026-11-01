@@ -49,4 +49,5 @@ Add a new row for every run. Never edit or delete old rows.
 |---|---|---|---|---|---|---|
 | 2026-11-01 | S3-P01…S3-P18 | (this commit) | Claude Code | PASS (49/49) | `logs/2026-11-01_s3_pc_tests.txt` | MinGW-W64 gcc 15.2.0. Module sources built with `-Wall -Wextra -pedantic -Wconversion -Wshadow -Werror`. S3-P07 was confirmed to FAIL with the glitch filter disabled |
 | 2026-11-01 | build | (this commit) | Claude Code | compiles, links | — | All `subsystem3/*.c` cross-compiled with the firmware flags plus `-Wall -Wextra -Wconversion -Wshadow`, `APP_TEST=0` and `1`: 0 warnings. Full image linked with `make CONSOLE=uart WIFI=none` (± `TEST=1`) in a scratch copy, with S1's WiFi status call stubbed out because that build has no WiFi. The default build was NOT run: it needs Pico SDK 2.x, and this PC has 1.5.1 |
+| 2026-11-01 | build | (this commit) | Claude Code | compiles | — | Added `S3_BARCODE_ENABLE` (now 0: barcode sensor has hardware issues). All `subsystem3/*.c` cross-compiled with barcode 0 and 1, `APP_TEST` 0 and 1: 0 warnings. PC tests 49/49 still pass |
 | — | S3-U01…S3-U07 | | | NOT RUN | | Not yet run on the car |

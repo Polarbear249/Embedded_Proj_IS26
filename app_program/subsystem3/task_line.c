@@ -37,9 +37,11 @@ static struct
 
 static uint8_t g_seen_overflows = 0U;   // drv_ir_overflows() last seen
 
+#if S3_BARCODE_ENABLE
 static void    s3_drain_edges(void);
 static void    s3_poll_barcode(uint32_t now_us);
 static bool    s3_cmd_of(char data_char, uint8_t *p_cmd);
+#endif
 static void    s3_publish(uint8_t error, uint8_t mode);
 static void    s3_update_diag(uint32_t start_us);
 static void    s3_count(uint16_t *p_counter);
@@ -60,23 +62,31 @@ line_task (INT stacd, void *exinf)
     uint32_t start_us;
     uint8_t  error = LINE_IF_ERROR_CENTRE;
     uint8_t  mode  = LINE_MODE_INIT;
+#if S3_BARCODE_ENABLE
     ER       err;
+#endif
 
     (void)stacd;
     (void)exinf;
 
+    drv_ir_init();
+
+#if S3_BARCODE_ENABLE
     // Interrupt is enabled on the core running this task (drv_ir.h)
-    err = drv_ir_init();
+    err = drv_ir_barcode_start();
 
     if (E_OK != err)
     {
-        tm_printf((UB *)"S3: drv_ir_init failed %d, barcode off\n",
+        tm_printf((UB *)"S3: barcode interrupt failed %d, barcode off\n",
                   (INT)err);
     }
     else
     {
         // barcode interrupt running
     }
+#else
+    tm_printf((UB *)"S3: barcode disabled (S3_BARCODE_ENABLE 0)\n");
+#endif
 
     line_logic_init(&g_line);
     bc_capture_init(&g_capture, drv_ir_barcode_black(), drv_ir_now_us());
@@ -96,8 +106,10 @@ line_task (INT stacd, void *exinf)
         (void)tk_slp_tsk(TMO_FEVR);
         start_us = drv_ir_now_us();
 
+#if S3_BARCODE_ENABLE
         s3_drain_edges();
         s3_poll_barcode(start_us);
+#endif
         line_logic_step(&g_line, drv_ir_left_black(), drv_ir_right_black(),
                         &error, &mode);
         s3_publish(error, mode);
@@ -105,6 +117,7 @@ line_task (INT stacd, void *exinf)
     }
 }
 
+#if S3_BARCODE_ENABLE
 /*!
  * Move every queued barcode edge into the capture. After a ring
  * overflow an edge is missing, so the current run cannot be trusted.
@@ -203,6 +216,8 @@ s3_cmd_of (char data_char, uint8_t *p_cmd)
 
     return b_is_cmd;
 }
+
+#endif /* S3_BARCODE_ENABLE */
 
 /*!
  * Build the whole word in a local, then store it once (never a

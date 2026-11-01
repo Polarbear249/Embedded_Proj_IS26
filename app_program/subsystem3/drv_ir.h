@@ -18,9 +18,11 @@
  * (IO_IRQ_BANK0) and queued in a lock-free ring, because a 3 mm bar
  * passes in ~3 ms at 1 m/s: too fast for 10 ms polling.
  *
- * Call drv_ir_init() from the Line task: the interrupt is enabled on
- * the core that calls it. Every other function is for the Line task
- * only (TEAM.md section 3: one owning task per peripheral).
+ * Call drv_ir_init() and then drv_ir_barcode_start() from the Line
+ * task: the interrupt is enabled on the core that calls it. Every other
+ * function is for the Line task only (TEAM.md section 3: one owning
+ * task per peripheral). Without drv_ir_barcode_start() the line inputs
+ * still work and the ring stays empty.
  */
 
 #ifndef DRV_IR_H
@@ -42,10 +44,15 @@
 #define DRV_IR_EDGE_TIME_MASK   (0x7FFFFFFFU)
 
 /*!
- * Configure the three inputs and the barcode edge interrupt.
+ * Configure the three inputs (no interrupt yet).
+ */
+void     drv_ir_init(void);
+
+/*!
+ * Install and enable the barcode edge interrupt on the calling core.
  * Returns E_OK or the kernel error from tk_def_int().
  */
-ER       drv_ir_init(void);
+ER       drv_ir_barcode_start(void);
 
 bool     drv_ir_left_black(void);
 bool     drv_ir_right_black(void);
