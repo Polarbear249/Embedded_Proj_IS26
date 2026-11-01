@@ -15,6 +15,12 @@ ER motor_init(void)
 {
     UINT pin, slice;
     ER er;
+    /* The kernel releases PWM from reset only when USE_PTMR is 1 (it is
+     * 0), so take it out of reset here, or every write below is lost.
+     * Clear only (no reset pulse): never disturbs another PWM user. */
+    clr_w(RESETS_RESET, RESETS_RESET_PWM);
+    while ((in_w(RESETS_RESET_DONE) & RESETS_RESET_PWM) == 0U) {
+    }
     for (slice = 4U; slice <= 5U; ++slice) {
         out_w(S2_PWM_REG(slice, PWM_CHx_CSR), 0U);
         out_w(S2_PWM_REG(slice, PWM_CHx_CC), 0U);
