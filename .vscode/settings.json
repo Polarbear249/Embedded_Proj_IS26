@@ -1,6 +1,2 @@
 {
-    "cmake.configureSettings": {
-        "PICO_SDK_PATH": "C:/Users/kunou/.pico-sdk/sdk/2.3.1",
-        "CMAKE_TOOLCHAIN_FILE": "C:/Users/kunou/.pico-sdk/sdk/2.3.1/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake"
-    }
 }
