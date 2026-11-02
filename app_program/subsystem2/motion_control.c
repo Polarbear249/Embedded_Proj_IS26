@@ -10,10 +10,15 @@
 /*
  * Buddy 2 - Motion Control Coordinator
  *
- * Intended execution model:
- * - One task owns motion commands and motion_update().
- * - encoder counts come from GPIO edge interrupts.
- * - motion_update() runs approximately every 100 ms.
+ * Execution model:
+ * - One task (motion_control_task) owns the motors: motion_tick()
+ *   every MOTION_TICK_MS applies duty commands and runs
+ *   motion_update() (PI speed control) about every 100 ms.
+ * - Encoder counts come from GPIO edge interrupts.
+ * - Commands from other tasks (motion_set_speed, motion_set_duty,
+ *   motion_stop) only store the request under command_mutex; the
+ *   motion task reads it under the same mutex. Two modes, latest
+ *   command wins: SPEED (PI) and DUTY (open loop, with a lease).
  *
  * Current implementation:
  * - Forward wheel-speed control
@@ -59,6 +64,28 @@
  */
 #define MOTION_ENCODER_TIMEOUT_MS 1000U
 
+/* Command lock: callers wait at most this long (the motion task holds
+   it only for one tick's work, tens of us). TMO_POL for duty commands,
+   which S3 renews every 10 ms anyway. */
+#define MOTION_LOCK_WAIT_MS       (10)
+
+typedef enum
+{
+    MOTION_MODE_IDLE = 0,
+    MOTION_MODE_SPEED,
+    MOTION_MODE_DUTY
+} motion_mode_t;
+
+static ID            command_mutex = 0;
+static motion_mode_t motion_mode = MOTION_MODE_IDLE;
+static int16_t       duty_left = 0;
+static int16_t       duty_right = 0;
+static int16_t       applied_left = 0;      /* motion task only */
+static int16_t       applied_right = 0;
+static UW            duty_issued_ms = 0U;
+static UW            duty_lease_ms = 0U;
+static UW            last_pi_ms = 0U;       /* motion task only */
+
 static uint32_t left_no_pulse_ms = 0U;
 static uint32_t right_no_pulse_ms = 0U;
 
@@ -100,6 +127,9 @@ static uint16_t motion_pwm_value(float value)
     return (uint16_t)value;
 }
 
+static void motion_stop_locked(void);
+static void motion_duty_tick(UW now_ms);
+
 /*
  * Enter fault state and stop both motors.
  */
@@ -121,10 +151,19 @@ static void motion_enter_fault(void)
 motion_result_t motion_init(void)
 {
     ER er;
+    T_CMTX cmtx = {0};
 
     if (motion_ready)
     {
         return MOTION_OK;
+    }
+
+    cmtx.mtxatr = TA_INHERIT;
+    command_mutex = tk_cre_mtx(&cmtx);
+
+    if (command_mutex < E_OK)
+    {
+        return MOTION_ERROR;
     }
 
     er = motor_init();
@@ -197,11 +236,6 @@ motion_result_t motion_set_speed(
         return MOTION_NOT_READY;
     }
 
-    if (motion_state == MOTION_STATE_FAULT)
-    {
-        return MOTION_ERROR;
-    }
-
     /*
      * Reject negative, excessive and NaN inputs.
      */
@@ -213,12 +247,26 @@ motion_result_t motion_set_speed(
         return MOTION_ERROR;
     }
 
-    if (left_rpm == 0.0f && right_rpm == 0.0f)
+    if (tk_loc_mtx(command_mutex, MOTION_LOCK_WAIT_MS) != E_OK)
     {
-        return motion_stop();
+        return MOTION_BUSY;
     }
 
-    if (motion_state == MOTION_STATE_STOPPED)
+    if (motion_state == MOTION_STATE_FAULT)
+    {
+        (void)tk_unl_mtx(command_mutex);
+        return MOTION_ERROR;
+    }
+
+    if (left_rpm == 0.0f && right_rpm == 0.0f)
+    {
+        motion_stop_locked();
+        (void)tk_unl_mtx(command_mutex);
+        return MOTION_OK;
+    }
+
+    if ((motion_state == MOTION_STATE_STOPPED) ||
+        (motion_mode != MOTION_MODE_SPEED))
     {
         pi_reset(&left_pi);
         pi_reset(&right_pi);
@@ -253,9 +301,75 @@ motion_result_t motion_set_speed(
     target_left_rpm = left_rpm;
     target_right_rpm = right_rpm;
 
+    motion_mode = MOTION_MODE_SPEED;
     motion_state = MOTION_STATE_RUNNING;
 
+    (void)tk_unl_mtx(command_mutex);
+
     return MOTION_OK;
+}
+
+/*
+ * Open-loop signed duty with a lease, see motion_control.h.
+ */
+ER motion_set_duty(INT left, INT right, UINT lease_ms)
+{
+    SYSTIM now;
+    ER     er;
+
+    if ((left < -MOTION_MAX_DUTY) || (left > MOTION_MAX_DUTY) ||
+        (right < -MOTION_MAX_DUTY) || (right > MOTION_MAX_DUTY) ||
+        (lease_ms == 0U) || (lease_ms > MOTION_MAX_LEASE_MS))
+    {
+        return E_PAR;
+    }
+
+    if (!motion_ready)
+    {
+        return E_OBJ;
+    }
+
+    er = tk_loc_mtx(command_mutex, TMO_POL);
+
+    if (er != E_OK)
+    {
+        return E_TMOUT;
+    }
+
+    if (motion_state == MOTION_STATE_FAULT)
+    {
+        er = E_OBJ;
+    }
+    else
+    {
+        er = tk_get_tim(&now);
+    }
+
+    if (er == E_OK)
+    {
+        if (motion_mode != MOTION_MODE_DUTY)
+        {
+            /* leaving SPEED mode: drop the PI state */
+            target_left_rpm = 0.0f;
+            target_right_rpm = 0.0f;
+            pi_reset(&left_pi);
+            pi_reset(&right_pi);
+            startup_cycles = 0U;
+            left_no_pulse_ms = 0U;
+            right_no_pulse_ms = 0U;
+        }
+
+        duty_left = (int16_t)left;
+        duty_right = (int16_t)right;
+        duty_issued_ms = now.lo;
+        duty_lease_ms = lease_ms;
+        motion_mode = MOTION_MODE_DUTY;
+        motion_state = MOTION_STATE_RUNNING;
+    }
+
+    (void)tk_unl_mtx(command_mutex);
+
+    return er;
 }
 
 /*
@@ -271,11 +385,32 @@ motion_result_t motion_stop(void)
         return MOTION_NOT_READY;
     }
 
+    if (tk_loc_mtx(command_mutex, MOTION_LOCK_WAIT_MS) != E_OK)
+    {
+        return MOTION_BUSY;
+    }
+
+    motion_stop_locked();
+    (void)tk_unl_mtx(command_mutex);
+
+    return MOTION_OK;
+}
+
+/*
+ * Stop both motors and clear every command. Caller holds command_mutex.
+ */
+static void motion_stop_locked(void)
+{
     if (motor_stop() != E_OK)
     {
         motion_enter_fault();
-        return MOTION_ERROR;
+        return;
     }
+
+    duty_left = 0;
+    duty_right = 0;
+    duty_lease_ms = 0U;
+    motion_mode = MOTION_MODE_IDLE;
 
     target_left_rpm = 0.0f;
     target_right_rpm = 0.0f;
@@ -292,8 +427,82 @@ motion_result_t motion_stop(void)
     {
         motion_state = MOTION_STATE_STOPPED;
     }
+}
 
-    return MOTION_OK;
+/*
+ * Motion task, every MOTION_TICK_MS. If a command call holds the lock
+ * at this instant, this tick is skipped (outputs unchanged).
+ */
+void motion_tick(void)
+{
+    SYSTIM now;
+
+    if (!motion_ready)
+    {
+        return;
+    }
+
+    if (tk_loc_mtx(command_mutex, TMO_POL) != E_OK)
+    {
+        return;
+    }
+
+    if (tk_get_tim(&now) != E_OK)
+    {
+        motion_stop_locked();
+    }
+    else if (motion_mode == MOTION_MODE_DUTY)
+    {
+        motion_duty_tick(now.lo);
+    }
+    else if ((UW)(now.lo - last_pi_ms) >= MOTION_UPDATE_MS)
+    {
+        /* SPEED or IDLE: PI step (or just RPM) about every 100 ms */
+        last_pi_ms = now.lo;
+        motion_update();
+    }
+    else
+    {
+        /* between PI steps */
+    }
+
+    (void)tk_unl_mtx(command_mutex);
+}
+
+/*
+ * One duty tick: lease check, one zero tick before any reversal, apply.
+ */
+static void motion_duty_tick(UW now_ms)
+{
+    int16_t left = duty_left;
+    int16_t right = duty_right;
+
+    if ((UW)(now_ms - duty_issued_ms) >= duty_lease_ms)
+    {
+        /* lease ran out: the caller stopped renewing */
+        motion_stop_locked();
+        applied_left = 0;
+        applied_right = 0;
+        return;
+    }
+
+    if (((left > 0) && (applied_left < 0)) ||
+        ((left < 0) && (applied_left > 0)) ||
+        ((right > 0) && (applied_right < 0)) ||
+        ((right < 0) && (applied_right > 0)))
+    {
+        left = 0;
+        right = 0;
+    }
+
+    if (motor_apply(left, right) != E_OK)
+    {
+        motion_enter_fault();
+        return;
+    }
+
+    applied_left = left;
+    applied_right = right;
 }
 
 /*

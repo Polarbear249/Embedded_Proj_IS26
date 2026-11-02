@@ -33,6 +33,13 @@ ER motor_set_left_pwm(uint16_t level);
 /* Set right motor forward PWM (0-200) */
 ER motor_set_right_pwm(uint16_t level);
 
+/*
+ * Signed drive for duty mode: -MOTOR_PWM_MAX..+MOTOR_PWM_MAX per wheel
+ * (clamped), positive = vehicle forward, negative = reverse. One whole
+ * compare-register write per motor, so a wheel never sees a mixed pair.
+ */
+ER motor_apply(int16_t left, int16_t right);
+
 /* Stop both motors */
 ER motor_stop(void);
 

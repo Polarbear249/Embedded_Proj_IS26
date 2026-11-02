@@ -48,6 +48,9 @@
 #define MOTOR_PWM_DIV_SHIFT  4U
 #define MOTOR_PWM_SLICE(pin) (((UW)(pin) >> 1) & 0x07U)
 #define MOTOR_PWM_CH_STRIDE  0x14U
+#define MOTOR_PWM_CC_REG(pin) \
+    (PWM_BASE + PWM_CHx_CC + (MOTOR_PWM_SLICE(pin) * MOTOR_PWM_CH_STRIDE))
+#define MOTOR_PWM_CC_B_SHIFT 16U   /* channel B in bits 31:16 */
 #define MOTOR_PWM_DIV_REG(pin) \
     (PWM_BASE + PWM_CHx_DIV + (MOTOR_PWM_SLICE(pin) * MOTOR_PWM_CH_STRIDE))
 
@@ -183,6 +186,41 @@ ER motor_stop(void)
 
     pwm_set_cc(RIGHT_MOTOR_A, 0U);
     pwm_set_cc(RIGHT_MOTOR_B, 0U);
+
+    return E_OK;
+}
+
+/*
+ * Signed drive for duty mode, see motor.h. Same pin mapping as
+ * motor_set_left_pwm() / motor_set_right_pwm():
+ *   left  forward GP10 (A), reverse GP11 (B)
+ *   right forward GP9  (B), reverse GP8  (A)
+ * The other input of the pair stays 0 (driver: PWM against brake).
+ */
+ER motor_apply(int16_t left, int16_t right)
+{
+    UW left_mag;
+    UW right_mag;
+    UW left_cc;
+    UW right_cc;
+
+    if (!motor_ready)
+    {
+        return E_OBJ;
+    }
+
+    left_mag = (UW)((left < 0) ? -left : left);
+    right_mag = (UW)((right < 0) ? -right : right);
+    left_mag = (left_mag > MOTOR_PWM_MAX) ? MOTOR_PWM_MAX : left_mag;
+    right_mag = (right_mag > MOTOR_PWM_MAX) ? MOTOR_PWM_MAX : right_mag;
+
+    left_cc = (left >= 0) ? left_mag
+                          : (left_mag << MOTOR_PWM_CC_B_SHIFT);
+    right_cc = (right >= 0) ? (right_mag << MOTOR_PWM_CC_B_SHIFT)
+                            : right_mag;
+
+    out_w(MOTOR_PWM_CC_REG(LEFT_MOTOR_A), left_cc);
+    out_w(MOTOR_PWM_CC_REG(RIGHT_MOTOR_A), right_cc);
 
     return E_OK;
 }

@@ -3,6 +3,7 @@
 #define MOTION_CONTROL_H
 
 #include <stdint.h>
+#include <tk/tkernel.h>
 
 /*
  * Buddy 2 - Shared Motion Control API
@@ -116,8 +117,35 @@ motion_result_t motion_turn_left(float angle_deg);
 motion_result_t motion_turn_right(float angle_deg);
 
 /*
- * Called periodically by Buddy 2's motion-control task.
- * Not intended for other subsystems to call directly.
+ * Open-loop duty mode (added 2026-11-02 for S3's line follower, same
+ * contract as main's 59da21b motion_set_duty).
+ *
+ * left / right: -MOTION_MAX_DUTY..+MOTION_MAX_DUTY, 1000 = 100 %,
+ * positive = forward, negative = reverse (so the car can spin).
+ * lease_ms: 1..MOTION_MAX_LEASE_MS. The motion task stops the motors
+ * when the lease runs out, so the caller renews it (e.g. every 10 ms
+ * with a 100 ms lease) and a stalled caller cannot leave them running.
+ * Latest command wins over motion_set_speed() and vice versa.
+ * Returns E_OK, E_PAR (bad range), E_OBJ (not ready or FAULT) or
+ * E_TMOUT (command lock busy for an instant: retry next cycle).
+ * No encoder stall watchdog in this mode.
+ */
+#define MOTION_TICK_MS          (10)        /* motion task period */
+#define MOTION_MAX_DUTY         (200)
+#define MOTION_MAX_LEASE_MS     (1000U)
+
+ER motion_set_duty(INT left, INT right, UINT lease_ms);
+
+/*
+ * Called every MOTION_TICK_MS by Buddy 2's motion-control task only:
+ * applies duty commands each tick and runs motion_update() (PI speed
+ * control) about every 100 ms.
+ */
+void motion_tick(void);
+
+/*
+ * PI speed-control step, called by motion_tick(). Not for other
+ * subsystems.
  */
 void motion_update(void);
 #endif /* MOTION_CONTROL_H */

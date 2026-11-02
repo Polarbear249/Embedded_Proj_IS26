@@ -39,8 +39,9 @@ static void encoder_publish_task(INT stacd, void *exinf)
 /*
  * Motion Control Task
  *
- * Calls the PI speed controller approximately
- * every 100 ms.
+ * Every MOTION_TICK_MS (10 ms): motion_tick() applies
+ * duty commands (S3 line follower) and runs the PI
+ * speed controller about every 100 ms.
  *
  * Hardware is initialised in subsystem2_init()
  * before either task starts.
@@ -52,9 +53,9 @@ static void motion_control_task(INT stacd, void *exinf)
 
     for (;;)
     {
-        motion_update();
+        motion_tick();
 
-        tk_dly_tsk(100);
+        tk_dly_tsk(MOTION_TICK_MS);
     }
 }
 
