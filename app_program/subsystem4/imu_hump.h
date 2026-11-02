@@ -18,8 +18,14 @@
  *
  * Events are measured in distance, not time (CLAUDE.md section 8):
  *  - start: |pitch| >= IMU_HUMP_ON_DDEG for IMU_HUMP_START_MM of travel
+ *           (20 mm: a drive-off kick tilts the gravity vector for a few
+ *           mm, run 37 started a false hump at 5 mm)
  *  - end:   |pitch| <  IMU_HUMP_OFF_DDEG for IMU_HUMP_END_MM of travel
- *           (longer than L, so the rear wheel has come down too)
+ *           (longer than L, so the rear wheel has come down too), or
+ *           the car has not moved forward for IMU_HUMP_STILL_CALLS
+ *           updates (stopped on or right after the hump, run 37)
+ *  - drop:  an event longer than IMU_HUMP_MAX_LEN_MM is a slope or a
+ *           level error, not a hump: cleared without a result
  * Outside an event the profile is held at 0, so pitch noise and a small
  * level error cannot build up over a run. Tilting the car without
  * moving it never counts. Reverse travel is ignored: the profile is only
@@ -48,10 +54,12 @@
 #define IMU_HUMP_BASE_MM        (85)
 #define IMU_HUMP_ON_DDEG        (30)    // 3.0 deg (noise at rest +-0.2)
 #define IMU_HUMP_OFF_DDEG       (15)    // 1.5 deg
-#define IMU_HUMP_START_MM       (5)
+#define IMU_HUMP_START_MM       (20)
 #define IMU_HUMP_END_MM         (IMU_HUMP_BASE_MM + 20)
 #define IMU_HUMP_MAX_MM         (255U)  // 8-bit field: clamp
 #define IMU_HUMP_JUMP_MM        (50)    // more per update = glitch: resync
+#define IMU_HUMP_STILL_CALLS    (100U)  // updates (10 ms each) = 1 s still
+#define IMU_HUMP_MAX_LEN_MM     (1000)  // longer = not a hump
 
 // IMU events, 3 bits (CLAUDE.md section 6)
 typedef enum
@@ -69,6 +77,8 @@ typedef struct
     int32_t  s_last_mm;                 // furthest distance processed
     int32_t  cand_mm;                   // travel with |pitch| >= ON
     int32_t  quiet_mm;                  // travel with |pitch| < OFF
+    int32_t  len_mm;                    // travel since the event began
+    uint32_t still_calls;               // updates without forward travel
     int32_t  z_now_um;                  // last profile value
     int32_t  peak_um;                   // highest z in this event
     uint32_t last_mm;                   // last hump height

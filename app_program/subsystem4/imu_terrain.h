@@ -10,8 +10,10 @@
  * (every IMU_TERRAIN_MAG_DIV cycles), stored calibration, fixed-point
  * IIR low-pass, pitch/roll against the start-up level reference.
  * Then hump detection and height (imu_hump.c) from the pitch and the
- * IF-10 wheel distance; the result is the IF-11 hump word. Impact and
- * turn detection are not here yet.
+ * IF-10 wheel distance; the result is the IF-11 hump word. Samples
+ * that are not mostly gravity (|a| far from 1 g) are kept out of the
+ * tilt filter; a short strong one is reported as an IMPACT event.
+ * Turn detection is not here yet.
  *
  * Timing (A7 evidence): burst time, loop time (WCET over the window)
  * and period jitter are measured on the RP2040 1 us hardware timer and

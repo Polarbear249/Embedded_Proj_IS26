@@ -39,6 +39,25 @@
 #define IMU_IIR_Q               (16)
 #define IMU_IIR_DIV             (4)
 
+// Gravity check: pitch/roll come from the direction of gravity, which
+// is only valid while the sensor measures mostly gravity. A sample whose
+// magnitude is more than IMU_GRAVITY_TOL_MG away from 1 g (a bang, a
+// wheel dropping off an edge) is not fed to the filter, so tilt holds
+// its last good value (run 37: a 32.9 deg spike while hitting the
+// hump). Limits: a steady forward acceleration a changes |a| only by
+// about a^2 / 2g (0.2 g -> 20 mg) while it tilts pitch by atan(a/g)
+// (0.2 g -> 11 deg), so it is NOT caught here; the hump start distance
+// (IMU_HUMP_START_MM) covers the drive-off kick. After
+// IMU_GRAVITY_HOLD_MAX samples in a row the samples are used again, so
+// a long disturbance cannot freeze tilt for ever.
+#define IMU_GRAVITY_TOL_MG      (150)
+#define IMU_GRAVITY_HOLD_MAX    (20U)       // 200 ms
+// Impact (FR8, report only; the Vehicle Controller decides any stop): a
+// disturbance at least IMU_IMPACT_MG from 1 g that is over within
+// IMU_IMPACT_MAX_SAMPLES samples. Test choices, to confirm on the car.
+#define IMU_IMPACT_MG           (400)
+#define IMU_IMPACT_MAX_SAMPLES  (5U)        // 50 ms
+
 #define IMU_LATE_US             (15000U)    // period > 1.5 x 10 ms
 #define IMU_LINE_LEN            (256U)
 
@@ -86,6 +105,9 @@ static int32_t              g_pitch_ddeg = 0;   // filtered, vs level
 static uint32_t             g_hump_seq = 0U;
 static uint32_t             g_last_event = (uint32_t)IMU_EVT_NONE;
 static uint32_t             g_rep_state = (uint32_t)IMU_TERRAIN_INIT;
+static uint32_t             g_dist_run = 0U;    // disturbed samples in a row
+static int32_t              g_dist_peak = 0;    // largest |a| - 1 g in it
+static uint32_t             g_impacts = 0U;     // since power-up
 
 static char const * const   g_state_name[] =
 {
@@ -104,6 +126,8 @@ static bool     imu_sample(uint32_t cycle, int32_t p_acc[],
 static void     imu_level_add(int32_t const p_acc[]);
 static void     imu_filter(int32_t const p_acc[]);
 static void     imu_hump_cycle(void);
+static bool     imu_gravity_ok(int32_t const p_acc[]);
+static void     imu_impact_check(void);
 static uint32_t imu_reported_state(void);
 static void     imu_publish(void);
 static void     imu_read_failed(i2c1_result_t result);
@@ -389,7 +413,11 @@ imu_cycle (uint32_t cycle, uint32_t *p_acc_us, uint32_t *p_mag_us)
         case IMU_TERRAIN_ACTIVE:
             if (imu_sample(cycle, acc, p_acc_us, p_mag_us))
             {
-                imu_filter(acc);
+                if (imu_gravity_ok(acc))
+                {
+                    imu_filter(acc);    // else tilt holds its last value
+                }
+
                 imu_hump_cycle();
             }
             break;
@@ -516,6 +544,62 @@ imu_filter (int32_t const p_acc[])
     {
         g_filt_q[axis] += ((p_acc[axis] * IMU_IIR_Q) - g_filt_q[axis])
                           / IMU_IIR_DIV;
+    }
+}
+
+/*
+ * True if this sample may be used for tilt (|a| within
+ * IMU_GRAVITY_TOL_MG of 1 g, or held for too long already). Tracks each
+ * run of disturbed samples and checks it for an impact when it ends.
+ */
+static bool
+imu_gravity_ok (int32_t const p_acc[])
+{
+    int64_t  acc_x = p_acc[0];
+    int64_t  acc_y = p_acc[1];
+    int64_t  acc_z = p_acc[2];
+    int32_t  mag = (int32_t)imu_calib_isqrt((uint64_t)((acc_x * acc_x)
+                                                        + (acc_y * acc_y)
+                                                        + (acc_z * acc_z)));
+    int32_t  dev = mag - IMU_CALIB_1G_MG;
+    bool     b_ok = false;
+
+    dev = (dev < 0) ? -dev : dev;
+
+    if (dev > IMU_GRAVITY_TOL_MG)
+    {
+        g_dist_run++;
+        g_dist_peak = (dev > g_dist_peak) ? dev : g_dist_peak;
+        b_ok = (g_dist_run > IMU_GRAVITY_HOLD_MAX);
+    }
+    else
+    {
+        if (0U != g_dist_run)
+        {
+            imu_impact_check();
+        }
+
+        g_dist_run = 0U;
+        g_dist_peak = 0;
+        b_ok = true;
+    }
+
+    return (b_ok);
+}
+
+// A disturbance just ended: short and strong = impact (report only)
+static void
+imu_impact_check (void)
+{
+    if ((g_dist_run <= IMU_IMPACT_MAX_SAMPLES)
+        && (g_dist_peak >= IMU_IMPACT_MG))
+    {
+        g_impacts++;
+        tm_printf((UB*)"[IMU] impact: %d mg from 1 g over %u samples"
+                  " (#%u)\n", (INT)g_dist_peak, (UINT)g_dist_run,
+                  (UINT)g_impacts);
+        g_last_event = (uint32_t)IMU_EVT_IMPACT;
+        imu_publish();
     }
 }
 

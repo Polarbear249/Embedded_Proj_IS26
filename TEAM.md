@@ -73,7 +73,7 @@ between yourselves; only the *reserved* and *board* rows are fixed.
 | GP17 | S5 | HC-SR04+ ECHO, direct 3.3 V (Grove 4) |
 | GP18 | *board* | NeoPixel RGB LED: reserved |
 | GP19 | | free (released by S3 2026-11-01). The template's example LED (`S1_LED_PIN`) still uses GP19 |
-| GP20 | VC (Buddy 4) | Robo Pico button, input with pull-up: starts / stops the VC test drive (`vehicle_controller.c`, `VC_TEST_DRIVE`) |
+| GP20 | VC (Buddy 4) | Robo Pico button, input with pull-up. Normal builds: **emergency stop** (1st press `motion_estop()`, latched; 2nd press releases). Test-drive builds (`VC_TEST_DRIVE`): starts / stops the test run (`vehicle_controller.c`) |
 | GP21 | *board* | Programmable button: reserved |
 | GP22 | *board* | Piezo buzzer: reserved |
 | GP26 | | free (released by S3 2026-11-01). Shared by Grove 5 and Grove 6: only one may drive it |
@@ -166,6 +166,7 @@ code still uses 12–21). Write down every task you create.
 | Motion Control | 2 | 5 (code still 14: `motion_control_task`, every 10 ms: duty commands each tick, PI speed control every 10th tick; and 12: `encoder_publish_task`, publishes IF-10 every 10 ms; encoder counts come from GPIO edge interrupts) | 10 ms | core 1 (`TP_PRC2`) |
 | Line / Barcode | 3 | 6 | 10 ms (cyclic handler `cyc_line`) | core 0 (`TP_PRC1`): its barcode GPIO callback runs on that core |
 | Vehicle Controller | shared | 7 | event-driven + 20 ms supervisory tick | |
+| VC emergency stop (`vc_estop`, normal builds) | shared (Buddy 4) | 7 | polls GP20 every 20 ms; reaction about 70 ms (derived) | any |
 | VC test drive (`vc_test_drive`, test only, `VC_TEST_DRIVE`) | shared (Buddy 4) | 15 (below Motion's 14 on the same core; commands not yet queued through `Q_motion`) | 100 ms poll; drives 1500 mm at 20 RPM per GP20 press | core 1 (`TP_PRC2`) |
 | Obstacle Scan | 5 | 8 | >= 60 ms between ultrasonic triggers | |
 | IMU / Terrain (`imu_terrain`) | 4 | 9 | 10 ms (cyclic handler + event flag) | core 0 (`TP_PRC1`) |

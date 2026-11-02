@@ -17,6 +17,7 @@ static void        imu_hump_clear_event(imu_hump_t *p_hump);
 static imu_event_t imu_hump_step(imu_hump_t *p_hump, int32_t pitch_ddeg,
                                  int32_t s_mm);
 static imu_event_t imu_hump_finish(imu_hump_t *p_hump);
+static imu_event_t imu_hump_still(imu_hump_t *p_hump);
 static uint32_t    imu_hump_height_mm(int32_t peak_um);
 
 /*!
@@ -72,17 +73,23 @@ imu_hump_update (imu_hump_t *p_hump, int32_t pitch_ddeg, int32_t dist_mm)
         p_hump->s_last_mm = dist_mm;
         p_hump->b_synced = true;
     }
+    else if (dist_mm <= p_hump->s_last_mm)
+    {
+        // Standing still or reversing: no profile, maybe close the hump
+        event = imu_hump_still(p_hump);
+    }
     else
     {
-        // Each new forward mm; standing still or reversing adds nothing
+        // Each new forward mm
+        p_hump->still_calls = 0U;
+
         for (s_mm = p_hump->s_last_mm + 1; s_mm <= dist_mm; s_mm++)
         {
             step_event = imu_hump_step(p_hump, pitch_ddeg, s_mm);
             event = (IMU_EVT_NONE != step_event) ? step_event : event;
         }
 
-        p_hump->s_last_mm = (dist_mm > p_hump->s_last_mm)
-                            ? dist_mm : p_hump->s_last_mm;
+        p_hump->s_last_mm = dist_mm;
     }
 
     return (event);
@@ -139,6 +146,8 @@ imu_hump_clear_event (imu_hump_t *p_hump)
 
     p_hump->cand_mm = 0;
     p_hump->quiet_mm = 0;
+    p_hump->len_mm = 0;
+    p_hump->still_calls = 0U;
     p_hump->z_now_um = 0;
     p_hump->peak_um = 0;
     p_hump->b_on_hump = false;
@@ -165,8 +174,15 @@ imu_hump_step (imu_hump_t *p_hump, int32_t pitch_ddeg, int32_t s_mm)
             imu_hump_clear_event(p_hump);
         }
     }
+    else if (p_hump->len_mm >= IMU_HUMP_MAX_LEN_MM)
+    {
+        // Far too long for a hump: a slope or a level error. Drop it.
+        imu_hump_clear_event(p_hump);
+    }
     else
     {
+        p_hump->len_mm++;
+
         // z(s) = z(s - L) + L sin(pitch); slot still holds z(s - L)
         p_hump->z_now_um = p_hump->z_um[slot]
                            + ((IMU_HUMP_BASE_MM
@@ -197,6 +213,41 @@ imu_hump_step (imu_hump_t *p_hump, int32_t pitch_ddeg, int32_t s_mm)
                 event = imu_hump_finish(p_hump);
             }
         }
+    }
+
+    return (event);
+}
+
+/*
+ * No forward travel this update. After IMU_HUMP_STILL_CALLS of them in
+ * a row, a hump in progress is closed with its peak so far (the car
+ * stopped on it or just after it), and a candidate is dropped.
+ */
+static imu_event_t
+imu_hump_still (imu_hump_t *p_hump)
+{
+    imu_event_t event = IMU_EVT_NONE;
+
+    if (p_hump->still_calls < IMU_HUMP_STILL_CALLS)
+    {
+        p_hump->still_calls++;
+    }
+
+    if (IMU_HUMP_STILL_CALLS != p_hump->still_calls)
+    {
+        // not still for long enough yet
+    }
+    else if (p_hump->b_on_hump)
+    {
+        event = imu_hump_finish(p_hump);   // clears the event as well
+    }
+    else if (0 != p_hump->cand_mm)
+    {
+        imu_hump_clear_event(p_hump);       // unconfirmed: just drop it
+    }
+    else
+    {
+        // nothing in progress
     }
 
     return (event);

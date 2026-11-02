@@ -14,6 +14,14 @@
  *
  * Not started in TEST=1 builds (the IMU task, and so hump detection,
  * does not run there).
+ *
+ * EMERGENCY STOP (every normal build without the test drive): the
+ * vc_estop task watches GP20. First press: motion_estop() (motors stop
+ * and every drive command, e.g. S3's line drive, is refused). Second
+ * press: motion_clear_estop(); S3's line drive then resumes at once if
+ * it is still armed on the line. Worst-case reaction about 70 ms
+ * (derived: 2 polls of 20-30 ms at the 10 ms tick + lock wait).
+ * In test-drive builds GP20 starts and stops the test run instead.
  */
 
 #ifndef VEHICLE_CONTROLLER_H
@@ -34,6 +42,11 @@
 
 #define VC_BUTTON_PIN           (20U)       // Robo Pico button (TEAM.md 2)
 #define VC_POLL_MS              (100)
+
+// Emergency-stop task: TEAM.md section 4 VC priority, any core
+#define VC_ESTOP_PRI            (7)
+#define VC_ESTOP_POLL_MS        (20)
+#define VC_ESTOP_DEBOUNCE       (2U)        // polls low in a row = press
 
 // Test only: below motion_control_task (14) on the same core, so a
 // command never interrupts motion_update() halfway (S2 commands are not

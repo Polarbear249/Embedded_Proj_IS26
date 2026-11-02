@@ -86,6 +86,10 @@ static UW            duty_issued_ms = 0U;
 static UW            duty_lease_ms = 0U;
 static UW            last_pi_ms = 0U;       /* motion task only */
 
+/* Emergency-stop latch: written under command_mutex; read without the
+   lock by motion_is_estopped() (one byte, a whole value either way). */
+static volatile bool estop_latched = false;
+
 static uint32_t left_no_pulse_ms = 0U;
 static uint32_t right_no_pulse_ms = 0U;
 
@@ -265,6 +269,12 @@ motion_result_t motion_set_speed(
         return MOTION_OK;
     }
 
+    if (estop_latched)
+    {
+        (void)tk_unl_mtx(command_mutex);
+        return MOTION_ERROR;
+    }
+
     if ((motion_state == MOTION_STATE_STOPPED) ||
         (motion_mode != MOTION_MODE_SPEED))
     {
@@ -336,7 +346,7 @@ ER motion_set_duty(INT left, INT right, UINT lease_ms)
         return E_TMOUT;
     }
 
-    if (motion_state == MOTION_STATE_FAULT)
+    if ((motion_state == MOTION_STATE_FAULT) || estop_latched)
     {
         er = E_OBJ;
     }
@@ -394,6 +404,58 @@ motion_result_t motion_stop(void)
     (void)tk_unl_mtx(command_mutex);
 
     return MOTION_OK;
+}
+
+/*
+ * Emergency stop: stop now and latch, see motion_control.h.
+ */
+motion_result_t motion_estop(void)
+{
+    if (!motion_ready)
+    {
+        return MOTION_NOT_READY;
+    }
+
+    if (tk_loc_mtx(command_mutex, MOTION_LOCK_WAIT_MS) != E_OK)
+    {
+        /* Never leave the motors running on a refused emergency stop:
+           zero the PWM directly (motor_stop writes only the compare
+           registers), then report it. */
+        (void)motor_stop();
+        return MOTION_BUSY;
+    }
+
+    motion_stop_locked();
+    estop_latched = true;
+    (void)tk_unl_mtx(command_mutex);
+
+    return MOTION_OK;
+}
+
+/*
+ * Release the latch. Motors stay stopped until the next accepted command.
+ */
+motion_result_t motion_clear_estop(void)
+{
+    if (!motion_ready)
+    {
+        return MOTION_NOT_READY;
+    }
+
+    if (tk_loc_mtx(command_mutex, MOTION_LOCK_WAIT_MS) != E_OK)
+    {
+        return MOTION_BUSY;
+    }
+
+    estop_latched = false;
+    (void)tk_unl_mtx(command_mutex);
+
+    return MOTION_OK;
+}
+
+bool motion_is_estopped(void)
+{
+    return estop_latched;
 }
 
 /*

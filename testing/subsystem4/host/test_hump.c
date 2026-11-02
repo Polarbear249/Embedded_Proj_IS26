@@ -68,6 +68,7 @@ typedef struct {
     double noise_ddeg;  /* uniform +- noise on pitch */
     double bias_ddeg;   /* level error */
     int    stationary;  /* 1: never move, tilt instead */
+    double stop_at_mm;  /* > 0: stop moving at this distance for 1.5 s */
 } sim_opts_t;
 
 /* Drive length mm over profile p; returns the hump word fields */
@@ -90,6 +91,17 @@ static imu_hump_t run(profile_t const *p, double length, sim_opts_t o,
         double pitch = atan2(zf - zr, xf - xr) * 1800.0 / PI;
 
         if (zf > *p_true_max) *p_true_max = zf;
+
+        if ((o.stop_at_mm > 0.0) && (s >= o.stop_at_mm)) {
+            int i;
+            for (i = 0; i < 150; i++) {     /* 1.5 s standing still */
+                ev = imu_hump_update(&hump, (int32_t)lround(filt),
+                                     (int32_t)floor(s));
+                if (ev == IMU_EVT_HUMP_START) (*p_starts)++;
+                if (ev == IMU_EVT_HUMP_END) (*p_ends)++;
+            }
+            break;
+        }
 
         if (s >= next_cycle) {
             double meas = pitch + o.bias_ddeg
@@ -157,8 +169,8 @@ static int check_pack(void)
 
 int main(void)
 {
-    sim_opts_t clean = {0.0, 0.0, 0};
-    sim_opts_t noisy = {3.0, 2.0, 0};       /* +-0.3 deg noise, 0.2 bias */
+    sim_opts_t clean = {0.0, 0.0, 0, 0.0};
+    sim_opts_t noisy = {3.0, 2.0, 0, 0.0};       /* +-0.3 deg noise, 0.2 bias */
     int ok = 1;
 
     srand(1);
@@ -172,29 +184,59 @@ int main(void)
                 150, 200, 30, 0}, 1200, clean, 1, 1.5);
     ok &= check("40 mm smooth bump (120 mm)", (profile_t){300, 60, 0, 60,
                 40, 1}, 900, clean, 1, 2.0);
+    /* the course's ramp, about 10 mm high */
+    ok &= check("10 mm ramp hump", (profile_t){300, 40, 60, 40, 10, 0}, 800,
+                clean, 1, 1.0);
     /* small: max pitch asin(8/85) = 5.4 deg, above the 3 deg start */
     ok &= check("8 mm hump", (profile_t){300, 25, 30, 25, 8, 0}, 800,
                 clean, 1, 1.0);
     /* flat, noisy, level error: no hump at all over 2 m */
     ok &= check("flat 2 m, noise + bias", (profile_t){300, 30, 40, 30, 0,
                 0}, 2000, noisy, 0, 0.0);
-    /* car tilted by hand without moving (pitch from a 23 mm hump) */
-    {
-        sim_opts_t still = {0.0, 0.0, 1};
-        ok &= check("tilted, not moving", (profile_t){300, 30, 40, 30, 23,
-                    0}, 800, still, 0, 0.0);
-    }
-    /* 600 mm ramps up to a 300 mm plateau: clamp at 255, never wrap.
-       The 300 mm top is longer than IMU_HUMP_END_MM, so the way down is
-       a second event; it has no height and must not be reported. */
+    /* level zero taken elsewhere: constant 3.5 deg on flat ground for
+       3 m. Must never be reported as a hump (dropped as too long) */
     {
         int st, en;
         double t;
-        profile_t big = {300, 600, 300, 600, 300, 0};
-        imu_hump_t h = run(&big, 2200, clean, &st, &en, &t);
+        sim_opts_t tilted = {0.0, 35.0, 0, 0.0};
+        profile_t flat = {300, 30, 40, 30, 0, 0};
+        imu_hump_t h = run(&flat, 3000, tilted, &st, &en, &t);
+        int c = (en == 0) && (h.max_mm == 0U) && !h.b_valid;
+        printf("%-34s true %6.1f mm  measured %3u mm  ends %d  %s\n",
+               "3.5 deg level error, 3 m flat", t, (unsigned)h.max_mm, en,
+               c ? "PASS" : "FAIL");
+        ok &= c;
+    }
+    /* car stops with its front on top of a 10 mm ramp hump (rear still
+       flat): the hump closes after 1 s still, height about 10 */
+    {
+        int st, en;
+        double t;
+        sim_opts_t stop = {0.0, 0.0, 0, 300.0 + 40.0 + 30.0};
+        profile_t ramp = {300, 40, 60, 40, 10, 0};
+        imu_hump_t h = run(&ramp, 800, stop, &st, &en, &t);
+        int c = (en == 1) && (h.last_mm >= 9U) && (h.last_mm <= 11U);
+        printf("%-34s true %6.1f mm  measured %3u mm  ends %d  %s\n",
+               "stops on top of a 10 mm hump", t, (unsigned)h.last_mm, en,
+               c ? "PASS" : "FAIL");
+        ok &= c;
+    }
+    /* car tilted by hand without moving (pitch from a 23 mm hump) */
+    {
+        sim_opts_t still = {0.0, 0.0, 1, 0.0};
+        ok &= check("tilted, not moving", (profile_t){300, 30, 40, 30, 23,
+                    0}, 800, still, 0, 0.0);
+    }
+    /* 280 mm high hump (200 mm ramps, 50 mm top, shorter than
+       IMU_HUMP_MAX_LEN_MM): clamp at 255, never wrap */
+    {
+        int st, en;
+        double t;
+        profile_t big = {300, 200, 50, 200, 280, 0};
+        imu_hump_t h = run(&big, 1200, clean, &st, &en, &t);
         int c = (en == 1) && (h.last_mm == 255U) && (h.max_mm == 255U);
         printf("%-34s true %6.1f mm  measured %3u mm  %s\n",
-               "300 mm ramp: clamp at 255", t, (unsigned)h.last_mm,
+               "280 mm hump: clamp at 255", t, (unsigned)h.last_mm,
                c ? "PASS" : "FAIL");
         ok &= c;
     }

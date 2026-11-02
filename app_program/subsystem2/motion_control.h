@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <tk/tkernel.h>
+#include <stdbool.h>
 
 /*
  * Buddy 2 - Shared Motion Control API
@@ -79,6 +80,19 @@ motion_result_t motion_set_speed(float left_rpm,
  * immediate physical stop.
  */
 motion_result_t motion_stop(void);
+
+/*
+ * Emergency stop (added 2026-11-02 for the GP20 stop button, same idea
+ * as main's 59da21b motion_estop). Stops both motors and LATCHES: while
+ * latched every drive command is refused (motion_set_duty -> E_OBJ,
+ * motion_set_speed -> MOTION_ERROR), so a task that keeps renewing
+ * commands (S3's line drive, every 10 ms) cannot restart the motors.
+ * motion_clear_estop() releases the latch but does not restart
+ * anything; the next accepted command does. Any task, any core.
+ */
+motion_result_t motion_estop(void);
+motion_result_t motion_clear_estop(void);
+bool            motion_is_estopped(void);
 
 /*
  * Copy the latest available motor and encoder status.

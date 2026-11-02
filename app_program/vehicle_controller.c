@@ -1,6 +1,7 @@
 /*
  * vehicle_controller.c
- * Vehicle Controller, see vehicle_controller.h. So far: the test drive.
+ * Vehicle Controller, see vehicle_controller.h. So far: the GP20
+ * emergency stop and the test drive.
  */
 
 #include "vehicle_controller.h"
@@ -37,10 +38,14 @@ static char const * const g_stop_name[] =
 };
 
 static void      vc_test_task(INT stacd, void *p_exinf);
-static bool      vc_button_pressed(void);
 static void      vc_wait_press(void);
 static vc_stop_t vc_drive(int32_t *p_driven_mm);
+#else
+static void      vc_estop_task(INT stacd, void *p_exinf);
+static void      vc_toggle_estop(void);
 #endif
+
+static bool      vc_button_pressed(void);
 
 /*!
  * Button input with pull-up (pressed = low). Kernel objects: none yet.
@@ -50,10 +55,9 @@ vc_init (void)
 {
     ER er = E_OK;
 
-#if VC_TEST_DRIVE
+    // GP20 (test drive or emergency stop, depending on the build)
     er = gpio_set_pin(VC_BUTTON_PIN, GPIO_MODE_IN);
     set_w(GPIO(VC_BUTTON_PIN), GPIO_PUE);
-#endif
 
     return (er);
 }
@@ -66,6 +70,11 @@ vc_start (void)
 #if VC_TEST_DRIVE && !APP_TEST
     ID tid = app_start_task((FP)vc_test_task, VC_TEST_PRI, VC_TEST_PRC,
                             "vc_test_drive");
+
+    er = (tid < E_OK) ? (ER)tid : E_OK;
+#elif !APP_TEST
+    ID tid = app_start_task((FP)vc_estop_task, VC_ESTOP_PRI, 0,
+                            "vc_estop");
 
     er = (tid < E_OK) ? (ER)tid : E_OK;
 #endif
@@ -103,12 +112,6 @@ vc_test_task (INT stacd, void *p_exinf)
                   (INT)driven_mm, (UINT)IMU_HUMP_W_LAST(word),
                   (UINT)IMU_HUMP_W_MAX(word), (UINT)IMU_HUMP_W_VALID(word));
     }
-}
-
-static bool
-vc_button_pressed (void)
-{
-    return (0U == gpio_get_val(VC_BUTTON_PIN));
 }
 
 // Press (low on two polls in a row, debounce) and release
@@ -200,3 +203,75 @@ vc_drive (int32_t *p_driven_mm)
     return (why);
 }
 #endif // VC_TEST_DRIVE
+
+#if !VC_TEST_DRIVE
+/*
+ * GP20 emergency stop. One action per press (on the poll where the
+ * button has been low VC_ESTOP_DEBOUNCE times in a row); holding the
+ * button does not repeat it.
+ */
+static void
+vc_estop_task (INT stacd, void *p_exinf)
+{
+    uint32_t low = 0U;
+
+    (void)stacd;
+    (void)p_exinf;
+
+    tm_printf((UB*)"[VC] GP20 = emergency stop (press again to release)\n");
+
+    for (;;)
+    {
+        tk_dly_tsk(VC_ESTOP_POLL_MS);
+
+        if (vc_button_pressed())
+        {
+            low = (low <= VC_ESTOP_DEBOUNCE) ? (low + 1U) : low;
+        }
+        else
+        {
+            low = 0U;
+        }
+
+        if (VC_ESTOP_DEBOUNCE == low)
+        {
+            vc_toggle_estop();
+        }
+    }
+}
+
+static void
+vc_toggle_estop (void)
+{
+    motion_result_t result = MOTION_OK;
+
+    if (motion_is_estopped())
+    {
+        result = motion_clear_estop();
+        tm_printf((UB*)"[VC] GP20: stop released (%d); the line drive"
+                  " resumes if it is still on the line\n", (INT)result);
+    }
+    else
+    {
+        result = motion_estop();
+
+        if (MOTION_OK == result)
+        {
+            tm_printf((UB*)"[VC] GP20: EMERGENCY STOP, motors off, drive"
+                      " commands refused\n");
+        }
+        else
+        {
+            tm_printf((UB*)"[VC] GP20: emergency stop NOT latched (%d),"
+                      " motors zeroed once: press again\n", (INT)result);
+        }
+    }
+}
+#endif // !VC_TEST_DRIVE
+
+// Robo Pico button, pressed = low (input with pull-up)
+static bool
+vc_button_pressed (void)
+{
+    return (0U == gpio_get_val(VC_BUTTON_PIN));
+}
