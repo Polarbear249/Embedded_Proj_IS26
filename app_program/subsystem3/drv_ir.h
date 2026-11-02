@@ -19,7 +19,8 @@
  * passes in ~3 ms at 1 m/s: too fast for 10 ms polling.
  *
  * Call drv_ir_init() and then drv_ir_barcode_start() from the Line
- * task: the interrupt is enabled on the core that calls it. Every other
+ * task (pinned to core 0): the edge callback is attached to the shared
+ * GPIO dispatcher (app_program/gpio_irq.c), which runs on core 0. Every other
  * function is for the Line task only (TEAM.md section 3: one owning
  * task per peripheral). Without drv_ir_barcode_start() the line inputs
  * still work and the ring stays empty.
@@ -49,8 +50,9 @@
 void     drv_ir_init(void);
 
 /*!
- * Install and enable the barcode edge interrupt on the calling core.
- * Returns E_OK or the kernel error from tk_def_int().
+ * Attach the barcode edge callback to the shared GPIO dispatcher.
+ * Returns E_OK or the error from gpio_irq_attach() (E_OBJ if called
+ * twice, or a kernel error from tk_def_int() on the first attach).
  */
 ER       drv_ir_barcode_start(void);
 

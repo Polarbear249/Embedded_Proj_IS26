@@ -9,10 +9,13 @@
  * called in interrupt context: store a count or a timestamp and return.
  * Never block, wait, print or allocate in a callback.
  *
- * Attach ONLY from subsystemN_init(). Those run one after another in
- * usermain() on core 0, so the callback table needs no lock and the
- * interrupt is enabled in core 0's NVIC (each RP2040 core has its own):
- * every GPIO callback runs on core 0.
+ * Attach from subsystemN_init() (they run one after another in
+ * usermain() on core 0) or from a task pinned to core 0 (TP_PRC1), one
+ * attach at a time: the callback table needs no lock, each entry is
+ * written once before its pin is enabled, and the interrupt is enabled
+ * in core 0's NVIC (each RP2040 core has its own), so every GPIO
+ * callback runs on core 0. Users: S2 encoders (subsystem2_init), S3
+ * barcode (Line task, core 0).
  */
 
 #ifndef GPIO_IRQ_H

@@ -3,41 +3,20 @@
  * Subsystem 3 (Buddy 3): IR sensor inputs and barcode edge interrupt,
  * see drv_ir.h.
  *
- * Why tk_def_int() and not the Pico SDK's gpio_set_irq_enabled_with_
- * callback(): in this kernel build the SDK's IRQ registration functions
- * are empty stubs (lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_compat.c),
- * so an SDK callback would never run. The kernel owns the vector table.
- *
- * IO_BANK0 interrupt registers (RP2040 datasheet 2.19.6.1, IO_BANK0):
- *   INTR0..3        0x0F0  raw status, edge bits write-1-to-clear
- *   PROC0_INTE0..3  0x100  enables for core 0's IO_IRQ_BANK0
- *   PROC1_INTE0..3  0x130  enables for core 1's IO_IRQ_BANK0
- * 4 bits per GPIO, 8 GPIOs per register:
- *   bit 4n+0 LEVEL_LOW, 4n+1 LEVEL_HIGH, 4n+2 EDGE_LOW, 4n+3 EDGE_HIGH
- * IO_IRQ_BANK0 is interrupt 13 (RP2040 datasheet 2.3.2).
- *
- * NOTE (TEAM.md section 3): this module is the only user of
- * IO_IRQ_BANK0 today. If another subsystem needs GPIO interrupts
- * (e.g. S5 ECHO on GP17), the handler must become one shared dispatcher;
- * a second tk_def_int() on interrupt 13 would replace this one.
+ * The barcode edges come through the team's shared GPIO interrupt
+ * dispatcher (app_program/gpio_irq.c, TEAM.md section 3): it owns
+ * IO_IRQ_BANK0 (interrupt 13), which the S2 wheel encoders use too. A
+ * second tk_def_int(13) would replace the dispatcher and silence the
+ * encoders, so this module only attaches a callback for its pin.
+ * (Until 2026-11-02 it installed its own handler; ported on the
+ * integration branch by Buddy 4, Buddy 3 to review.)
+ * The Pico SDK's IRQ registration functions are empty stubs in this
+ * kernel build (lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_compat.c),
+ * so they cannot be used either.
  */
 
 #include "drv_ir.h"
-
-#define DRV_IR_INTNO_IO_BANK0   (13U)
-#define DRV_IR_INT_LEVEL        (2)         // same level as the kernel's
-                                            //   physical timer (INTPRI_PTIM)
-
-#define DRV_IR_IO_INTR0         (IO_BANK0_BASE + 0x0F0U)
-#define DRV_IR_IO_PROC0_INTE0   (IO_BANK0_BASE + 0x100U)
-#define DRV_IR_IO_PROC1_INTE0   (IO_BANK0_BASE + 0x130U)
-#define DRV_IR_IO_REG(base, pin) ((base) + (((pin) / 8U) * 4U))
-#define DRV_IR_EDGE_LOW(pin)    ((uint32_t)1U << ((((pin) % 8U) * 4U) + 2U))
-#define DRV_IR_EDGE_HIGH(pin)   ((uint32_t)1U << ((((pin) % 8U) * 4U) + 3U))
-#define DRV_IR_EDGE_BOTH(pin)   (DRV_IR_EDGE_LOW(pin) | DRV_IR_EDGE_HIGH(pin))
-
-// SIO CPUID: 0 on core 0, 1 on core 1 (sysdef.h SIO_CPUID_ADDR)
-#define DRV_IR_CPUID            (SIO_CPUID_ADDR)
+#include "../gpio_irq.h"
 
 // Pad: input on, output off, Schmitt trigger on, pull-DOWN on. The
 // module drives DOUT itself; the pull-down only matters if a sensor
@@ -71,7 +50,7 @@ static volatile uint8_t g_isr_black = 0U;   // last level the ISR queued
 
 static bool drv_ir_is_black(uint32_t pin);
 static void drv_ir_setup_pin(uint32_t pin);
-static void drv_ir_isr(UINT intno);
+static void drv_ir_barcode_edge(uint32_t pin, uint32_t events);
 
 void
 drv_ir_init (void)
@@ -88,46 +67,15 @@ drv_ir_init (void)
 ER
 drv_ir_barcode_start (void)
 {
-    T_DINT   dint;
-    ER       err;
-    uint32_t inte_base;
-
     g_ring_head = 0U;
     g_ring_tail = 0U;
     g_overflows = 0U;
     g_isr_black = drv_ir_is_black(DRV_IR_PIN_BARCODE) ? 1U : 0U;
 
-    // Clear stale edge flags, then install the handler
-    out_w(DRV_IR_IO_REG(DRV_IR_IO_INTR0, DRV_IR_PIN_BARCODE),
-          DRV_IR_EDGE_BOTH(DRV_IR_PIN_BARCODE));
-
-    dint.intatr = TA_HLNG;
-    dint.inthdr = (FP)drv_ir_isr;
-    err = tk_def_int(DRV_IR_INTNO_IO_BANK0, &dint);
-
-    if (E_OK == err)
-    {
-        // Enable both edges on THIS core's IO_IRQ_BANK0 only, so the
-        // handler always runs on one core.
-        if (0U == in_w(DRV_IR_CPUID))
-        {
-            inte_base = DRV_IR_IO_PROC0_INTE0;
-        }
-        else
-        {
-            inte_base = DRV_IR_IO_PROC1_INTE0;
-        }
-
-        set_w(DRV_IR_IO_REG(inte_base, DRV_IR_PIN_BARCODE),
-              DRV_IR_EDGE_BOTH(DRV_IR_PIN_BARCODE));
-        EnableInt(DRV_IR_INTNO_IO_BANK0, DRV_IR_INT_LEVEL);
-    }
-    else
-    {
-        // handler not installed: leave the interrupt disabled
-    }
-
-    return err;
+    // Both edges of the barcode pin to drv_ir_barcode_edge(), run by the
+    // shared dispatcher on core 0 (stale edge flags are cleared there)
+    return gpio_irq_attach(DRV_IR_PIN_BARCODE, GPIO_IRQ_EDGE_BOTH,
+                           drv_ir_barcode_edge);
 }
 
 bool
@@ -214,22 +162,21 @@ drv_ir_setup_pin (uint32_t pin)
 }
 
 /*!
- * IO_IRQ_BANK0 handler: timestamp one barcode-sensor change.
+ * Dispatcher callback (interrupt context, core 0): timestamp one
+ * barcode-sensor change. The dispatcher has already cleared the edge
+ * flag, so a change after the level read raises a new interrupt.
  * Minimal work, no kernel calls, no blocking (TEAM.md section 3).
  */
 static void
-drv_ir_isr (UINT intno)
+drv_ir_barcode_edge (uint32_t pin, uint32_t events)
 {
     uint32_t now_us;
     uint8_t  black;
     uint8_t  head;
     uint8_t  next;
 
-    (void)intno;
-
-    // Clear first, so a change after the level read raises a new IRQ
-    out_w(DRV_IR_IO_REG(DRV_IR_IO_INTR0, DRV_IR_PIN_BARCODE),
-          DRV_IR_EDGE_BOTH(DRV_IR_PIN_BARCODE));
+    (void)pin;
+    (void)events;   // the level read below is what counts
 
     now_us = in_w(TIMER_TIMERAWL);
     black  = drv_ir_is_black(DRV_IR_PIN_BARCODE) ? 1U : 0U;
