@@ -14,4 +14,7 @@
 
 #define S5_PRI_MAIN	20		/* priority band 20-21 (TEAM.md) */
 
+/* Task entry point for the RTOS */
+void obstacle_task(INT stacd, void *exinf);
+
 #endif /* SUBSYSTEM5_H */
