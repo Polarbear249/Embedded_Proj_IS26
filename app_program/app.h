@@ -8,6 +8,7 @@
 
 #ifndef APP_H
 #define APP_H
+typedef unsigned char UINT8;
 
 #include <tk/tkernel.h>		/* micro T-Kernel API (tk_xxx_yyy) */
 #include <tm/tmonitor.h>	/* T-Monitor API: tm_printf() console output */

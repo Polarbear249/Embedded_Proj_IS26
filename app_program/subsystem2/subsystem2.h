@@ -30,12 +30,35 @@ typedef struct {
 
 #define S2_POOL_COUNT	4	/* at most 4 samples in flight */
 
+/* ---------------------------------------------------------------------
+ *  Interface between Vehicle Controller (Buddy 2) and Obstacle Scan (Buddy 5)
+ * --------------------------------------------------------------------- */
+
+// Message from Vehicle Controller to Obstacle Scan
+typedef struct {
+    T_MSG hdr;      // Required by RTOS
+    UINT reason;    // 1 = Time, 2 = Turn, 3 = Barcode, 4 = Line Lost
+} SCAN_REQUEST;
+
+// Message from Obstacle Scan back to Vehicle Controller
+typedef struct {
+    T_MSG hdr;
+    UINT8 best_angle;
+    float max_dist;
+} OBSTACLE_PROFILE;
+
 /* IF-02: the receiver of a sample gives its memory block back to
    mpf_samples (tk_rel_mpf) and then a slot back to sem_slots
    (tk_sig_sem, count 1).  Nothing else may use these two objects. */
 IMPORT ID	sem_slots;
 IMPORT ID	mpf_samples;
 
+/* The mailboxes themselves (defined in subsystem5.c) */
+IMPORT ID mbx_scan_req;
+IMPORT ID mbx_obstacle_rpt;
+
+#define S2_PRI_VEHICLE  7
+void vehicle_controller_task(INT stacd, void *exinf);
 /* Private to subsystem 2 */
 
 
