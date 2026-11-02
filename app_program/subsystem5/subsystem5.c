@@ -1,6 +1,6 @@
 /*
  *	subsystem5.c
- *	Subsystem 5 -- <name>.  EMPTY TEMPLATE.
+ *	Subsystem 5 -- <Daryl>.
  *
  *	subsystem5_init():  create this subsystem's kernel objects
  *	                    (semaphores, mailboxes, ...).  Do not start
@@ -17,13 +17,27 @@
  */
 
 #include "subsystem5.h"
+#include "obstacle.h"
+#include "ultrasonic.h"
+#include "servo.h"
 
+// Initialise the subsystem's hardware and kernel objects
 EXPORT ER subsystem5_init(void)
 {
+    ER er;
+	// Init ultrasonic sensor and servo motor
+    er = ultrasonic_init();
+    if (er < E_OK) return er;
+    
+    er = servo_init();
+    if (er < E_OK) return er;
+
 	return E_OK;
 }
 
 EXPORT ER subsystem5_start(void)
 {
-	return E_OK;
+    // Priority 8, any core, obstacle_task for debug
+	ID tid = app_start_task(obstacle_task, 8, 0, "obstacle_task");
+	return (tid < E_OK) ? tid : E_OK; // Sunglass_thumbsup_emoji
 }
