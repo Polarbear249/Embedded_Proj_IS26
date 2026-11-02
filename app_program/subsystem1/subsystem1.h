@@ -56,6 +56,17 @@ IMPORT UW	s1_cmd_rejected(void);
 IMPORT uint32_t	mqtt_app_tx(uint8_t *buf, uint32_t max);
 IMPORT void	mqtt_app_rx(const char *topic, const uint8_t *data, uint32_t len);
 
+/* Telemetry monitor (telem_monitor.c): the vehicle snapshot in words on
+   the serial monitor, so the team can calibrate without decoding the MQTT
+   frame by hand. s1_telem_print() is callable from any task. telem_task()
+   gathers the snapshot and belongs in vehicle_controller.c once the VC
+   takes IF-07 over. */
+#define S1_PRI_TELEM	11		/* below the WiFi task, above the stub */
+#define S1_TELEM_MS	1000U		/* one printed snapshot per second */
+IMPORT ID	tid_telem;
+IMPORT void	telem_task(INT stacd, void *exinf);
+IMPORT void	s1_telem_print(const T_TELEM *snap);
+
 /* Read-only WiFi state, safe to call from any task. */
 IMPORT BOOL	s1_wifi_link_up(void);
 IMPORT UW	s1_wifi_ip(void);

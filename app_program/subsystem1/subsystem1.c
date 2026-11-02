@@ -66,5 +66,9 @@ EXPORT ER subsystem1_start(void)
 	if (tid_wifi < E_OK) {
 		return tid_wifi;
 	}
+	tid_telem = app_start_task(telem_task, S1_PRI_TELEM, 0, "telem_task");
+	if (tid_telem < E_OK) {
+		return tid_telem;
+	}
 	return tk_sta_cyc(cyc_led);
 }
