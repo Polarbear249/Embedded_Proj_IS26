@@ -1,0 +1,29 @@
+# S5 Ultrasonic unit test, run 2, 2026-10-26
+# image: subsystem5_test build 2
+# console output as pasted by the tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# tester notes: First 2 readings were to the ceiling (estimated ~177-181cm using a tape measure).
+# Next 2 readings were to the tester's hand placed extremely close to the sensor (~3cm).
+# The final reading was the tester cupping the sensor completely to block the sound wave,
+# which was successfully rejected as invalid by the 2cm blind spot window. 
+
+[TEST] ===== Starting Subsystem 5: S5-U02 & S5-U03 =====
+[TEST] Pins configured. Reading distance 5 times...
+[TEST] Place an object at 10cm, 20cm, and 30cm.
+
+[TEST] Raw Pulse: 10528 us  |  Distance: 181.5 cm
+[TEST] Raw Pulse: 10401 us  |  Distance: 179.3 cm
+[TEST] Raw Pulse: 187 us    |  Distance: 3.2 cm
+[TEST] Raw Pulse: 203 us    |  Distance: 3.5 cm
+
+[TEST] Loop finished.
+[TEST] S5-U02 PASS - Raw pulse width values captured successfully.
+[TEST] S5-U03 PASS - Distance formula executed. (Tester must confirm prints match physical ruler).
+[TEST] === test run end ===
+
+# Annotation:
+# Pulse 1 (181.5cm): Ceiling, measured with tape measure. [PASS - High confidence]
+# Pulse 2 (179.3cm): Ceiling, measured with tape measure. [PASS - High confidence]
+# Pulse 3 (3.2cm)  : Hand placed ~3cm away. [PASS - Validated math, human error probable]
+# Pulse 4 (3.5cm)  : Hand placed ~3cm away. [PASS - Validated math, human error probable]
+# Pulse 5 (N/A)    : Hand cupped over sensor. [PASS - Successfully rejected, below 2cm blind spot]

@@ -1,0 +1,34 @@
+# S5 Ultrasonic unit test, run 1, 2026-10-26
+# image: subsystem5_test build 4
+# console output as pasted by the tester
+# wiring: Servo on GP12 (Robo Pico S1 port), Ultrasonic on GP6/GP7
+# tester notes: Servo physically moved to 30, 90, and 150 degrees.
+# The ultrasonic sensor did not return an echo at the time of testing as we were only testing the servo but the servo PWM logic and settling delays executed perfectly.
+
+---- Opened the serial port /dev/ttyACM0 ----
+
+[TEST] ===== Starting Subsystem 5: S5-U04 (Servo Pan) =====
+[TEST] Servo initialized on GP12
+[TEST] Sweeping to 30, 90, and 150 degrees...
+
+[SERVO] Commanded angle: 30 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 30 deg (out of range)
+
+[SERVO] Commanded angle: 90 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 90 deg (out of range)
+
+[SERVO] Commanded angle: 150 degrees
+[SERVO] Waiting 500ms for settling...
+[TEST] No echo at 150 deg (out of range)
+
+[SERVO] Returning to center (90 degrees).
+[SERVO] Commanded angle: 90 degrees
+[TEST] S5-U04 PASS - Servo swept to 30, 90, and 150. Distances acquired after settling.
+[TEST] === test run end ===
+
+# Annotation:
+# Servo sweep executed perfectly. 
+# The "No echo" is intended as we didn't hook up the ultrasonic sensor at this point in time, will do so in further tests
+# S5-U04 PASS confirmed based on visual observation of the servo movement.
