@@ -21,7 +21,11 @@
 
 #include "app.h"
 
-#define VC_TEST_DRIVE           (1)         // 0 = no test-drive task
+// Off by default since S3's line follower (S3_DRIVE_ENABLE) drives the
+// motors in normal builds. For hump runs: set this to 1 AND
+// S3_DRIVE_SWITCH to 0 in subsystem3/subsystem3.h. Both on = build
+// error (two tasks commanding the motors fight: latest command wins).
+#define VC_TEST_DRIVE           (0)         // 0 = no test-drive task
 
 // 20 RPM x 207.3 mm per wheel turn = about 69 mm/s (derived). S2 accepts
 // 0..30 RPM (MOTION_MAX_TARGET_RPM).

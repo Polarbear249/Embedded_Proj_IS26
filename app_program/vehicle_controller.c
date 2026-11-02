@@ -8,6 +8,12 @@
 #include "subsystem2/motion_control.h"
 #include "subsystem4/imu_terrain.h"
 #include "subsystem4/imu_hump.h"
+#include "subsystem3/subsystem3.h"      // S3_DRIVE_ENABLE
+
+#if VC_TEST_DRIVE && S3_DRIVE_ENABLE
+// Two motor commanders: turn one off (S3_DRIVE_SWITCH in subsystem3.h)
+#error "VC_TEST_DRIVE and S3_DRIVE_ENABLE are both on"
+#endif
 
 #define VC_MM_PER_TURN          (207)       // pi x 66 mm wheel
 #define VC_MS_PER_MIN           (60000)
