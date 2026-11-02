@@ -54,6 +54,16 @@
 #define VC_TEST_PRI             (15)
 #define VC_TEST_PRC             (TP_PRC2)
 
+// IF-09 (S5 -> VC): message buffer of uint32_t profile words (layout in
+// subsystem5/subsystem5.h), created by vc_init(). S5 sends with TMO_POL;
+// the vc_estop task drains it every poll. On an ALERT the VC latches
+// motion_estop() (GP20 releases it): the interim stop path until
+// EVG_stop exists. PROFILE and FAULT words are printed only; a dead
+// ultrasonic does NOT stop the car. Worst-case alert-to-stop latency
+// about 160 ms (derived: 2 pings of 60-70 ms + one 20-30 ms VC poll).
+#define VC_PROFILE_DEPTH        (8U)
+IMPORT ID vc_mbf_profile;
+
 ER vc_init(void);
 ER vc_start(void);
 
