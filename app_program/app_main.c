@@ -121,15 +121,33 @@ EXPORT INT usermain(void)
 	tm_printf((UB*)"all subsystems started\n\n");
 
 #if APP_TEST
+	/* APP_TEST_ONLY (local switch, TEST=1 only): 0 = run every
+	   subsystem's tests (team default, keep it 0 in commits); 1..5 = run
+	   only that subsystem's tests, e.g. 4 skips the slow WiFi tests.
+	   The other subsystems' tasks still start as normal. */
+#ifndef APP_TEST_ONLY
+#define APP_TEST_ONLY	0
+#endif
 	/* Test build (make TEST=1): run every subsystem's tests in turn,
 	   here in the initial task, while the system is running.  Tests may
 	   call tk_dly_tsk() to let the other tasks work for a while. */
-	tm_printf((UB*)"[TEST] === test run start ===\n");
-	subsystem1_test();
-	subsystem2_test();
-	subsystem3_test();
-	subsystem4_test();
-	subsystem5_test();
+	tm_printf((UB*)"[TEST] === test run start (only %d, 0 = all) ===\n",
+		  APP_TEST_ONLY);
+	if ((0 == APP_TEST_ONLY) || (1 == APP_TEST_ONLY)) {
+		subsystem1_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (2 == APP_TEST_ONLY)) {
+		subsystem2_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (3 == APP_TEST_ONLY)) {
+		subsystem3_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (4 == APP_TEST_ONLY)) {
+		subsystem4_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (5 == APP_TEST_ONLY)) {
+		subsystem5_test();
+	}
 	tm_printf((UB*)"[TEST] === test run end ===\n");
 #endif
 

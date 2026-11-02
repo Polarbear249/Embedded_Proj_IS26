@@ -52,14 +52,15 @@
 // does not turn Z, so Z keeps its stored value (0: needs a tilted spin,
 // not done). Only the car's own magnets (motors, steel) are removed;
 // fields from motor current while driving are not.
-// X/Y measured 2026-10-31 on the car, module in its original (run 12)
-// orientation, 2 full turns on a chair (S4-U25/U26 PASS, run 36): span
-// ratio 98 %, check spin RMS 1 %, min/max 8 %, so heading error about
-// +-2.3 deg there (derived). Run 28's -1176/790 was for a different
-// mounting (runs 26-29); runs 14-27 were partial turns. Valid for this
-// mount and roughly this place only: spin again at the venue.
-#define IMU_CALIB_MAG_OFF_X     (-1141)
-#define IMU_CALIB_MAG_OFF_Y     (1597)
+// X/Y measured 2026-11-02 on the car after the module was raised on a
+// new mount away from the power source, 2 full turns (S4-U25/U26 PASS,
+// run 37): span ratio 98 %, check spin offset only RMS 2 %, min/max 4 %.
+// Both spins warned that Z moved about 1000 counts (car tilted while
+// turned), so re-spin flatter if heading looks off. Replaces run 36's
+// -1141/1597 (old mount, now invalid: hdg read about +-180 deg). Valid
+// for this mount and roughly this place only: spin again at the venue.
+#define IMU_CALIB_MAG_OFF_X     (-1007)
+#define IMU_CALIB_MAG_OFF_Y     (630)
 #define IMU_CALIB_MAG_OFF_Z     (0)
 
 // Magnetometer soft-iron scale, x1000 (1000 = no change). Steel and

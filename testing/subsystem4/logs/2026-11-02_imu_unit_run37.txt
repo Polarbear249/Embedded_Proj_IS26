@@ -1,0 +1,109 @@
+Run 37: IMU unit tests after raising the IMU mount (away from the power source)
+Date: 2026-11-02. Branch integrate/s4-onto-main at 8aaf476 + uncommitted
+app_main.c APP_TEST_ONLY switch. Image flashed: mtk3pico_smp1_usb_cdc_wifi_test.uf2
+(ALL tests, APP_TEST_ONLY 0: S5-U01 ran at the end), not the S4-only image.
+Console pasted from the IMU banner on; earlier S1..S3 output not pasted.
+Results: bench 7/7, S4-U23 PASS, S4-U24 PASS (0.1/0.0 deg), S4-U25 PASS
+(offset x=-1007 y=630 stored in imu_calib.h), S4-U26 PASS (offset only RMS 2 %,
+offset + scale RMS 0 %). Both spins warned that Z moved ~1000 counts (tilt).
+Note: |a| at rest 1117-1123 mg raw (runs 23-36: 1006-1029 mg). See TEST_LOG.
+
+--- console ---
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the car flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=95 y=27 z=1114  mag x=3852 y=922 z=1839
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- level zero: you need tape to mark where the car stands -----
+
+[IMU] >>> pose 1/3  FLAT: car on the floor, mark both wheels and the ball with tape  (5 s)
+s1: link down, status=0 kpolls=2547
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=2809
+[IMU] avg mg x=101 y=25 z=1118  |a|=1122  spread 16 mg  (50/50 reads ok)
+[IMU] level reference (mount + floor)  pitch 5.5 deg  roll 2.0 deg
+[TEST] S4-U23 PASS  level zero captured (car flat, still)
+
+[IMU] >>> pose 2/3  TURNED: same spot, car turned 180 deg (nose where the tail was)  (5 s)
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=3072
+[IMU] avg mg x=17 y=-23 z=1117  |a|=1117  spread 40 mg  (50/50 reads ok)
+[IMU] turned 180  pitch 1.1 deg  roll -0.6 deg
+[IMU] mount tilt  (ref + turned) / 2  pitch 3.3 deg  roll 0.7 deg
+[IMU] floor slope (ref - turned) / 2  pitch 2.2 deg  roll 1.3 deg
+
+[IMU] >>> pose 3/3  FLAT again: original direction, wheels and ball on the tape marks  (5 s)
+s1: link down, status=0 kpolls=3334
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=3597
+[IMU] avg mg x=105 y=23 z=1115  |a|=1120  spread 577 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 577 mg (limit 60) min -349 max 228
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 3/3  FLAT again: original direction, wheels and ball on the tape marks  (5 s)
+s1: link down, status=0 kpolls=3859
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=4122
+[IMU] avg mg x=103 y=25 z=1118  |a|=1123  spread 18 mg  (50/50 reads ok)
+[IMU] flat again vs level  pitch 0.1 deg  roll 0.0 deg
+[TEST] S4-U24 PASS  flat again reads pitch and roll 0 +-0.5 deg
+[TEST] subsystem4 IMU level zero SUMMARY 2 passed, 0 failed
+[IMU] ----- magnetometer: turn the car slowly by hand, flat, 2 full turns -----
+[IMU] no watch, ring or phone on that hand, power bank away, motors off
+[IMU] vertical axis Z: the circle is in X/Y
+
+[IMU] >>> spin 1/2  SPIN: car flat on the floor, away from steel, laptop and phone  (5 s)
+s1: link down, status=0 kpolls=4384
+[IMU] TURN NOW: slowly, 2 full turns, keep it flat (20 s)
+s1: link down, status=0 kpolls=4647
+[IMU] 5 s
+s1: link down, status=0 kpolls=4909
+s1: link down, status=0 kpolls=5172
+[IMU] 10 s
+s1: link down, status=0 kpolls=5434
+[IMU] 15 s
+s1: link down, status=0 kpolls=5697
+s1: link down, status=0 kpolls=5959
+[IMU] 20 s
+[IMU] stop, put the car down
+[IMU] mag range x=-5847..3832 y=-4302..5563 z=1659..2735  (0 read errors)
+[IMU] span X=9679 Y=9865 counts (ratio 98 %, 100 = no soft-iron)
+[IMU] paste into imu_calib.h: MAG_OFF x=-1007 y=630 z=0
+[IMU] soft-iron scale x1000: X=1009 Y=990 (1000 = none)
+[IMU] WARNING: vertical axis Z moved 1076 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U25 PASS  flat spin: read errors <= 2 %, no saturation, both horizontal spans >= 2000
+
+[IMU] >>> spin 2/2  SPIN again (check): same place, same way  (5 s)
+s1: link down, status=0 kpolls=6222
+[IMU] TURN NOW: slowly, 2 full turns, keep it flat (20 s)
+s1: link down, status=0 kpolls=6484
+[IMU] 5 s
+s1: link down, status=0 kpolls=6747
+[IMU] 10 s
+s1: link down, status=0 kpolls=7009
+s1: link down, status=0 kpolls=7272
+[IMU] 15 s
+s1: link down, status=0 kpolls=7534
+[IMU] 20 s
+[IMU] stop, put the car down
+[IMU] radius raw 3622..6017 (spread 49 %)  corrected 4759..4987 (spread 4 %)
+[IMU] over all 1000 samples, spread of the radius:
+[IMU]   offset only     RMS 2 %  min/max 4 %
+[IMU]   offset + scale  RMS 0 %  min/max 3 %
+[IMU] paste into imu_calib.h: MAG_SCALE x=1009 y=990 z=1000
+[IMU] WARNING: vertical axis Z moved 998 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U26 PASS  radius spread (offset + scale) <= 25 % of its mean
+[TEST] subsystem4 IMU magnetometer SUMMARY 2 passed, 0 failed
+[TEST] S5-U01 PASS  example: running in a task context
+[TEST] subsystem5 SUMMARY 1 passed, 0 failed
+[TEST] === test run end ===
