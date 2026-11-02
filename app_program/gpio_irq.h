@@ -2,7 +2,8 @@
  * gpio_irq.h
  * Shared GPIO edge-interrupt dispatcher (one handler for the RP2040 GPIO
  * bank, IO_IRQ_BANK0). Shared file: change only by team agreement.
- * Users: S2 wheel encoders (GP0, GP4); planned: S5 HC-SR04 ECHO (GP17).
+ * Users: S2 wheel encoders (GP0, GP4), S3 barcode (GP7), S5 HC-SR04 ECHO
+ * (GP17, subsystem5/ultrasonic.c).
  *
  * Team decision (Tribunal 1, CLAUDE.md section 4): one dispatcher, minimal
  * ISR work, no interrupt disabling around it. Each pin gets one callback,

@@ -1,12 +1,13 @@
 /*
  * vehicle_controller.c
  * Vehicle Controller, see vehicle_controller.h. So far: the GP20
- * emergency stop and the test drive.
+ * emergency stop, the S5 obstacle stop (IF-09) and the test drive.
  */
 
 #include "vehicle_controller.h"
 #include <stdbool.h>
 #include "subsystem2/motion_control.h"
+#include "subsystem5/subsystem5.h"      // IF-09 word layout
 #include "subsystem4/imu_terrain.h"
 #include "subsystem4/imu_hump.h"
 #include "subsystem3/subsystem3.h"      // S3_DRIVE_ENABLE
@@ -43,21 +44,38 @@ static vc_stop_t vc_drive(int32_t *p_driven_mm);
 #else
 static void      vc_estop_task(INT stacd, void *p_exinf);
 static void      vc_toggle_estop(void);
+static void      vc_drain_profiles(void);
+static void      vc_obstacle(uint32_t word);
 #endif
 
 static bool      vc_button_pressed(void);
 
+EXPORT ID vc_mbf_profile = 0;
+
 /*!
- * Button input with pull-up (pressed = low). Kernel objects: none yet.
+ * Button input with pull-up (pressed = low), and the IF-09 message
+ * buffer (owner: VC, receiver; one uint32_t per message, depth 8).
  */
 ER
 vc_init (void)
 {
-    ER er = E_OK;
+    ER     er = E_OK;
+    T_CMBF cmbf = {0};
 
     // GP20 (test drive or emergency stop, depending on the build)
     er = gpio_set_pin(VC_BUTTON_PIN, GPIO_MODE_IN);
     set_w(GPIO(VC_BUTTON_PIN), GPIO_PUE);
+
+    if (E_OK <= er)
+    {
+        cmbf.mbfatr = TA_TFIFO;
+        cmbf.maxmsz = (INT)sizeof(uint32_t);
+        // each message also stores a size header (sizeof(INT))
+        cmbf.bufsz = (SZ)(VC_PROFILE_DEPTH
+                          * (sizeof(uint32_t) + sizeof(INT)));
+        vc_mbf_profile = tk_cre_mbf(&cmbf);
+        er = (vc_mbf_profile < E_OK) ? (ER)vc_mbf_profile : E_OK;
+    }
 
     return (er);
 }
@@ -237,6 +255,75 @@ vc_estop_task (INT stacd, void *p_exinf)
         {
             vc_toggle_estop();
         }
+
+        vc_drain_profiles();
+    }
+}
+
+/*
+ * Every IF-09 word waiting, never blocking (TMO_POL). At most the
+ * buffer depth per poll, so a fast producer cannot hold this task.
+ */
+static void
+vc_drain_profiles (void)
+{
+    uint32_t word = 0U;
+    uint32_t count = 0U;
+    bool     b_more = true;
+
+    while (b_more && (count < VC_PROFILE_DEPTH))
+    {
+        // returns the size, or E_TMOUT when empty
+        b_more = ((INT)sizeof(word)
+                  == tk_rcv_mbf(vc_mbf_profile, &word, TMO_POL));
+
+        if (b_more)
+        {
+            vc_obstacle(word);
+        }
+
+        count++;
+    }
+}
+
+static void
+vc_obstacle (uint32_t word)
+{
+    static char const * const best_name[] =
+    {
+        "left", "centre", "right", "none"
+    };
+    uint32_t kind = S5_P_KIND(word);
+
+    if (S5_KIND_ALERT == kind)
+    {
+        if (motion_is_estopped())
+        {
+            tm_printf((UB*)"[VC] obstacle at %u cm (already stopped)\n",
+                      (UINT)S5_P_CENTRE(word));
+        }
+        else
+        {
+            tm_printf((UB*)"[VC] obstacle at %u cm: STOP (%d), GP20"
+                      " releases\n", (UINT)S5_P_CENTRE(word),
+                      (INT)motion_estop());
+        }
+    }
+    else if (S5_KIND_PROFILE == kind)
+    {
+        tm_printf((UB*)"[VC] obstacle profile L %u C %u R %u cm,"
+                  " best %s\n", (UINT)S5_P_LEFT(word),
+                  (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word),
+                  best_name[S5_P_BEST(word)]);
+    }
+    else if (S5_KIND_FAULT == kind)
+    {
+        tm_printf((UB*)"[VC] ultrasonic: no echo (missing or dead);"
+                  " not stopping\n");
+    }
+    else
+    {
+        // unused kind code: ignore
     }
 }
 
