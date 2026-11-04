@@ -8,7 +8,15 @@
  * contact); the wheel distance is the arc length of the rear contact's
  * path. Every 10 ms (2 mm at 200 mm/s) the pitch, after the same IIR as
  * the task (y += (x - y) / 4) plus optional noise and bias, and the
- * distance go to imu_hump_update(), as in imu_terrain.c.
+ * distance go to imu_hump_update(), as in imu_terrain.c. Roll gets the
+ * same filter, noise and bias.
+ *
+ * Side mode (one-wheel hump, demo track has it on the right): only one
+ * rear wheel rides the profile, the other wheel and the ball stay on
+ * the flat. Rigid 3-point geometry: roll = asin(z / W) (left wheel up >
+ * 0), pitch = -atan(z / 2 / L). On the car the pitch was smaller than
+ * that (run 38: about 0.4x), so pitch_scale lets a test use the car's
+ * value; the side height must not depend on it.
  *
  * Build and run: ./run_tests.sh
  */
@@ -22,8 +30,10 @@
 
 #define PI          3.14159265358979
 #define L_MM        ((double)IMU_HUMP_BASE_MM)
+#define W_MM        ((double)IMU_HUMP_TRACK_MM)
 #define SPEED       200.0       /* mm/s */
 #define CYCLE_S     0.010
+#define WOBBLE_MM   150.0
 
 typedef struct {
     double start, up, top, down, height;   /* trapezoid, mm */
@@ -69,15 +79,26 @@ typedef struct {
     double bias_ddeg;   /* level error */
     int    stationary;  /* 1: never move, tilt instead */
     double stop_at_mm;  /* > 0: stop moving at this distance for 1.5 s */
+    int    side;        /* 0 full width, +1 left wheel only, -1 right */
+    double pitch_scale; /* side mode: pitch x this (0 = rigid model) */
+    double roll_bias_ddeg; /* roll level error */
+    double wobble_ddeg; /* driving wobble on pitch: +- this, period
+                           WOBBLE_MM of travel (runs 40-42: ~2.5) */
 } sim_opts_t;
+
+static double noise(double amp)
+{
+    return amp * (2.0 * rand() / (double)RAND_MAX - 1.0);
+}
 
 /* Drive length mm over profile p; returns the hump word fields */
 static imu_hump_t run(profile_t const *p, double length, sim_opts_t o,
                       int *p_starts, int *p_ends, double *p_true_max)
 {
     imu_hump_t hump;
-    double xr = 0.0, s = 0.0, next_cycle = 0.0, filt = 0.0;
+    double xr = 0.0, s = 0.0, next_cycle = 0.0, filt = 0.0, rfilt = 0.0;
     double step = 0.05;
+    double scale = (o.pitch_scale > 0.0) ? o.pitch_scale : 1.0;
     imu_event_t ev;
 
     imu_hump_init(&hump);
@@ -86,16 +107,27 @@ static imu_hump_t run(profile_t const *p, double length, sim_opts_t o,
     *p_true_max = 0.0;
 
     while (xr < length) {
-        double xf = front_x(p, xr);
-        double zr = ground(p, xr), zf = ground(p, xf);
-        double pitch = atan2(zf - zr, xf - xr) * 1800.0 / PI;
+        double pitch, roll = 0.0, zr;
 
-        if (zf > *p_true_max) *p_true_max = zf;
+        if (0 == o.side) {
+            double xf = front_x(p, xr);
+            double zf = ground(p, xf);
+            zr = ground(p, xr);
+            pitch = atan2(zf - zr, xf - xr) * 1800.0 / PI;
+            if (zf > *p_true_max) *p_true_max = zf;
+        } else {
+            double zw = ground(p, xr);      /* the one wheel's height */
+            zr = 0.0;                       /* axle centre path ~ flat */
+            roll = o.side * asin(zw / W_MM) * 1800.0 / PI;
+            pitch = -scale * atan(zw / 2.0 / L_MM) * 1800.0 / PI;
+            if (zw > *p_true_max) *p_true_max = zw;
+        }
 
         if ((o.stop_at_mm > 0.0) && (s >= o.stop_at_mm)) {
             int i;
             for (i = 0; i < 150; i++) {     /* 1.5 s standing still */
                 ev = imu_hump_update(&hump, (int32_t)lround(filt),
+                                     (int32_t)lround(rfilt),
                                      (int32_t)floor(s));
                 if (ev == IMU_EVT_HUMP_START) (*p_starts)++;
                 if (ev == IMU_EVT_HUMP_END) (*p_ends)++;
@@ -104,10 +136,13 @@ static imu_hump_t run(profile_t const *p, double length, sim_opts_t o,
         }
 
         if (s >= next_cycle) {
-            double meas = pitch + o.bias_ddeg
-                + o.noise_ddeg * (2.0 * rand() / (double)RAND_MAX - 1.0);
+            double meas = pitch + o.bias_ddeg + noise(o.noise_ddeg)
+                + o.wobble_ddeg * sin(2.0 * PI * s / WOBBLE_MM);
+            double rmeas = roll + o.roll_bias_ddeg + noise(o.noise_ddeg);
             filt += (meas - filt) / 4.0;
+            rfilt += (rmeas - rfilt) / 4.0;
             ev = imu_hump_update(&hump, (int32_t)lround(filt),
+                                 (int32_t)lround(rfilt),
                                  o.stationary ? 0 : (int32_t)floor(s));
             if (ev == IMU_EVT_HUMP_START) (*p_starts)++;
             if (ev == IMU_EVT_HUMP_END) (*p_ends)++;
@@ -117,9 +152,15 @@ static imu_hump_t run(profile_t const *p, double length, sim_opts_t o,
         if (o.stationary) {
             s += step;              /* time passes, distance does not */
             xr += step;             /* (pitch from the profile only) */
-        } else {
+        } else if (0 == o.side) {
             double nx = xr + step;
             s += hypot(step, ground(p, nx) - zr);
+            xr = nx;
+        } else {
+            /* side mode: the axle centre (mean of the wheels) rises by
+               half the one wheel's rise */
+            double nx = xr + step;
+            s += hypot(step, 0.5 * (ground(p, nx) - ground(p, xr)));
             xr = nx;
         }
     }
@@ -169,8 +210,13 @@ static int check_pack(void)
 
 int main(void)
 {
-    sim_opts_t clean = {0.0, 0.0, 0, 0.0};
-    sim_opts_t noisy = {3.0, 2.0, 0, 0.0};       /* +-0.3 deg noise, 0.2 bias */
+    sim_opts_t clean = {0.0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0};
+    /* +-0.3 deg noise on pitch and roll, 0.2 deg bias on both */
+    sim_opts_t noisy = {3.0, 2.0, 0, 0.0, 0, 0.0, 2.0, 0.0};
+    /* one-wheel humps: rigid geometry, and the car's smaller pitch */
+    sim_opts_t right = {0.0, 0.0, 0, 0.0, -1, 0.0, 0.0, 0.0};
+    sim_opts_t left = {0.0, 0.0, 0, 0.0, 1, 0.0, 0.0, 0.0};
+    sim_opts_t right_car = {3.0, 2.0, 0, 0.0, -1, 0.4, 2.0, 0.0};
     int ok = 1;
 
     srand(1);
@@ -179,31 +225,45 @@ int main(void)
                 23, 0}, 800, clean, 1, 1.5);
     ok &= check("23 mm hump, noise + bias", (profile_t){300, 30, 40, 30,
                 23, 0}, 800, noisy, 1, 2.0);
-    /* longer than the wheelbase: the recurrence must add up */
-    ok &= check("30 mm long hump (200 mm ramps)", (profile_t){300, 200,
-                150, 200, 30, 0}, 1200, clean, 1, 1.5);
+    /* longer than the wheelbase: the recurrence must add up. Its 150 mm
+       flat top gives ~115 mm below OFF (2.5 deg), more than
+       IMU_HUMP_END_MM, so the hump closes ON TOP with the right height;
+       the way down then opens a second event that ends without a result
+       (a down ramp never rises). Expected: 2 starts, exactly 1 end. */
+    {
+        int st, en;
+        double t;
+        profile_t lng = {300, 200, 150, 200, 30, 0};
+        imu_hump_t h = run(&lng, 1200, clean, &st, &en, &t);
+        int c = (en == 1) && (st == 2) && (h.max_mm == h.last_mm)
+                && (fabs((double)h.last_mm - t) <= 1.5);
+        printf("%-34s true %6.1f mm  measured %3u mm  humps %d/%d  %s\n",
+               "30 mm long hump (200 mm ramps)", t, (unsigned)h.last_mm,
+               st, en, c ? "PASS" : "FAIL");
+        ok &= c;
+    }
     ok &= check("40 mm smooth bump (120 mm)", (profile_t){300, 60, 0, 60,
                 40, 1}, 900, clean, 1, 2.0);
     /* the course's ramp, about 10 mm high */
     ok &= check("10 mm ramp hump", (profile_t){300, 40, 60, 40, 10, 0}, 800,
                 clean, 1, 1.0);
-    /* small: max pitch asin(8/85) = 5.4 deg, above the 3 deg start */
+    /* small: max pitch asin(8/85) = 5.4 deg, above the 4 deg start */
     ok &= check("8 mm hump", (profile_t){300, 25, 30, 25, 8, 0}, 800,
                 clean, 1, 1.0);
     /* flat, noisy, level error: no hump at all over 2 m */
     ok &= check("flat 2 m, noise + bias", (profile_t){300, 30, 40, 30, 0,
                 0}, 2000, noisy, 0, 0.0);
-    /* level zero taken elsewhere: constant 3.5 deg on flat ground for
+    /* level zero taken elsewhere: constant 4.5 deg on flat ground for
        3 m. Must never be reported as a hump (dropped as too long) */
     {
         int st, en;
         double t;
-        sim_opts_t tilted = {0.0, 35.0, 0, 0.0};
+        sim_opts_t tilted = {0.0, 45.0, 0, 0.0, 0, 0.0, 0.0, 0.0};
         profile_t flat = {300, 30, 40, 30, 0, 0};
         imu_hump_t h = run(&flat, 3000, tilted, &st, &en, &t);
         int c = (en == 0) && (h.max_mm == 0U) && !h.b_valid;
         printf("%-34s true %6.1f mm  measured %3u mm  ends %d  %s\n",
-               "3.5 deg level error, 3 m flat", t, (unsigned)h.max_mm, en,
+               "4.5 deg level error, 3 m flat", t, (unsigned)h.max_mm, en,
                c ? "PASS" : "FAIL");
         ok &= c;
     }
@@ -212,7 +272,8 @@ int main(void)
     {
         int st, en;
         double t;
-        sim_opts_t stop = {0.0, 0.0, 0, 300.0 + 40.0 + 30.0};
+        sim_opts_t stop = {0.0, 0.0, 0, 300.0 + 40.0 + 30.0,
+                           0, 0.0, 0.0, 0.0};
         profile_t ramp = {300, 40, 60, 40, 10, 0};
         imu_hump_t h = run(&ramp, 800, stop, &st, &en, &t);
         int c = (en == 1) && (h.last_mm >= 9U) && (h.last_mm <= 11U);
@@ -223,7 +284,7 @@ int main(void)
     }
     /* car tilted by hand without moving (pitch from a 23 mm hump) */
     {
-        sim_opts_t still = {0.0, 0.0, 1, 0.0};
+        sim_opts_t still = {0.0, 0.0, 1, 0.0, 0, 0.0, 0.0, 0.0};
         ok &= check("tilted, not moving", (profile_t){300, 30, 40, 30, 23,
                     0}, 800, still, 0, 0.0);
     }
@@ -239,6 +300,41 @@ int main(void)
                "280 mm hump: clamp at 255", t, (unsigned)h.last_mm,
                c ? "PASS" : "FAIL");
         ok &= c;
+    }
+    /* One-wheel (side) humps: roll gives W x sin(|roll|) */
+    ok &= check("side: 23 mm under right wheel", (profile_t){300, 30, 40,
+                30, 23, 0}, 800, right, 1, 1.5);
+    ok &= check("side: 23 mm under left wheel", (profile_t){300, 30, 40,
+                30, 23, 0}, 800, left, 1, 1.5);
+    /* the 10 mm ramp: roll asin(10/113) = 5.1 deg, above the start */
+    ok &= check("side: 10 mm right, car pitch+noise", (profile_t){300, 40,
+                60, 40, 10, 0}, 800, right_car, 1, 1.5);
+    /* smallest side hump that starts: 113 x sin(4 deg) = 7.9 mm */
+    ok &= check("side: 4 mm right (below start)", (profile_t){300, 30, 40,
+                30, 4, 0}, 800, right, 0, 0.0);
+    /* roll level error 4.5 deg on flat ground for 3 m: dropped */
+    {
+        int st, en;
+        double t;
+        sim_opts_t rolled = {0.0, 0.0, 0, 0.0, 0, 0.0, 45.0, 0.0};
+        profile_t flat = {300, 30, 40, 30, 0, 0};
+        imu_hump_t h = run(&flat, 3000, rolled, &st, &en, &t);
+        int c = (en == 0) && (h.max_mm == 0U) && !h.b_valid;
+        printf("%-34s true %6.1f mm  measured %3u mm  ends %d  %s\n",
+               "4.5 deg roll error, 3 m flat", t, (unsigned)h.max_mm, en,
+               c ? "PASS" : "FAIL");
+        ok &= c;
+    }
+    /* Driving wobble as measured on the car (runs 40-42): +-2.2 deg of
+       pitch on the flat. Must not start a hump, and must not stop a
+       real one from ending (with OFF 1.5 deg it never ended) */
+    {
+        sim_opts_t wobble = {1.0, 0.0, 0, 0.0, 0, 0.0, 0.0, 22.0};
+        sim_opts_t wobble_r = {1.0, 0.0, 0, 0.0, -1, 0.4, 0.0, 22.0};
+        ok &= check("flat 2 m, driving wobble 2.2 deg", (profile_t){300,
+                    30, 40, 30, 0, 0}, 2000, wobble, 0, 0.0);
+        ok &= check("side: 10 mm right + wobble 2.2 deg", (profile_t){300,
+                    40, 60, 40, 10, 0}, 900, wobble_r, 1, 1.5);
     }
     ok &= check_pack();
 

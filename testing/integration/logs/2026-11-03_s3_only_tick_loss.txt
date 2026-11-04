@@ -1,0 +1,76 @@
+S3-only test image (APP_TEST_ONLY 3) with PR #6 telemetry monitor printing
+Date: 2026-11-03. Branch integrate/s4-onto-main at f011d8c (PR #6 merged),
+image build_make/s3_only_smp1_usb_cdc_wifi_test.uf2.
+
+Finding 1 (measured): S3-U01 FAIL, 200 ms tk_dly_tsk read 331087 us on
+TIMERAWL, while the line task's seq advanced only 19 cycles (19-20 = 200 ms
+of KERNEL time). Clocks are configured right (PLL 125 MHz for SysTick,
+12 MHz / 12 = 1 MHz TIMER, kernel/sysdepend/pico_rp2040/cpu_clock.c), so
+kernel ticks were lost during the window.
+First guess (WRONG): the PR #6 telemetry printing (tm_printf masks
+interrupts per call). Rerun 2 with printing switched off read 331240 us,
+the same. Change reverted.
+Current hypothesis (not proven): the window is the first thing after boot
+and overlaps cyw43_init() (WiFi firmware download), which holds core 0;
+earlier IMU logs show one ~132 ms gap at start-up too (per max 131952 us),
+while steady-state IMU periods are 9-11 ms. Test: image
+s3_only_settle_smp1_usb_cdc_wifi_test.uf2 (APP_TEST_SETTLE_MS 5000, tests
+start 5 s after boot). PASS there = start-up only, not a running problem.
+WIFI=none build not possible: subsystem1 needs cyw43_utk.h.
+
+Finding 2: S3-U06 readings never changed for the whole window:
+C=1 R=0 BC=0 mode=1 on every line. CONFIRM with the tester whether black was
+moved under each sensor. If it was: the inputs do not follow the sensors
+(check each module's LED, the comparator pot, sensor height, Grove 5/6/7).
+
+--- console (condensed: [TELEM] blocks after the first removed) ---
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+s1: telemetry monitor every 1000 ms
+[IMU] test build: imu_terrain not started, unit tests own I2C1
+all subsystems started
+[TEST] === test run start (only 3, 0 = all) ===
+S3: barcode disabled (S3_BARCODE_ENABLE 0)
+[TEST] S3 info: 200 ms = 331087 us
+[TEST] S3-U01 FAIL  TIMERAWL counts 1 us per tick   (../app_program/subsystem3/subsystem3_test.c:58)
+[TEST] S3 info: seq advanced 19 in 200 ms
+[TEST] S3-U02 PASS  line_state seq advances once per 10 ms
+[TEST] S3-U03 PASS  line task running (mode is not INIT)
+[TEST] S3 info: max exec 67 us, overruns 0 at boot, 0 in test window
+[TEST] S3-U04 PASS  cycle < 1 ms and no missed 10 ms slot
+[TEST] S3-U05 PASS  barcode edge ring never overflowed
+[TEST] S3-U06 move black under C, R, BC for 15 s
+[TEST] S3 start C=1 R=0 BC=0 mode=1 err=64
+[TEST] S3 C=1 R=0 BC=0 mode=1 err=64      (x6, one per second, no change)
+  (telem not queued: -50)                 (E_TMOUT: WiFi down, queue full)
+
+--- rerun 2 (S1_TELEM_PRINT 0, no telemetry printing), same image otherwise ---
+[TEST] === test run start (only 3, 0 = all) ===
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+S3: barcode disabled (S3_BARCODE_ENABLE 0)
+[TEST] S3 info: 200 ms = 331240 us
+[TEST] S3-U01 FAIL  TIMERAWL counts 1 us per tick   (../app_program/subsystem3/subsystem3_test.c:58)
+[TEST] S3 info: seq advanced 19 in 200 ms
+[TEST] S3-U02..U05 PASS (max exec 59 us, 0 overruns)
+[TEST] S3-U06 move black under C, R, BC for 15 s
+[TEST] S3 start C=1 R=0 BC=0 mode=1 err=64
+[TEST] S3 C=1 R=0 BC=0 mode=1 err=64      (x16, one per second, no change)
+[TEST] S3-U06 done
+[TEST] S3-U07 SKIPPED: S3_BARCODE_ENABLE is 0
+[TEST] subsystem3 SUMMARY 4 passed, 1 failed
+
+--- rerun 3: s3_only_settle image (APP_TEST_SETTLE_MS 5000), PR #6 printing ON ---
+RESULT: S3-U01 PASS, 200 ms = 209824 us, seq advanced 21. Same printing load
+as run 1, so the printing was never the cause; the 331 ms only happens when
+the window overlaps boot / cyw43_init(). CONFIRMED start-up only.
+S3-U04 max exec 133 us, overruns 1 at boot, 0 in the test window.
+S3-U06 (tape moved by the tester): ALL THREE sensors toggle:
+  C 1 -> 0 -> 1 -> 0 ...  R 0 -> 1 -> 0 ...  BC 0 -> 1 -> 0 -> 1 ...
+  e.g. "C=1 R=1 BC=0 err=74", "C=0 R=1 BC=1 err=96", "C=1 R=0 BC=1 err=64"
+  Runs 1-2 showed no change because the tape was not moved under C then.
+SUMMARY subsystem3 5 passed, 0 failed (S3-U07 skipped, barcode disabled).
+Conclusion: the IR inputs work on the bench. The car losing the line is not a
+dead sensor: look at the follower tuning (Buddy 3: DRIVE_BASE_DUTY 120,
+LINE_ERR_GUESS 16, only centre + right sensors) and sensor height on the track.
