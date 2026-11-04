@@ -1,6 +1,6 @@
 /*
  *	subsystem2.h
- *	Subsystem 2 -- Producer (sample source).  Student ID: <student ID>.
+ *	Subsystem 2 -- Motion control.  Student ID: <student ID>.
  *
  *	Public interface of subsystem 2.  Other subsystems include it as
  *	"../subsystem2/subsystem2.h".
@@ -12,32 +12,18 @@
 #include "../app.h"
 #include "motion_control.h"
 
-#define S2_PRI_PRODUCER		14	/* priority band 14-15 (TEAM.md) */
-#define S2_PERIOD_MS		300	/* one sample every 300 ms */
-
-/* ---------------------------------------------------------------------
- *  IF-01 data format: one sample, sent to subsystem 3's mailbox.
- *  A mailbox message MUST start with a T_MSG header: the kernel links
- *  messages together through it, so the data itself is never copied.
- * --------------------------------------------------------------------- */
-typedef struct {
-	T_MSG	hdr;		/* used by the kernel, do not touch */
-	UW	seq;		/* sample sequence number */
-	UW	time_ms;	/* system time when the sample was taken */
-	INT	value;		/* the "measurement", 0..100 */
-	INT	prc;		/* processor (core) that produced it: 1 or 2 */
-} SAMPLE_MSG;
-
-#define S2_POOL_COUNT	4	/* at most 4 samples in flight */
-
-/* IF-02: the receiver of a sample gives its memory block back to
-   mpf_samples (tk_rel_mpf) and then a slot back to sem_slots
-   (tk_sig_sem, count 1).  Nothing else may use these two objects. */
-IMPORT ID	sem_slots;
-IMPORT ID	mpf_samples;
+#define S2_PRI_MOTION		5	/* Motion Control, TEAM.md section 4 */
+#define S2_DIST_PERIOD_MS	10	/* IF-10 publish period, 1 tick */
 
 /* Private to subsystem 2 */
 
+/*
+ * 1 = run the move and turn try-out once after boot (motion_demo.c). The
+ * car drives by itself, so keep it 0 in commits. Needs S3_DRIVE_SWITCH 0.
+ */
+#define S2_MOVE_DEMO		0
+#define S2_PRI_DEMO		15	/* below Motion, as the VC test drive */
+void motion_demo_task(INT stacd, void *exinf);
 
 
 #endif /* SUBSYSTEM2_H */

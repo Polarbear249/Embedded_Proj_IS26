@@ -1,0 +1,14 @@
+Pico W on the car, USB serial COM6, 2026-11-04. Move demo image, S2_MOVE_DEMO 1, S3_DRIVE_SWITCH 0, MOVE_TURN_SCALE_PCT 97.
+Car on the floor. WiFi down. Tester by eye: U-turn about 10 deg short. Nothing measured.
+Code: merge of 425640b into 5625b60, uncommitted, S5 as the empty stub.
+Only the demo lines and the settled counts are kept.
+[S2 demo] moves start in 5000 ms: clear the floor
+[IMU] hump end at d 298 mm: height 15 mm (highest 15 mm)
+[S2 demo] forward 30 cm: accepted 0, state 0, faults 0x0, 2350 ms, L 1829 R 1820 counts, odometer 298 mm
+[S2 demo] backward 30 cm: accepted 0, state 0, faults 0x0, 2200 ms, L -7 R -7 counts, odometer -1 mm
+[S2 demo] left 90 deg: accepted 0, state 0, faults 0x0, 850 ms, L -518 R 511 counts, odometer 0 mm
+[S2 demo] right 90 deg: accepted 0, state 0, faults 0x0, 800 ms, L -3 R -3 counts, odometer 0 mm
+[S2 demo] U-turn: accepted 0, state 0, faults 0x0, 1600 ms, L -1040 R 1037 counts, odometer 0 mm
+[S2 demo] done: reset the board to run it again
+Settled encoder counts after each move (L/R): 1829/1820, -8/-7, -518/511, -3/-3, -1042/1037
+Change per move (L/R): +1829/+1820, -1837/-1827, -510/+518, +515/-514, -1039/+1040

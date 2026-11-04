@@ -1,0 +1,16 @@
+Pico W on the car, USB serial COM6, 2026-11-04. Move demo image, S2_MOVE_DEMO 1, S3_DRIVE_SWITCH 0.
+Wheels raised: IMU heading stayed 117.1 to 117.8 deg through every turn. WiFi down. GP20 not seen in this log.
+Code: merge of 425640b into 5625b60, uncommitted, S5 as the empty stub.
+Only the demo lines and the first IMU timing lines are kept.
+[S2 demo] moves start in 5000 ms: clear the floor
+[S2 demo] forward 30 cm: accepted 0, state 0, faults 0x0, 1750 ms, L 1836 R 1832 counts, odometer 299 mm
+[S2 demo] backward 30 cm: accepted 0, state 0, faults 0x0, 1800 ms, L 5 R 4 counts, odometer 1 mm
+[S2 demo] left 90 deg: accepted 0, state 0, faults 0x0, 550 ms, L -543 R 545 counts, odometer 0 mm
+[S2 demo] right 90 deg: accepted 0, state 0, faults 0x0, 550 ms, L 5 R 6 counts, odometer 0 mm
+[S2 demo] U-turn: accepted 0, state 0, faults 0x0, 1050 ms, L -1070 R 1079 counts, odometer 1 mm
+[S2 demo] done: reset the board to run it again
+Settled encoder counts after each move (L/R): 1840/1835, -3/2, -545/545, 7/6, -1082/1082
+[IMU] t ACTIVE ... per 1078-132609 late 1 err 0
+[IMU] t ACTIVE ... per 4229-15677 late 1 err 0
+[IMU] t ACTIVE ... per 7327-12785 late 0 err 0
+Later IMU windows: period between 6574 and 13567 us, late 0, including during the moves.

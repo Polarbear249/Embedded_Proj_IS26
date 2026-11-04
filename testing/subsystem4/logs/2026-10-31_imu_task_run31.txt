@@ -1,0 +1,37 @@
+Date:    2026-10-31
+Run:     31 (imu_terrain task, normal build, S4-U32 with probe-first recovery)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted (probe-first
+         recovery, imu_configure, I2C timeout snapshot)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8)
+Setup:   Car flat until ACTIVE, then the SDA jumper pulled and plugged back
+         in several times.
+Result:  Level zero pitch 1.2 roll 0.5 deg, ACTIVE. Timing normal (period
+         9.12..10.90 ms, WCET 2.19 ms).
+         S4-U32 PASS: 4 faults (5 x NACK_ADDR -> IMU_FAULT -> FAULT), each
+         recovered by the WHO_AM_I probe on the existing set-up ("sensor
+         answers again (probe, no re-init)" -> ACTIVE) within 1-5 s of the
+         wire going back. While the wire was out each probe failed with
+         NACK_ADDR (SDA 1 SCL 1) and cost 0.35 ms (loop max 338..352 us),
+         instead of 80 ms per failed re-init before. No full re-init was
+         needed, so the re-init timeout snapshot never triggered.
+         After the last recovery pitch settled at 1.3..2.0 deg and roll
+         0.4..0.6 deg (about 0 before the wire was touched): the module or
+         the car shifted while the jumper was handled. Together with the
+         S4-U24 fail (run 28) this points at a mount that is not rigid.
+         Level reference kept through every fault (as designed).
+
+---- console: key lines ----
+[IMU] level zero: pitch 12 roll 5 (0.1 deg)
+[IMU] 5 bad reads in a row, last NACK_ADDR (no device at address): IMU_FAULT
+[IMU] state FAULT
+[IMU] sensor answers again (probe, no re-init)
+[IMU] state ACTIVE
+[IMU] 5 bad reads in a row, last NACK_ADDR (no device at address): IMU_FAULT
+[IMU] state FAULT
+[IMU] probe: NACK_ADDR (no device at address) (SDA 1 SCL 1), retry in 1 s
+[IMU] t FAULT acc 0-0 mag 0 loop 0-352 wcet 2187 per 9116-10897 late 0 err 0 | p 1 r 1 hdg 1431 d 0
+[IMU] sensor answers again (probe, no re-init)
+[IMU] state ACTIVE
+(... two more fault / recovery cycles ...)
+[IMU] t ACTIVE acc 907-929 mag 910 loop 916-2174 wcet 2187 per 9343-10671 late 0 err 0 | p 1 r -3 hdg 1431 d 0
+[IMU] t ACTIVE acc 907-918 mag 909 loop 915-1841 wcet 2187 per 9512-10496 late 0 err 0 | p 14 r 6 hdg 1424 d 0

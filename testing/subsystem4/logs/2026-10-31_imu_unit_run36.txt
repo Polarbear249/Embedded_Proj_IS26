@@ -1,0 +1,31 @@
+Date:    2026-10-31
+Run:     36 (make TEST=1, car mode, module in its original orientation)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2
+Setup:   Car on a chair seat (a different chair from earlier spins; tester
+         expects it may be slightly less accurate). 2 full turns per spin.
+Result:  S1 5/7 (U09/U10 need the hotspot + NET=lwip MQTT=1), S2 3/3,
+         S4 bench 7/7, S5 1/1.
+         Level zero S4-U23/U24 PASS: reference pitch 4.4 deg (seat slopes),
+         turned 180 -3.8 deg -> mount tilt 0.3 / 0.1 deg, seat slope
+         4.1 / 0.1 deg; back on the marks 0.0 / -0.1 deg.
+         Magnetometer S4-U25/U26 PASS:
+           span X=10220 Y=10397, ratio 98 %
+           offset x=-1141 y=1597: STORED in imu_calib.h
+           scale 1008/991: about 1000, kept 1000
+           check spin: offset only RMS 1 % min/max 8 %;
+                       offset + scale RMS 2 % min/max 6 %
+           Z moved 1114 / 1176 counts (car tilted while turned; warning)
+         Derived: 8 % min/max = offset error about 4 % of the radius,
+         heading error about +-2.3 deg at this place. Best spin so far.
+
+---- key lines ----
+[IMU] level reference (mount + floor)  pitch 4.4 deg  roll 0.2 deg
+[IMU] mount tilt  (ref + turned) / 2  pitch 0.3 deg  roll 0.1 deg
+[IMU] floor slope (ref - turned) / 2  pitch 4.1 deg  roll 0.1 deg
+[TEST] S4-U24 PASS  flat again reads pitch and roll 0 +-0.5 deg
+[IMU] span X=10220 Y=10397 counts (ratio 98 %, 100 = no soft-iron)
+[IMU] paste into imu_calib.h: MAG_OFF x=-1141 y=1597 z=0
+[IMU]   offset only     RMS 1 %  min/max 8 %
+[IMU]   offset + scale  RMS 2 %  min/max 6 %
+[TEST] S4-U26 PASS  radius spread (offset + scale) <= 25 % of its mean

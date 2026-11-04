@@ -1,0 +1,87 @@
+Axis check after raising the IMU mount (away from the power source)
+Date: 2026-11-02. Image: mtk3pico_smp1_usb_cdc_wifi.uf2 (S3 line drive on,
+GP20 e-stop), branch integrate/s4-onto-main at 8aaf476.
+Procedure: car driving on the line; nose (ball caster end) lifted by hand,
+then one side lifted. Which side was lifted for roll: NOT RECORDED (to ask).
+Result: pitch sign PASS (nose up -> p up to +34.2 deg). Roll went to about
+-14 deg (code: roll > 0 = left side up). PASS if the right side was lifted,
+FAIL (Y axis reversed) if the left side was lifted.
+Note: "hump ... height 48 mm" is an artefact: the wheels kept driving while
+the nose was held up. Heading is stale until the magnetometer is redone.
+Level zero of the new mount: pitch -1.0 deg, roll -0.1 deg.
+Tester (2026-11-02): the LEFT side was lifted -> roll read negative.
+Not accepted as a Y-axis fault yet, because it contradicts two things:
+ 1. Encoders: while roll read -14.3 deg, R jumped 230 -> 694 counts and
+    L only 148 -> 175. A lifted wheel spins free, so this looks like the
+    RIGHT encoder's wheel was in the air.
+ 2. Geometry: pitch PASS (+X forward) and level zero roll -0.1 deg
+    (so +Z up, else roll would be near 180 deg). The chip axes are
+    right-handed and no code remaps them, so Y = Z x X must point left.
+    A reversed Y alone is impossible for a rigid mount.
+Open: "left" seen from behind the car (car's left) or facing its nose
+(car's right)? Or are the encoder L/R labels swapped? Recheck statically.
+RESOLVED 2026-11-03 (run 38): car's left up -> roll +11.2 deg, right up ->
+-10.4 deg, encoder labels correct. Roll sign PASS; this lift was the car's
+right side.
+
+--- console ---
+[VC] GP20 = emergency stop (press again to release)
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+S3: barcode disabled (S3_BARCODE_ENABLE 0)
+S3: drive ON: place the car on the line, it starts after 2 s
+[IMU] state CALIBRATING
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: pitch -10 roll -1 (0.1 deg)
+[IMU] state ACTIVE
+S3 drive: C=1 R=0 mode=1 err=64 arm=99/200 armed=0 wheels=0/0 motion=0
+[IMU] t ACTIVE acc 910-2214 mag 916 loop 916-2247 wcet 2247 per 1077-131940 late 1 err 0 | p 1 r -2 hdg 1790 d 0 L 0 R 0 | z 0 H 0/0
+S3 drive: C=1 R=0 mode=1 err=64 arm=199/200 armed=0 wheels=0/0 motion=0
+S3: drive armed, following the line
+[IMU] t ACTIVE acc 911-953 mag 912 loop 962-1948 wcet 2247 per 6785-13300 late 0 err 0 | p 1 r 2 hdg 1792 d 0 L 0 R 0 | z 0 H 0/0
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0
+[IMU] t ACTIVE acc 910-941 mag 912 loop 969-1939 wcet 2247 per 9032-10988 late 0 err 0 | p 93 r 0 hdg 1789 d 10 L 58 R 74 | z 0 H 0/0
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0
+[IMU] t ACTIVE acc 914-942 mag 912 loop 972-1939 wcet 2247 per 8968-11001 late 0 err 0 | p 193 r -3 hdg -1799 d 11 L 62 R 74 | z 16 H 0/0
+s1: link down, status=0 kpolls=184
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0
+[IMU] t ACTIVE acc 913-944 mag 912 loop 972-1944 wcet 2247 per 9004-10905 late 0 err 0 | p 117 r -14 hdg 1788 d 13 L 62 R 102 | z 20 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 914-942 mag 912 loop 976-1961 wcet 2247 per 8993-11021 late 0 err 0 | p 342 r -8 hdg -1789 d 21 L 122 R 147 | z 50 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 915-941 mag 911 loop 977-1941 wcet 2247 per 8905-11044 late 0 err 0 | p 281 r -5 hdg -1779 d 22 L 123 R 147 | z 40 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 912-941 mag 915 loop 971-1954 wcet 2247 per 8965-10955 late 0 err 0 | p 273 r -7 hdg -1788 d 22 L 123 R 147 | z 0 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 913-944 mag 913 loop 977-1943 wcet 2247 per 9084-11019 late 0 err 0 | p 285 r -6 hdg -1800 d 22 L 123 R 152 | z 0 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 912-944 mag 912 loop 976-1948 wcet 2247 per 8899-11072 late 0 err 0 | p 267 r 1 hdg -1787 d 22 L 123 R 156 | z 0 H 0/0
+s1: link down, status=0 kpolls=447
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 912-942 mag 911 loop 975-1942 wcet 2247 per 8989-10927 late 0 err 0 | p 252 r -9 hdg -1794 d 24 L 136 R 160 | z 35 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 910-943 mag 913 loop 974-1943 wcet 2247 per 9028-10985 late 0 err 0 | p 319 r -4 hdg -1793 d 25 L 140 R 173 | z 42 H 0/0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 911-942 mag 912 loop 979-1964 wcet 2247 per 8903-11074 late 0 err 0 | p 295 r 12 hdg -1770 d 30 L 148 R 230 | z 42 H 0/0
+[IMU] hump start at d 42 mm
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t HUMP_UP acc 911-942 mag 912 loop 986-1965 wcet 2247 per 8945-10961 late 0 err 0 | p 71 r -143 hdg -1780 d 71 L 175 R 694 | z 10 H 0/0
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t HUMP_UP acc 911-941 mag 911 loop 976-1948 wcet 2247 per 8989-11020 late 0 err 0 | p 7 r -125 hdg -1797 d 78 L 204 R 759 | z 24 H 0/0
+s1: link down, status=0 kpolls=709
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0
+[IMU] t HUMP_DOWN acc 914-945 mag 913 loop 981-1947 wcet 2247 per 8901-11064 late 0 err 0 | p -18 r -130 hdg 1778 d 81 L 205 R 788 | z -3 H 0/0
+[IMU] hump end at d 81 mm: height 48 mm (highest 48 mm)
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 912-943 mag 911 loop 976-1943 wcet 2247 per 8952-10861 late 0 err 0 | p -8 r -109 hdg -1781 d 84 L 226 R 803 | z -6 H 48/48
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+[IMU] t ACTIVE acc 913-938 mag 913 loop 979-1938 wcet 2247 per 8993-11033 late 0 err 0 | p -22 r -122 hdg -1793 d 85 L 232 R 810 | z 0 H 48/48
+S3 drive: C=0 R=0 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0
+[IMU] t ACTIVE acc 914-947 mag 912 loop 983-1961 wcet 2247 per 8903-11046 late 0 err 0 | p -29 r -103 hdg 1750 d 120 L 418 R 1057 | z 0 H 48/48
+S3 drive: C=0 R=0 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0
+[IMU] t ACTIVE acc 914-942 mag 912 loop 983-1964 wcet 2247 per 8953-10952 late 0 err 0 | p -22 r -23 hdg 1695 d 159 L 634 R 1319 | z 0 H 48/48
+s1: link down, status=0 kpolls=972
+S3 drive: C=0 R=1 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0
+[IMU] t ACTIVE acc 912-945 mag 913 loop 979-1955 wcet 2247 per 8976-11023 late 0 err 0 | p 6 r -3 hdg 1747 d 193 L 898 R 1474 | z 0 H 48/48

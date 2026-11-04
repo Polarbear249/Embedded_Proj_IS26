@@ -1,0 +1,71 @@
+Runs 40-42: VC test drive (PI speed mode, 20 RPM, straight 1500 mm), 10 mm
+ramp under the RIGHT wheel. Image build_make/hump_test_drive.uf2 (2026-11-03
+09:51): integrate/s4-onto-main f011d8c + uncommitted side-hump code (W 113).
+Condensed: only [IMU]/[VC] lines and the S2 encoder fields kept; the PR #6
+[TELEM] blocks removed. Full paste in the chat of 2026-11-03.
+
+Findings (to CONFIRM with the tester where marked):
+- PI mode drove over the ramp in all 3 runs: no stall (the line-follow run
+  stalled at duty 88 = 8.8 % on the climbing wheel). -> S3's open-loop duty
+  cap, not the supply, caused that stall.
+- Side model works on the car: run 42 roll -4.7..-5.5 deg (right side up),
+  z 9-10 mm = 113 x sin(5.5 deg) = 10.8 mm for the 10 mm ramp.
+- No hump END in any run (H 0/0): on the flat, pitch swings +-2.5 deg while
+  driving (e.g. run 42 d 89 p 3.5, d 302 p 2.5, d 365 p -2.4), above the
+  1.5 deg OFF threshold, so the 105 mm quiet stretch never happens. Run 41
+  also started a false event at d 31 (drive-off).
+- Every run ends mid-drive with a new boot banner and no "[VC] ... stop"
+  line (run 40 at d 619, run 41 at d 346, run 42 at d 365). CONFIRM: reset
+  by hand, or a brown-out reset (motors on USB power)?
+- Run 40 d 487-617: pitch +14.5..+26.1 deg, impacts 783 / 1215 mg: the car
+  hit or climbed something. CONFIRM what.
+
+--- run 40 ---
+[IMU] level zero: pitch 6 roll 11 (0.1 deg)
+[VC] test drive ready: press GP20 to drive 1500 mm at 20 RPM (press again to stop)
+[IMU] impact: 436 mg from 1 g over 2 samples (#1)
+[IMU] t ACTIVE  | p -49 r -2  d 36  L 214 R 228 | z 0
+[IMU] t ACTIVE  | p -3 r -14  d 65  L 374 R 430 | z 0
+[IMU] t ACTIVE  | p -15 r 9   d 105 L 612 R 681 | z 0
+[IMU] t ACTIVE  | p 20 r -1   d 151 L 900 R 953 | z 0
+[IMU] t ACTIVE  | p -39 r -26 d 200 L 1201 R 1253 | z 5
+[IMU] hump start at d 223 mm
+[IMU] t HUMP_DOWN | p -26 r -36 d 256 L 1519 R 1620 | z 7
+[IMU] t HUMP_UP   | p 12 r -3   d 323 L 1923 R 2043 | z 4
+[IMU] t HUMP_DOWN | p -9 r 16   d 387 | z 3
+[IMU] t HUMP_DOWN | p -4 r -15  d 444 | z 2
+[IMU] impact: 783 mg from 1 g over 2 samples (#2)
+[IMU] t HUMP_UP   | p 145 r 32  d 487 L 3030 R 2933 | z 29
+[IMU] t HUMP_UP   | p 261 r 2   d 549 L 3469 R 3261 | z 36
+[IMU] impact: 1215 mg from 1 g over 4 samples (#3)
+[IMU] impact: 421 / 425 / 571 mg (#4-#6)
+[IMU] t HUMP_DOWN | p -50 r 16  d 617 L 3816 R 3739 | z 32   H 0/0
+(new boot banner here)
+
+--- run 41 ---
+[IMU] level zero: pitch 10 roll 10 (0.1 deg)
+[IMU] t ACTIVE  | p -14 r 21 d 0 | z 0
+[IMU] hump start at d 31 mm                      (drive-off, false)
+[IMU] t HUMP_DOWN | p -8 r 5    d 44  | z 0
+[IMU] t HUMP_UP   | p 10 r 3    d 77  | z 1
+[IMU] t HUMP_DOWN | p -1 r -4   d 118 | z 0
+[IMU] t HUMP_DOWN | p 1 r -17   d 166 | z 3
+[IMU] t HUMP_DOWN | p -22 r -29 d 216 | z 5
+[IMU] t HUMP_UP   | p 14 r 16   d 282 | z 3
+[IMU] t HUMP_UP   | p -13 r -7  d 346 | z 1   H 0/0
+(new boot banner here)
+
+--- run 42 ---
+[IMU] level zero: pitch 9 roll 10 (0.1 deg)
+[IMU] t ACTIVE  | p 23 r 3   d 0   | z 0
+[IMU] impact: 575 mg from 1 g over 2 samples (#1)
+[IMU] t ACTIVE  | p 9 r -12  d 53  L 308 R 346 | z 0
+[IMU] t ACTIVE  | p 35 r -5  d 89  | z 0
+[IMU] t ACTIVE  | p -4 r -6  d 132 | z 0
+[IMU] t ACTIVE  | p 1 r -47  d 179 L 1093 R 1108 | z 9
+[IMU] hump start at d 205 mm
+[IMU] t HUMP_UP   | p 3 r -55  d 235 L 1415 R 1471 | z 10
+[IMU] t HUMP_UP   | p 25 r 3   d 302 | z 0
+[IMU] t HUMP_DOWN | p -24 r -4  d 365 L 2222 R 2258 | z 0   H 0/0
+(paste ends)
+Periods 6.2-13.9 ms, err 0 in all runs; one-off boot gap ~136 ms as before.

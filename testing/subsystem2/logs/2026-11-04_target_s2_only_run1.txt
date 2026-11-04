@@ -1,0 +1,22 @@
+Pico W on the car, USB serial COM6, 2026-11-04. Wheels idle, no motor load. WiFi down (no hotspot).
+Code: merge of 425640b into 5625b60, uncommitted, S5 as the empty stub.
+Build: make TEST=1, with -DAPP_TEST_ONLY=2 -DAPP_TEST_SETTLE_MS=8000 added to the compiler command.
+Only the [TEST] lines are kept; [TELEM] lines between them are removed.
+[TEST] === test run start (only 2, 0 = all) ===
+[TEST] S2-U01 PASS  reject NULL status pointer
+[TEST] S2-U02 PASS  reject negative speed without moving wheels
+[TEST] S2-U04 PASS  reject bad distances
+[TEST] S2-U05 PASS  reject bad angles
+[TEST] S2-U06 PASS  line drive rejects bad speed and lease
+[TEST] S2-U07 PASS  Q_motion accepts a word
+[TEST] S2-U08 PASS  motion task reads Q_motion and refuses a reserved op
+[TEST] S2-U09 PASS  EVG_stop can be set
+[TEST] S2-U10 PASS  motion task latches on EVG_stop
+[TEST] S2-U11 PASS  EVG_stop refuses a move
+[TEST] S2-U12 PASS  EVG_STOPPED confirms the wheels are still
+[TEST] S2-U13 PASS  stop releases
+[TEST] S2-U14 PASS  stays released and does not restart the motors
+[TEST] S2 motion_tick max exec 344 us, max period 142075 us
+[TEST] S2-U15 PASS  motion_tick worst-case time well under its period
+[TEST] subsystem2 SUMMARY 14 passed, 0 failed
+[TEST] === test run end ===

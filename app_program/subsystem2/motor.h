@@ -1,8 +1,48 @@
-#ifndef S2_MOTOR_H
-#define S2_MOTOR_H
-#include "../app.h"
-/* Private driver: only the motion task may call these after startup. */
+
+#ifndef MOTOR_H
+#define MOTOR_H
+
+#include <tk/tkernel.h>
+#include <stdint.h>
+
+/*
+ * Buddy 2 - Motor Driver Interface
+ * Raspberry Pi Pico W / Robo Pico
+ *
+ * Internal interface for the motion-control subsystem.
+ * Other buddies should use motion_control.h instead.
+ */
+
+/*
+ * Added by Buddy 4, 2026-10-31. Buddy 2 review, 2026-11-04: KEEP at 1 for
+ * now, because every passing car run used it. Re-test at 0 on battery
+ * power before the demo. Raises the power limits so the wheels start on
+ * laptop USB power (about 4.6 V).
+ * At Buddy 2's limits (20 % max, 15 % start kick) the PI reached its
+ * maximum and the encoder watchdog stopped the motors after 1 s without
+ * a single encoder count. 1 = 50 % max, 25 % start; 0 = Buddy 2's
+ * tuned values. The motor driver allows 1 A per channel; a stalled
+ * wheel is still stopped by the 1 s encoder watchdog.
+ */
+#define MOTOR_TEST_HIGH_POWER   (1)
+
+/* Initialise both motor PWM channels */
 ER motor_init(void);
-ER motor_apply(INT left, INT right);
-void motor_stop(void);
-#endif
+
+/* Set left motor forward PWM (0-MOTOR_PWM_MAX, motor.c) */
+ER motor_set_left_pwm(uint16_t level);
+
+/* Set right motor forward PWM (0-MOTOR_PWM_MAX, motor.c) */
+ER motor_set_right_pwm(uint16_t level);
+
+/*
+ * Signed drive for duty mode: -MOTOR_PWM_MAX..+MOTOR_PWM_MAX per wheel
+ * (clamped), positive = vehicle forward, negative = reverse. One whole
+ * compare-register write per motor, so a wheel never sees a mixed pair.
+ */
+ER motor_apply(int16_t left, int16_t right);
+
+/* Stop both motors */
+ER motor_stop(void);
+
+#endif /* MOTOR_H */

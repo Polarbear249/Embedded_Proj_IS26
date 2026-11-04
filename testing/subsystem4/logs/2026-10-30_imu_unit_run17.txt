@@ -1,0 +1,121 @@
+Date:    2026-10-30
+Run:     17 (bare-module 6-face calibration with tilt compensation)
+Branch:  IMU_Branch, 86632fe + uncommitted imu_calib.c/h, imu_unit_test.c
+Image:   build_make/s4_imu_bare_smp1_usb_cdc_wifi_test.uf2 (make TEST=1,
+         IMU_TEST_BARE 1)
+Setup:   GY-511 off the car, 4 wires connected, rested by hand on the table.
+         Console pasted by the tester (first character of output lost).
+Result:  S4-U27, U28, U29 PASS. OFF x=-3 y=-12 z=66 mg, SPAN x=1994 y=1956
+         z=1954 mg (stored in imu_calib.h). Check pose: raw 1039 mg,
+         corrected 995 mg. Agrees with the run 16 replay (-1/-12/68,
+         1998/1955/1956) within 3 mg on every value.
+         I2C: the sensor stopped answering for about 2 s while the module was
+         being turned (50/50 then 37/50 reads NACK_ADDR, then recovered by
+         itself): a jumper losing contact. Fix the wiring before driving.
+
+IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] BARE MODULE: lay it flat on the table, still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=-857 y=67 z=-431  mag x=14890 y=-2166 z=8550
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- bare module: 6 faces, any order -----
+[IMU] rest each face flat on the table (or press an edge against a book); hold it still, do not wave it
+[IMU] still needed: -X up -Y up -Z up +X up +Y up +Z up
+
+[IMU] >>> pose 1/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=15 y=-22 z=1043  |a|=1043  spread 21 mg  (50/50 reads ok)
+[IMU] got +Z up (1043 mg)  1/6 faces
+[IMU] still needed: -X up -Y up -Z up +X up +Y up
+
+[IMU] >>> pose 2/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=51 y=-15 z=-910  |a|=911  spread 59 mg  (50/50 reads ok)
+[IMU] got -Z up (-910 mg)  2/6 faces
+[IMU] still needed: -X up -Y up +X up +Y up
+
+[IMU] >>> pose 3/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=0 y=0 z=0  |a|=0  spread 0 mg  (0/50 reads ok)
+[IMU] FAIL reads: 50 of 50 failed, first at sample 0: NACK_ADDR (no device at address) (abort src 0x1)
+[IMU] FAIL |a|: outside 800..1200 mg
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 3/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=208 y=504 z=924  |a|=1072  spread 729 mg  (13/50 reads ok)
+[IMU] FAIL reads: 37 of 50 failed, first at sample 3: NACK_ADDR (no device at address) (abort src 0x1)
+[IMU] FAIL still: axis X moved 729 mg (limit 60) min -66 max 663
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 3/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=33 y=966 z=79  |a|=969  spread 118 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 118 mg (limit 60) min 16 max 134
+[IMU] pose rejected (reason above), again
+[IMU] still needed: -X up -Y up +X up +Y up
+
+[IMU] >>> pose 3/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-22 y=-990 z=42  |a|=991  spread 34 mg  (50/50 reads ok)
+[IMU] got -Y up (-990 mg)  3/6 faces
+[IMU] still needed: -X up +X up +Y up
+
+[IMU] >>> pose 4/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=21 y=966 z=76  |a|=969  spread 42 mg  (50/50 reads ok)
+[IMU] got +Y up (966 mg)  4/6 faces
+[IMU] still needed: -X up +X up
+
+[IMU] >>> pose 5/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=9 y=-168 z=1026  |a|=1039  spread 142 mg  (50/50 reads ok)
+[IMU] FAIL still: axis Z moved 142 mg (limit 60) min 963 max 1105
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 5/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=14 y=111 z=972  |a|=978  spread 1112 mg  (50/50 reads ok)
+[IMU] FAIL still: axis Y moved 1112 mg (limit 60) min -246 max 866
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 5/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=-1000 y=-3 z=69  |a|=1002  spread 24 mg  (50/50 reads ok)
+[IMU] got -X up (-1000 mg)  5/6 faces
+[IMU] still needed: +X up
+
+[IMU] >>> pose 6/6  turn the module so a NEW face points up  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=994 y=-15 z=66  |a|=996  spread 13 mg  (50/50 reads ok)
+[IMU] got +X up (994 mg)  6/6 faces
+[IMU] face -X up: tilt 9 mg (compensated, limit 200)
+[IMU] face -Y up: tilt 30 mg (compensated, limit 200)
+[IMU] face -Z up: tilt 54 mg (compensated, limit 200)
+[IMU] face +X up: tilt 3 mg (compensated, limit 200)
+[IMU] face +Y up: tilt 26 mg (compensated, limit 200)
+[IMU] face +Z up: tilt 20 mg (compensated, limit 200)
+[TEST] S4-U27 PASS  bare module: 6 faces still, each tilted <= 11.5 deg
+[IMU] up   mg x=994 y=966 z=1043
+[IMU] down mg x=-1000 y=-990 z=-911
+[IMU] paste into imu_calib.h: OFF x=-3 y=-12 z=66  SPAN x=1994 y=1956 z=1954
+[TEST] S4-U28 PASS  offset <= 150 mg and span 2000 mg +-10 % on every axis
+
+[IMU] >>> pose 1/1  CHECK: any face up, flat on the table  (8 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=11 y=-20 z=1039  |a|=1039  spread 13 mg  (50/50 reads ok)
+[IMU] corrected mg x=14 y=-8 z=995  |a| raw=1039 corrected=995 (1 g = 1000)
+[TEST] S4-U29 PASS  corrected |a| on a new pose = 1000 mg +-15 mg
+[TEST] subsystem4 IMU bare-module calibration SUMMARY 3 passed, 0 failed
+[IMU] done. Remount the module, set IMU_TEST_BARE 0 and run the car tests (level zero, magnetometer)
+[TEST] === test run end ===

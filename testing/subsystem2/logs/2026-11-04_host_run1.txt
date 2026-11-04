@@ -1,0 +1,15 @@
+S2_HOST_SAN= sh ./run_tests.sh, 2026-11-04, MinGW GCC, merge of 425640b into 5625b60 (uncommitted)
+5 turns: 1036 mm (ref 1036.7)
+long run: 327744 mm (ref 327744.2)
+PASS: IRQ encoder counting + IF-10: zero, forward, reset baseline, reverse, spin, double edge, long run
+PASS conversions
+PASS straight move stops at its goal
+PASS turn wheel directions
+PASS balance holds an unequal pair level
+PASS kick, cruise and creep
+PASS stalled wheel ends the move as a fault
+PASS wheel running against its command is an encoder fault
+PASS a finished wheel does not count as stalled
+PASS Q_motion command word round trip
+test_motion_move: all passed
+exit=0

@@ -20,6 +20,18 @@
 #define I2C1_SDA_PIN    (2U)
 #define I2C1_SCL_PIN    (3U)
 
+// I2C1 block state captured when a transfer timed out (diagnostic)
+typedef struct
+{
+    uint32_t status;        // IC_STATUS (bit 5 MST_ACTIVITY, 2 TFE)
+    uint32_t txflr;         // IC_TXFLR: commands still in the TX FIFO
+    uint32_t enable_status; // IC_ENABLE_STATUS bit 0 = enabled
+    uint32_t raw_intr;      // IC_RAW_INTR_STAT
+    uint32_t sda;           // line levels at that moment, 1 = high
+    uint32_t scl;
+    uint32_t count;         // timeouts since power-up
+} i2c1_diag_t;
+
 typedef enum
 {
     I2C1_OK = 0,
@@ -39,6 +51,7 @@ i2c1_result_t i2c1_read(uint8_t addr, uint8_t *p_data, uint32_t len);
 i2c1_result_t i2c1_write_read(uint8_t addr, uint8_t reg,
                               uint8_t *p_data, uint32_t len);
 uint32_t      i2c1_last_abort(void);
+void          i2c1_timeout_diag(i2c1_diag_t *p_diag);
 char const   *i2c1_result_name(i2c1_result_t result);
 
 #endif // DRV_I2C1_H
