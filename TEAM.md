@@ -59,8 +59,8 @@ between yourselves; only the *reserved* and *board* rows are fixed.
 | GP3 | S4 | I2C1 SCL, GY-511 IMU (Grove 2 / Maker port) |
 | GP4 | S2 | Left wheel encoder A (Grove 3) |
 | GP5 | S2 | Left wheel encoder B (Grove 3) |
-| GP6 | S3 | Left IR DOUT (Grove 5) |
-| GP7 | S3 | Right IR DOUT, barcode (Grove 7; AOUT unused) |
+| GP6 | S3 | Right line IR DOUT, just right of the line (Grove 5; Grove 5's GP26 wire is not connected). TCRT5000, HIGH = black |
+| GP7 | S3 | Barcode IR DOUT, left side of the car (Grove 7; AOUT unused). TCRT5000, HIGH = black, edge interrupt |
 | GP8 | S2 | Motor 1 input A (M1A, fixed by Robo Pico) |
 | GP9 | S2 | Motor 1 input B (M1B, fixed by Robo Pico) |
 | GP10 | S2 | Motor 2 input A (M2A, fixed by Robo Pico) |
@@ -72,12 +72,12 @@ between yourselves; only the *reserved* and *board* rows are fixed.
 | GP16 | S5 | HC-SR04+ TRIG (Grove 4) |
 | GP17 | S5 | HC-SR04+ ECHO, direct 3.3 V (Grove 4) |
 | GP18 | *board* | NeoPixel RGB LED: reserved |
-| GP19 | S3 | Centre IR DOUT (GPIO breakout). The template's example LED (`S1_LED_PIN`) still uses GP19 and must move |
-| GP20 | *board* | Programmable button: reserved |
+| GP19 | | free (released by S3 2026-11-01). The template's example LED (`S1_LED_PIN`) still uses GP19 |
+| GP20 | VC (Buddy 4) | Robo Pico button, input with pull-up. Normal builds: **emergency stop** (1st press `motion_estop()`, latched; 2nd press releases). Test-drive builds (`VC_TEST_DRIVE`): starts / stops the test run (`vehicle_controller.c`) |
 | GP21 | *board* | Programmable button: reserved |
 | GP22 | *board* | Piezo buzzer: reserved |
-| GP26 | S3 | Left IR AOUT (ADC0) |
-| GP27 | S3 | Centre IR AOUT (ADC1) |
+| GP26 | | free (released by S3 2026-11-01). Shared by Grove 5 and Grove 6: only one may drive it |
+| GP27 | S3 | Centre line IR DOUT, over the line (Grove 6), digital input (no ADC). TCRT5000, HIGH = black |
 | GP28 | *board* | VBAT sense or spare ADC2: keep free |
 
 Notes
@@ -121,11 +121,11 @@ the drivers have no locking to stop it.
 | I2C1 (own polled driver `subsystem4/drv_i2c1.c`; kernel I2C driver stays off) | S4 | IMU / Terrain task (tests: initial task) | GP2 SDA, GP3 SCL |
 | SPI0 | | | |
 | SPI1 | | | |
-| ADC | S3 | Line / Barcode task | GP26 (ADC0), GP27 (ADC1); GP28 unused |
+| ADC | | | free: S3 released it 2026-11-01 (all IR sensors are DOUT only) |
 | PWM slice 4 (motor 1) | S2 | Motion Control task | GP8, GP9 |
 | PWM slice 5 (motor 2) | S2 | Motion Control task | GP10, GP11 |
 | PWM slice 6 (servo) | S5 | Obstacle Scan task | GP12 (GP13 shares the slice) |
-| GPIO edge interrupts (encoders, ECHO) | **CONFIRM** owner | one shared GPIO interrupt dispatcher, minimal ISR work (store raw counts/timestamps), no interrupt disabling | GP0, GP1, GP4, GP5, GP17 |
+| GPIO edge interrupts (IO_IRQ_BANK0, interrupt 13) | shared: `app_program/gpio_irq.c` (dispatcher, runs on core 0) | interrupt handler, not a task. Users attach one callback per pin with `gpio_irq_attach()` from `subsystemN_init()` or from a task pinned to core 0 (one attach at a time); callbacks run in interrupt context and only store counts/timestamps. No interrupt disabling. **Never call `tk_def_int(13)` elsewhere: it would replace the dispatcher.** Users: S2 encoders (A channels GP0, GP4, both edges; B read in the callback); S3 barcode GP7 (both edges, `subsystem3/drv_ir.c`, when `S3_BARCODE_ENABLE` is 1); S5 ECHO GP17 planned | GP0, GP4, GP7 (GP1, GP5 read only); GP17 planned |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
 
 ### WiFi and MQTT are special
@@ -163,11 +163,13 @@ code still uses 12–21). Write down every task you create.
 
 | Task | Subsystem | Priority | Period | Core |
 |---|---|---|---|---|
-| Motion Control | 2 | 5 | 10 ms | |
-| Line / Barcode | 3 | 6 | 10 ms | |
+| Motion Control | 2 | 5 (code still 14: `motion_control_task`, every 10 ms: duty commands each tick, PI speed control every 10th tick; and 12: `encoder_publish_task`, publishes IF-10 every 10 ms; encoder counts come from GPIO edge interrupts) | 10 ms | core 1 (`TP_PRC2`) |
+| Line / Barcode | 3 | 6 | 10 ms (cyclic handler `cyc_line`) | core 0 (`TP_PRC1`): its barcode GPIO callback runs on that core |
 | Vehicle Controller | shared | 7 | event-driven + 20 ms supervisory tick | |
+| VC emergency stop (`vc_estop`, normal builds) | shared (Buddy 4) | 7 | polls GP20 every 20 ms; reaction about 70 ms (derived) | any |
+| VC test drive (`vc_test_drive`, test only, `VC_TEST_DRIVE`) | shared (Buddy 4) | 15 (below Motion's 14 on the same core; commands not yet queued through `Q_motion`) | 100 ms poll; drives 1500 mm at 20 RPM per GP20 press | core 1 (`TP_PRC2`) |
 | Obstacle Scan | 5 | 8 | >= 60 ms between ultrasonic triggers | |
-| IMU / Terrain | 4 | 9 | 10 ms | |
+| IMU / Terrain (`imu_terrain`) | 4 | 9 | 10 ms (cyclic handler + event flag) | core 0 (`TP_PRC1`) |
 | WiFi / MQTT | 1 | 10 | 200 ms telemetry, 1 s heartbeat | |
 | Liveness LED | **CONFIRM** owner | | | |
 
@@ -191,12 +193,12 @@ object but the µT-Kernel object type is not yet chosen.
 | IF-03 | S3, S4, S5, S1 → VC | queue (kernel type TBD, owned by VC) | `Q_events` | packed event header, bounded depth, overflow flag; header layout **CONFIRM** | Tribunal 1 |
 | IF-04 | S3, S4, S5, S1 → VC | event flag (owned by VC) | `EVG_sys` | event notification with `tk_set_flg`; wait/clear options **CONFIRM** | Tribunal 1 |
 | IF-05 | all → VC | shared word, atomic access | `g_fault_mask` | latched fault bits: motor stall, encoder fault, IMU fault, no echo, WiFi loss. Owner **CONFIRM**: VC (Version C) or S2 | Tribunal 1 |
-| IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop | Tribunal 1 |
+| IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop. Read with `s3_line_state_read()`. Bit layout in `app_program/subsystem3/line_if.h`: error 7 (offset 64), mode 3, barcode cmd 2 + cmd_seq 2 (act once when cmd_seq changes), raw sensors 3, seq 8 | Tribunal 1 (mechanism); bit layout **PROPOSED by S3 2026-11-01, needs S2 agreement** |
 | IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `mbf_telem` (`Q_telem`) | 13-byte packed snapshot, frame v1, layout in `app_program/subsystem1/telemetry_frame.h`; VC calls `s1_telem_send()` | Tribunal 1 |
 | IF-08 | S1 → VC | message buffer (created by S1 until the VC exists; then move to VC) | `mbf_cmd` (`Q_cmd`) | validated 3-byte command frame (`CMD_STOP`, `CMD_START`, `CMD_SET_SPEED`, `CMD_PING`); VC calls `s1_cmd_recv()` | Tribunal 1 (buffer type and temporary owner: S1) |
 | IF-09 | S5 → VC | queue (kernel type TBD, owned by VC) | `Q_profile` | packed `ObstacleProfile_t`: three 9-bit distances in 32 bits | Tribunal 1 |
-| IF-10 | S2 → S4 | aligned 32-bit word, single writer, no lock | **TBD** | encoder distance for hump height, every 10 ms | **PROPOSED** |
-| IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer, no lock | **TBD** | hump result, 8-bit height clamped (mm), written on hump end | Tribunal 1 |
+| IF-10 | S2 → S4 | aligned 32-bit word, single writer (S2 encoder task), no lock; read with `motion_get_distance_mm()` (`subsystem2/motion_control.h`) | `distance_mm` (static in `subsystem2/encoder.c`) | `int32_t` cumulative distance since power-up in mm, mean of both wheels, forward positive, never reset; counts from GPIO edge interrupts (`app_program/gpio_irq.c`), published every 10 ms by `encoder_publish_task`. Host test `testing/subsystem2/host/`; on target INT-10 **PASS** (1 m push: 990 mm, 2026-10-31, `testing/subsystem4/logs/2026-10-31_int10_run34.txt`) | Implemented and tested by Buddy 4 in Buddy 2's folder (`integrate/s4-onto-main`); **Buddy 2 to sign off** |
+| IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer (`imu_terrain` task), no lock; read with `imu_terrain_get_hump_word()` (`subsystem4/imu_terrain.h`), unpack with the `IMU_HUMP_W_*` macros in `subsystem4/imu_hump.h` | `g_hump_word` (static in `subsystem4/imu_terrain.c`) | `[7:0]` highest hump of the run, mm (clamped at 255, never wraps); `[15:8]` last hump, mm; `[19:16]` IMU state (4 bits); `[22:20]` last event (3 bits: none, hump start, hump end, impact, fault); `[23]` valid (at least one hump measured); `[31:24]` seq (+1 per update). Written on hump start/end and state changes. Round-trip host test `testing/subsystem4/host/` | Tribunal 1 (width); layout **PROPOSED** by Buddy 4, VC and S1 to confirm |
 
 MQTT topics (broker on the laptop): `mtk3smp-pico/telem` (binary frame out, 5 Hz),
 `mtk3smp-pico/cmd` (binary command in), `mtk3smp-pico/heartbeat` (text, 1 s).
@@ -223,12 +225,12 @@ in the code; replace them as each owner creates the objects in section 5.
 | Task | 32 | 2 | 1 | 1 | 1 | |
 | Semaphore | 16 | | 1 | | | |
 | Event flag | 16 | | | | 1 | |
-| Mailbox | 12 | | | 1 | | |
+| Mailbox | 12 | | | | | |
 | Mutex | 12 | | | 1 | | |
 | Message buffer | 12 | 2 | | | 1 | |
 | Fixed memory pool | 12 | | 1 | | | |
 | Variable memory pool | 12 | | | | | |
-| Cyclic handler | 12 | 1 | | | | |
+| Cyclic handler | 12 | 1 | | 1 | | |
 | Alarm handler | 12 | | | | 1 | |
 
 (The kernel's USB and WiFi service tasks also use a few of these.)

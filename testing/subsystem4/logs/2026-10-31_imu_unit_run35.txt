@@ -1,0 +1,29 @@
+Date:    2026-10-31
+Run:     35 (make TEST=1, level zero + nose-up check)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2
+Setup:   Mount fixed (tester). Pose 2 used as NOSE UP instead of "turned
+         180": ball caster on the 23 mm block, both wheels on the floor.
+         Poses 1 and 3 flat on the tape marks.
+Result:  Bench 7/7. At rest acc x=-16 y=-22 z=1027 mg, mag z=-2155: the
+         same as runs 18-20 (x about -19, z about 1028, mag z negative),
+         so the module is back in its original orientation; runs 26-29
+         (mag z about +3665, acc x about +30) had it mounted differently.
+         S4-U23 PASS: reference pitch -0.8 roll -0.4 deg.
+         Nose-up check PASS: x 262 mg, pitch +15.7 deg (run 12, same
+         23 mm block: +276 mg, 15.5 deg). Axis map +X forward confirmed:
+         nose up = positive pitch.
+         S4-U24 PASS: back on the marks pitch 0.0 roll -0.1 deg.
+         The "mount tilt / floor slope" lines are meaningless in this run
+         (pose 2 was not a 180 deg turn).
+         Follow-up: the stored magnetometer offset (-1176/790, run 28) was
+         measured with the other mounting; re-run the 2-turn spin.
+
+---- key lines ----
+[IMU] at rest: OK  acc mg x=-16 y=-22 z=1027  mag x=-4245 y=1513 z=-2155
+[IMU] level reference (mount + floor)  pitch -0.8 deg  roll -0.4 deg
+[TEST] S4-U23 PASS  level zero captured (car flat, still)
+[IMU] avg mg x=262 y=-25 z=988  |a|=1022  spread 27 mg  (50/50 reads ok)
+[IMU] turned 180  pitch 15.7 deg  roll -0.8 deg
+[IMU] flat again vs level  pitch 0.0 deg  roll -0.1 deg
+[TEST] S4-U24 PASS  flat again reads pitch and roll 0 +-0.5 deg

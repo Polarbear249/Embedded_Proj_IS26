@@ -1,46 +1,122 @@
+
 /*
- *	subsystem2.c
- *	Subsystem 2 -- Producer: creates its objects and starts its task.
+ * subsystem2.c
+ * Buddy 2 - Motion Control Subsystem
  *
- *	APIs shown: tk_cre_sem, tk_cre_mpf
+ * Initial micro T-Kernel integration.
+ *
+ * Responsibilities:
+ * - Initialise motor and encoder hardware
+ * - Start encoder sampling task
+ * - Start motion control task
+ * - Run PI speed control periodically
  */
 
 #include "subsystem2.h"
 #include "motion_control.h"
+#include "encoder.h"
 
-EXPORT ID	sem_slots;	/* IF-02, see subsystem2.h */
-EXPORT ID	mpf_samples;
-
-EXPORT ER subsystem2_init(void)
+/*
+ * Encoder Publish Task
+ *
+ * The encoder counts now come from GPIO edge interrupts
+ * (encoder.c), so this task no longer samples pins. It only
+ * publishes the IF-10 distance word every S2_DIST_PERIOD_MS.
+ */
+static void encoder_publish_task(INT stacd, void *exinf)
 {
-	T_CSEM	csem = {0};
-	T_CMPF	cmpf = {0};
+    (void)stacd;
+    (void)exinf;
 
-	/* Semaphore: a counter of free "slots".  The producer takes one
-	   (tk_wai_sem) before each sample; the consumer gives one back
-	   (tk_sig_sem).  It never exceeds the number of memory blocks, so
-	   the producer can never run out of memory. */
-	csem.sematr  = TA_TFIFO;	/* waiting tasks queue in FIFO order */
-	csem.isemcnt = S2_POOL_COUNT;	/* initial count */
-	csem.maxsem  = S2_POOL_COUNT;	/* maximum count */
-	sem_slots = tk_cre_sem(&csem);
-	if (sem_slots < E_OK) {
-		return sem_slots;
-	}
+    for (;;)
+    {
+        encoder_publish_distance();
 
-	/* Fixed-size memory pool: S2_POOL_COUNT blocks, each exactly one
-	   SAMPLE_MSG.  Faster and more predictable than malloc(). */
-	cmpf.mpfatr = TA_TFIFO | TA_RNG3;
-	cmpf.mpfcnt = S2_POOL_COUNT;		/* number of blocks */
-	cmpf.blfsz  = sizeof(SAMPLE_MSG);	/* size of one block */
-	mpf_samples = tk_cre_mpf(&cmpf);
-	return (mpf_samples < E_OK) ? mpf_samples : motion_init();
+        tk_dly_tsk(S2_DIST_PERIOD_MS);
+    }
 }
 
+/*
+ * Motion Control Task
+ *
+ * Every MOTION_TICK_MS (10 ms): motion_tick() applies
+ * duty commands (S3 line follower) and runs the PI
+ * speed controller about every 100 ms.
+ *
+ * Hardware is initialised in subsystem2_init()
+ * before either task starts.
+ */
+static void motion_control_task(INT stacd, void *exinf)
+{
+    (void)stacd;
+    (void)exinf;
+
+    for (;;)
+    {
+        motion_tick();
+
+        tk_dly_tsk(MOTION_TICK_MS);
+    }
+}
+
+/*
+ * Initialise Subsystem 2.
+ *
+ * Motor and encoder hardware are initialised
+ * before the two tasks are started.
+ */
+EXPORT ER subsystem2_init(void)
+{
+    /* Initialise motor and encoder hardware */
+    if (motion_init() != MOTION_OK)
+    {
+        return E_SYS;
+    }
+
+    return E_OK;
+}
+
+/*
+ * Start Subsystem 2 tasks.
+ *
+ * Both tasks are pinned to core 1 (TP_PRC2).
+ *
+ * Encoder publish task priority: 12
+ * Motion task priority: S2_PRI_PRODUCER (14)
+ *
+ * Smaller priority numbers indicate higher
+ * scheduling priority in micro T-Kernel.
+ */
 EXPORT ER subsystem2_start(void)
 {
-	/* Pinned to core 1 (TP_PRC2): samples cross to subsystem 3 on core 0 */
-	ID tid = app_start_task(motion_task, S2_PRI_PRODUCER, TP_PRC2,
-				"motion_task");
-	return (tid < E_OK) ? tid : E_OK;
+    ID encoder_tid;
+    ID motion_tid;
+
+    /* Start the IF-10 distance publish task */
+    encoder_tid = app_start_task(
+        encoder_publish_task,
+        12,
+        TP_PRC2,
+        "encoder_publish_task"
+    );
+
+    if (encoder_tid < E_OK)
+    {
+        return encoder_tid;
+    }
+
+    /* Start the motion-control task */
+    motion_tid = app_start_task(
+        motion_control_task,
+        S2_PRI_PRODUCER,
+        TP_PRC2,
+        "motion_control_task"
+    );
+
+    if (motion_tid < E_OK)
+    {
+        return motion_tid;
+    }
+
+    return E_OK;
 }

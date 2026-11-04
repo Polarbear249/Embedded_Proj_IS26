@@ -1,0 +1,55 @@
+[PC] S3-P01   PASS  all 44 patterns have exactly 3 wide
+[PC] S3-P01   PASS  all 44 patterns are distinct
+[PC] S3-P01   PASS  wide elements split 2 bars+1 space or 3 spaces
+[PC] S3-P01   PASS  lower case is not Code 39
+[PC] S3-P02   PASS  A matches module string
+[PC] S3-P02   PASS  B matches module string
+[PC] S3-P02   PASS  C matches module string
+[PC] S3-P02   PASS  D matches module string
+[PC] S3-P03   PASS  PDF sample *A* forwards -> 'A'
+[PC] S3-P03   PASS  PDF sample *A* backwards -> 'A', reversed
+[PC] S3-P03   PASS  PDF sample *Z* forwards -> 'Z'
+[PC] S3-P03   PASS  PDF sample *Z* backwards -> 'Z', reversed
+[PC]          random decodes: 25800 / 25800 correct
+[PC] S3-P04   PASS  every char, ratio 3.0/2.5/2.2, +-15 % jitter, +-20 % speed drift, both directions
+[PC] S3-P05   PASS  all elements equal -> ERR_RATIO
+[PC] S3-P05   PASS  28 elements -> ERR_LENGTH
+[PC] S3-P05   PASS  NULL widths -> ERR_NULL
+[PC] S3-P05   PASS  *** -> ERR_FRAME
+[PC] S3-P05   PASS  corrupted first char is rejected
+[PC] S3-P06   PASS  A-D at 50..1000 mm/s, both directions, across the timer wrap
+[PC] S3-P07   PASS  same, with a 40 us comparator spike inside every element
+[PC] S3-P08   PASS  two barcodes in a row both decode
+[PC] S3-P09   PASS  crossing the line is ignored (no decode, no failure)
+[PC] S3-P10   PASS  half a barcode is reported once as a failed read
+[PC] S3-P11   PASS  power-up on black waits for quiet, then decodes
+[PC] S3-P12   PASS  start on white/white: TRACKING, straight
+[PC] S3-P13   PASS  one-cycle black is debounced away
+[PC] S3-P13   PASS  left black for 2 cycles: steer left
+[PC] S3-P13   PASS  back to white/white: small bias toward the left
+[PC] S3-P13   PASS  right black: steer right
+[PC] S3-P13   PASS  white/white: bias toward the right
+[PC] S3-P14   PASS  both black: JUNCTION, straight
+[PC] S3-P14   PASS  junction passed: TRACKING
+[PC] S3-P15   PASS  just under the lost time: still TRACKING
+[PC] S3-P15   PASS  lost: full turn toward the last side (right)
+[PC] S3-P15   PASS  then full turn the other way (left)
+[PC] S3-P15   PASS  then FAILED, error centred
+[PC] S3-P15   PASS  black again: back to TRACKING
+[PC] S3-P16   PASS  pack/unpack round trip, all fields
+[PC] S3-P16   PASS  out-of-range error cannot spill into other fields
+[PC] S3-P16   PASS  reserved bits stay 0
+[PC] S3-P17   PASS  error 0 -> -64
+[PC] S3-P17   PASS  error 127 -> +63
+[PC] S3-P17   PASS  error 64 -> 0
+[PC] S3-P18   PASS  new seq: fresh
+[PC] S3-P18   PASS  same seq once: still fresh
+[PC] S3-P18   PASS  same seq twice: still fresh
+[PC] S3-P18   PASS  same seq 3 times: STALE
+[PC] S3-P18   PASS  seq moves again: fresh
+[PC] S3-P18   PASS  NULL reader: stale
+[PC]          sizeof line_state word   = 4 B
+[PC]          sizeof line_if_state_t   = 8 B (unpacked)
+[PC]          sizeof line_logic_t      = 4 B
+[PC]          sizeof bc_capture_t      = 80 B
+[PC] 49 checks, 0 failed

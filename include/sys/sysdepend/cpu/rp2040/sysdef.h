@@ -281,6 +281,11 @@
 #define GPIO_OE_CLR		(SIO_BASE+0x028)
 #define GPIO_OE_XOR		(SIO_BASE+0x02C)
 
+/* Watchdog tick generator (clocks TIMER; RP2040 datasheet 4.7) */
+#define WATCHDOG_BASE		0x40058000
+#define WATCHDOG_TICK		(WATCHDOG_BASE+0x2C)
+#define WATCHDOG_TICK_ENABLE	(1<<9)
+
 /* Timer */
 #define TIMER_BASE		0x40054000
 

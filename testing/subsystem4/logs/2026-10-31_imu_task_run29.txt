@@ -1,0 +1,42 @@
+Date:    2026-10-31
+Run:     29 (imu_terrain task, normal build: timer fix, INT-10, S4-U32)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted changes (watchdog
+         tick fix in cpu_clock.c, magnetometer offset -1176/790)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 (make -j8)
+Setup:   Car pushed 1 m by hand (tester), then the SDA jumper pulled and
+         plugged back in. Whether the board was power-cycled first (the
+         condition for the timer-fix check) is not stated.
+Result:
+  Timer:  period 9.40..10.70 ms, burst 0.91 ms, loop 0.92 / 1.87 ms,
+          WCET 2.23 ms before the fault: real microseconds again (run 22
+          read 42.5x low). Confirms the fix only if this boot followed a
+          power cycle (CONFIRM).
+  S4-U30: PASS, but level zero restarted about 120 times ("car moved",
+          50 mg limit) before it took pitch 1.4 roll 1.2 deg.
+  INT-10: FAIL: d went 0 -> -11 mm for a 1 m push. Cause found: the
+          kernel tick is 10 ms (config/config.h CNF_TIMER_PERIOD 10), so
+          S2's encoder task (tk_dly_tsk(1)) samples every 10-20 ms, not
+          every 1 ms. A 1 m hand push is about 4.8 wheel turns = about
+          6100 edges per wheel (derived), far faster than 50-100 samples/s:
+          almost every edge is missed and direction is decided at random.
+          Needs edge interrupts (team decision in CLAUDE.md) or a PIO
+          counter in S2. The IF-10 word itself works (host test PASS).
+  S4-U32: detection PASS (5 x NACK_ADDR -> IMU_FAULT). Recovery FAIL:
+          after SDA was plugged back in, every 1 s retry still failed with
+          TIMEOUT for at least 25 s. Each retry blocked the task about
+          80 ms (measured, loop max 79.5..80.2 ms), which fits SDA reading
+          high (no 9-clock recovery) plus one 20-30 ms transfer timeout at
+          the 10 ms tick, i.e. the I2C block never finished the first byte:
+          SCL held low or a pin problem (not proven). Diagnostic added: the
+          failure message now prints SDA/SCL levels before and after.
+  Magnetometer: heading steady to +-1 deg at rest, follows turns.
+
+---- console: see the paste in the session; key lines ----
+[IMU] level zero: pitch 14 roll 12 (0.1 deg)
+[IMU] t ACTIVE acc 908-936 mag 909 loop 916-1969 wcet 2228 per 9492-10586 late 0 err 0 | p 3 r -1 hdg 1525 d 0
+[IMU] t ACTIVE acc 908-918 mag 908 loop 919-1873 wcet 2228 per 9571-10551 late 0 err 0 | p 6 r -3 hdg 1437 d -11
+[IMU] 5 bad reads in a row, last NACK_ADDR (no device at address): IMU_FAULT
+[IMU] state FAULT
+[IMU] start failed: TIMEOUT (bus stuck?), WHO_AM_I 0x0
+[IMU] t FAULT acc 0-0 mag 0 loop 2-79725 wcet 79725 per 9784-79777 late 1 err 0 | p -28 r -5 hdg 1437 d -11
+(... the same start failed / t FAULT pair repeats every second for 25 s ...)

@@ -1,0 +1,37 @@
+Date:    2026-10-30
+Run:     26 (magnetometer spin, module REMOUNTED on the car)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted imu_unit_test.c
+         (IMU_TEST_BARE_MAG still 1, so prompts say "bare module" and the
+         S4-U33/U34 IDs are printed; vertical axis from the accelerometer,
+         read errors <= 2 % allowed)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2 (make TEST=1)
+Setup:   GY-511 mounted back on the car, car spun by hand. S1/S2/S5 not
+         pasted.
+Result:  Clean spin: 0 read errors (wires no longer flex), vertical axis Z,
+         Z range 484 counts (flat, no tilt warning).
+         Spin 1: span X=6538 Y=8408, ratio 77 % (ellipse; bare module in
+         run 25: 104 %). Offset x=-2232 y=836 (sixth different car offset).
+         Spin 2 with that offset: min/max spread 49 %, RMS 16 %.
+         Reading: the bare chip draws a circle, the car turns it into an
+         ellipse (soft iron: steel/motor magnets bend the field), which an
+         offset alone cannot correct. Derived: an aligned 77 % ellipse
+         alone gives about 25 % min/max, about 9 % RMS.
+         Mount check needed: at rest mag z=+3660 (earlier car runs -493 to
+         -2600) and acc x=+33 mg (earlier about -20): the module may sit in
+         a different place or turned 180 deg about Z. Re-check the axis map
+         (nose up must give pitch > 0) before relying on pitch.
+
+---- console (S4 part) ----
+[IMU] at rest: OK  acc mg x=33 y=3 z=1065  mag x=917 y=-2700 z=3660
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] BARE MODULE MAG: module off the car, on a wooden/plastic table
+[IMU] vertical axis Z: the circle is in X/Y
+[IMU] >>> spin 1/2  SPIN: bare module flat on a wooden/plastic table, turn it on the spot  (5 s)
+[IMU] mag range x=-5501..1037 y=-3368..5040 z=3317..3801  (0 read errors)
+[IMU] span X=6538 Y=8408 counts (ratio 77 %, 100 = no soft-iron)
+[IMU] bare chip offset (do NOT paste, car only): MAG_OFF x=-2232 y=836 z=0
+[TEST] S4-U33 PASS  flat spin: read errors <= 2 %, no saturation, both horizontal spans >= 2000
+[IMU] >>> spin 2/2  SPIN again (check): same spot, same way, keep it flat  (5 s)
+[IMU] radius raw 2686..5797 (spread 73 %)  corrected 3257..5377 (spread 49 %)
+[IMU] corrected radius over all 1000 samples: RMS spread 16 % of the mean (min/max is 49 %)
+[TEST] S4-U34 FAIL  corrected radius spread <= 25 % of its mean   (../app_program/subsystem4/imu_unit_test.c:1113)

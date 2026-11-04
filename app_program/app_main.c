@@ -16,22 +16,16 @@
  *	and then puts the initial task to sleep forever.
  *	If usermain() RETURNS, the kernel shuts the whole system down.
  *
- *	The example system: one subsystem per folder, one task each
- *	------------------------------------------------------------
- *	  subsystem1/  LED       blinks GP19, paced by a cyclic handler
- *	  subsystem2/  Producer  makes a "sample" every 300 ms     (core 1)
- *	  subsystem3/  Consumer  collects samples into statistics  (core 0)
- *	  subsystem4/  Monitor   prints reports, pauses/resumes the LED
- *	  subsystem5/  (empty template for the fifth student)
+ *	The system: one subsystem per folder (TEAM.md section 1)
+ *	--------------------------------------------------------
+ *	  subsystem1/  WiFi, MQTT telemetry and commands
+ *	  subsystem2/  Motion control: motors, encoders, PI speed  (core 1)
+ *	  subsystem3/  Line following and barcode (stub for now)
+ *	  subsystem4/  IMU and terrain: imu_terrain task           (core 0)
+ *	  subsystem5/  Ultrasonic scan and obstacle profiling
  *
- *	How they talk to each other (the interfaces, see TEAM.md section 5):
- *	  IF-01  S2 -> S3  mailbox mbx_samples      (owned by S3)
- *	  IF-02  S3 -> S2  semaphore sem_slots + memory pool mpf_samples
- *	                   (owned by S2: S3 hands slots and blocks back)
- *	  IF-03  S3 -> S4  message buffer mbf_summary + event flag flg_events
- *	                   (owned by S4)
- *	  IF-04  S4 -> S3  reads app_stats under mutex mtx_stats (owned by S3)
- *	  IF-05  S4 -> S1  suspends/resumes the LED task tid_led (owned by S1)
+ *	The interfaces between them are listed in TEAM.md section 5
+ *	(the template's producer/consumer/monitor chain was removed).
  *	The subsystem that RECEIVES or OWNS the data creates the object and
  *	publishes its ID in its header; the other side just uses it.
  *
@@ -54,6 +48,7 @@
  */
 
 #include "app.h"
+#include "vehicle_controller.h"
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
@@ -113,6 +108,7 @@ EXPORT INT usermain(void)
 	CHECK(subsystem3_init(), "subsystem3_init");
 	CHECK(subsystem4_init(), "subsystem4_init");
 	CHECK(subsystem5_init(), "subsystem5_init");
+	CHECK(vc_init(), "vc_init");
 
 	/* Phase 2: every subsystem starts its tasks */
 	CHECK(subsystem1_start(), "subsystem1_start");
@@ -120,19 +116,50 @@ EXPORT INT usermain(void)
 	CHECK(subsystem3_start(), "subsystem3_start");
 	CHECK(subsystem4_start(), "subsystem4_start");
 	CHECK(subsystem5_start(), "subsystem5_start");
+	CHECK(vc_start(), "vc_start");
 
 	tm_printf((UB*)"all subsystems started\n\n");
 
 #if APP_TEST
+	/* APP_TEST_ONLY (local switch, TEST=1 only): 0 = run every
+	   subsystem's tests (team default, keep it 0 in commits); 1..5 = run
+	   only that subsystem's tests, e.g. 4 skips the slow WiFi tests.
+	   The other subsystems' tasks still start as normal. */
+#ifndef APP_TEST_ONLY
+#define APP_TEST_ONLY	0
+#endif
+	/* APP_TEST_SETTLE_MS (local switch, TEST=1 only): wait this long
+	   before the tests, so they do not overlap the WiFi bring-up
+	   (cyw43_init); 0 = start at once (default). Diagnostic for S3-U01
+	   (2026-11-03: 200 ms read 331 ms right after boot). */
+#ifndef APP_TEST_SETTLE_MS
+#define APP_TEST_SETTLE_MS	0
+#endif
+	if (0 < APP_TEST_SETTLE_MS) {
+		tm_printf((UB*)"[TEST] settling %d ms before the tests\n",
+			  APP_TEST_SETTLE_MS);
+		(void)tk_dly_tsk(APP_TEST_SETTLE_MS);
+	}
 	/* Test build (make TEST=1): run every subsystem's tests in turn,
 	   here in the initial task, while the system is running.  Tests may
 	   call tk_dly_tsk() to let the other tasks work for a while. */
-	tm_printf((UB*)"[TEST] === test run start ===\n");
-	subsystem1_test();
-	subsystem2_test();
-	subsystem3_test();
-	subsystem4_test();
-	subsystem5_test();
+	tm_printf((UB*)"[TEST] === test run start (only %d, 0 = all) ===\n",
+		  APP_TEST_ONLY);
+	if ((0 == APP_TEST_ONLY) || (1 == APP_TEST_ONLY)) {
+		subsystem1_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (2 == APP_TEST_ONLY)) {
+		subsystem2_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (3 == APP_TEST_ONLY)) {
+		subsystem3_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (4 == APP_TEST_ONLY)) {
+		subsystem4_test();
+	}
+	if ((0 == APP_TEST_ONLY) || (5 == APP_TEST_ONLY)) {
+		subsystem5_test();
+	}
 	tm_printf((UB*)"[TEST] === test run end ===\n");
 #endif
 

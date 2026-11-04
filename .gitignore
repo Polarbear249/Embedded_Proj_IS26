@@ -23,6 +23,8 @@ config/wifi_secrets.h
 *.mkv
 
 CLAUDE.md
+handoff.md
+graphify-out/
 # macOS
 .DS_Store
 

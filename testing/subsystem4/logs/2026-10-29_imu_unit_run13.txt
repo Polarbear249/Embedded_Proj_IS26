@@ -1,0 +1,50 @@
+Date:    2026-10-29
+Run:     13 (first run of the 6-position calibration on the car)
+Branch:  IMU_Branch, 86632fe + uncommitted imu_calib.c/h, imu_unit_test.c
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2 (make TEST=1 -j8),
+         build 5 + the "which check failed" messages
+Setup:   GY-511 (LSM303D) on the car, car flat on the floor.
+Note:    console pasted by the tester; the run was stopped at pose 1/6
+         (third retry). Start of the output (kernel banner) not copied.
+Result:  reads 50/50 and spread 22-30 mg (car still), but raw |a| 1119-1122
+         mg, outside the then 900..1100 mg stillness window, so pose 1 was
+         rejected 3 times. Window widened to +-20 % after this run.
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the car flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=41 y=-1 z=1133  mag x=315 y=-3198 z=1020
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- 6-position calibration: each pose puts one axis straight up or down -----
+[IMU] square the car against a wall or box edge; prop it, do not hold it
+
+[IMU] >>> pose 1/6  +Z UP: car on its wheels, flat on the floor  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=38 y=0 z=1122  |a|=1122  spread 30 mg  (50/50 reads ok)
+[IMU] FAIL |a|: outside 900..1100 mg
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 1/6  +Z UP: car on its wheels, flat on the floor  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=37 y=0 z=1120  |a|=1120  spread 28 mg  (50/50 reads ok)
+[IMU] FAIL |a|: outside 900..1100 mg
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 1/6  +Z UP: car on its wheels, flat on the floor  (10 s)
+[IMU] hands off, measuring in 3 s
+[IMU] avg mg x=37 y=0 z=1119  |a|=1119  spread 22 mg  (50/50 reads ok)
+[IMU] FAIL |a|: outside 900..1100 mg
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 1/6  +Z UP: car on its wheels, flat on the floor  (10 s)
+[IMU] hands off, measuring in 3 s
