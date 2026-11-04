@@ -41,14 +41,14 @@ main  (the team's real trunk: PRs #3, #4, #5 merged here)
 | `ultra-implementation1` | PR #8 (and closed #7): Buddy 5's original, already included in #9 | close #8 after #9 merges |
 | `feature/buddy2-motion-control` | PR #2: Buddy 2's original, already included in the integration branch | close #2 after #10 merges |
 | `buddy1-telem-monitor`, `line_tracing_only` | already merged into the integration branch | delete after #10 |
-| `master` | **obsolete.** Last change 10-26; its only unique commits are early S4 work, superseded by the integration branch | **GitHub still shows it as the default branch: switch the default to `main`**, then delete it |
+| ~~`master`~~ | **deleted 2026-11-04**; GitHub default branch switched to `main` the same day. Its two unique commits (`5368c35`, `6db49e1`, early S4 work, superseded) are kept in the tag `archive/master-2026-10-26` | nothing |
 | `IMU_Branch` | obsolete standalone S4 (`6745fa8` deletes other subsystems: never merge) | delete |
 | `Buddy-2`, `Buddy-3`, `buddy1-wifi`, `ultrasonic-isolate2` | 0 commits ahead of `main` (fully merged) | delete |
 
-**Is `master` the final branch? No.** All merged work is on `main`; `master` only
-looks important because GitHub lists it as the default (Settings -> General ->
-Default branch, owner `Polarbear249` can change it). New clones and new PRs default
-to `master` until that is switched, which is how work could land in the wrong place.
+**`main` is the final branch.** All merged work is on `main`. Until 2026-11-04
+GitHub listed `master` as the default branch, so the repo front page showed
+`master`'s last change (10-26) and new PRs defaulted to it; now `main` is the default
+and `master` is gone. **Everyone: `git fetch --prune` and branch off `main`.**
 
 ---
 
@@ -64,8 +64,8 @@ to `master` until that is switched, which is how work could land in the wrong pl
    lists Buddy 4's edits in `subsystem2/`).
 4. Fix line following enough for a demo lap (Buddy 3 with Buddy 2, section 4).
 5. **Merge PR #10 into `main`** (merge commit, not squash: keeps everyone's commits).
-6. Switch the GitHub default branch to `main`; close #2 and #8; delete the stale
-   branches in section 1.
+6. Close #2 and #8; delete the stale branches in section 1 (default branch already
+   switched to `main`, `master` deleted, 2026-11-04).
 7. **From then on, one trunk:** every change is a short branch off `main`
    (`s3-left-sensor`, `vc-mission`, ...), a PR to `main`, merged only after it builds
    (both builds, 0 warnings), passes the PC tests and has a car test logged. Changes
