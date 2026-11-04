@@ -24,6 +24,7 @@ config/wifi_secrets.h
 
 CLAUDE.md
 handoff.md
+graphify-out/
 # macOS
 .DS_Store
 
