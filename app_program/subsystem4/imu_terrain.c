@@ -54,9 +54,18 @@
 #define IMU_GRAVITY_HOLD_MAX    (20U)       // 200 ms
 // Impact (FR8, report only; the Vehicle Controller decides any stop): a
 // disturbance at least IMU_IMPACT_MG from 1 g that is over within
-// IMU_IMPACT_MAX_SAMPLES samples. Test choices, to confirm on the car.
-#define IMU_IMPACT_MG           (400)
+// IMU_IMPACT_MAX_SAMPLES samples. 400 mg fired 6 times in one normal
+// test drive over a 10 mm ramp (421-1215 mg, run 40, 2026-11-03): ramp
+// edges and drive-off are not impacts. 800 mg: to confirm on the car.
+#define IMU_IMPACT_MG           (800)       // was 400
 #define IMU_IMPACT_MAX_SAMPLES  (5U)        // 50 ms
+
+// Hump trace (diagnostic, off by default): while the car moves, print
+// "[TR] d p r z" every IMU_TRACE_EVERY samples (40 ms, ~3 mm at 20 RPM),
+// to see the tilt seen while driving at a fine distance step (runs
+// 43-44: is it vibration or a once-per-wheel-turn wobble?).
+#define IMU_HUMP_TRACE          (0)
+#define IMU_TRACE_EVERY         (4U)
 
 #define IMU_LATE_US             (15000U)    // period > 1.5 x 10 ms
 #define IMU_LINE_LEN            (256U)
@@ -126,6 +135,7 @@ static bool     imu_sample(uint32_t cycle, int32_t p_acc[],
 static void     imu_level_add(int32_t const p_acc[]);
 static void     imu_filter(int32_t const p_acc[]);
 static void     imu_hump_cycle(void);
+static void     imu_trace(int32_t dist_mm, int32_t roll_ddeg);
 static bool     imu_gravity_ok(int32_t const p_acc[]);
 static void     imu_impact_check(void);
 static uint32_t imu_reported_state(void);
@@ -604,8 +614,9 @@ imu_impact_check (void)
 }
 
 /*
- * Hump detection, every good sample while ACTIVE: pitch of the filtered
- * gravity vector against level, plus the IF-10 wheel distance.
+ * Hump detection, every good sample while ACTIVE: pitch and roll of the
+ * filtered gravity vector against level (roll for a one-wheel hump),
+ * plus the IF-10 wheel distance.
  */
 static void
 imu_hump_cycle (void)
@@ -622,7 +633,13 @@ imu_hump_cycle (void)
     }
 
     imu_calib_level_tilt(&g_level, filt_mg, &g_pitch_ddeg, &roll);
-    event = imu_hump_update(&g_hump, g_pitch_ddeg, dist_mm);
+    event = imu_hump_update(&g_hump, g_pitch_ddeg, roll, dist_mm);
+
+    // Constant condition: compiled either way (no unused warnings)
+    if (0 != IMU_HUMP_TRACE)
+    {
+        imu_trace(dist_mm, roll);
+    }
 
     if (IMU_EVT_HUMP_START == event)
     {
@@ -647,6 +664,29 @@ imu_hump_cycle (void)
     if ((IMU_EVT_NONE != event) || (imu_reported_state() != g_rep_state))
     {
         imu_publish();
+    }
+}
+
+/*
+ * IMU_HUMP_TRACE: one short line every IMU_TRACE_EVERY samples while the
+ * wheel distance changes: distance mm, pitch and roll 0.1 deg (filtered,
+ * vs level), profile mm. Diagnostic only: tm_printf is not real-time.
+ */
+static void
+imu_trace (int32_t dist_mm, int32_t roll_ddeg)
+{
+    static uint32_t s_count = 0U;
+    static int32_t  s_last_mm = 0;
+
+    s_count++;
+
+    if ((s_count >= IMU_TRACE_EVERY) && (dist_mm != s_last_mm))
+    {
+        s_count = 0U;
+        s_last_mm = dist_mm;
+        tm_printf((UB*)"[TR] %d %d %d %d\n", (INT)dist_mm,
+                  (INT)g_pitch_ddeg, (INT)roll_ddeg,
+                  (INT)imu_hump_now_mm(&g_hump));
     }
 }
 

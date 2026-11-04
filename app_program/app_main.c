@@ -128,6 +128,18 @@ EXPORT INT usermain(void)
 #ifndef APP_TEST_ONLY
 #define APP_TEST_ONLY	0
 #endif
+	/* APP_TEST_SETTLE_MS (local switch, TEST=1 only): wait this long
+	   before the tests, so they do not overlap the WiFi bring-up
+	   (cyw43_init); 0 = start at once (default). Diagnostic for S3-U01
+	   (2026-11-03: 200 ms read 331 ms right after boot). */
+#ifndef APP_TEST_SETTLE_MS
+#define APP_TEST_SETTLE_MS	0
+#endif
+	if (0 < APP_TEST_SETTLE_MS) {
+		tm_printf((UB*)"[TEST] settling %d ms before the tests\n",
+			  APP_TEST_SETTLE_MS);
+		(void)tk_dly_tsk(APP_TEST_SETTLE_MS);
+	}
 	/* Test build (make TEST=1): run every subsystem's tests in turn,
 	   here in the initial task, while the system is running.  Tests may
 	   call tk_dly_tsk() to let the other tasks work for a while. */
