@@ -1,0 +1,376 @@
+Pico W on the car, USB serial COM6, 2026-11-05. Move demo image, S2_MOVE_DEMO 1, S3_DRIVE_SWITCH 0.
+MOVE_DIST_SCALE_PCT 93, MOVE_STRAIGHT_LEFT_PCT 98, MOVE_TURN_SCALE_PCT 105, MOTION_U_TURN_DEG 182.
+Code: a461608 with the settings above, real S5 code. Car on a flat floor. WiFi down.
+Tester: ran twice, forward about 28 cm, veer about 5 cm left. This log is one of the two runs.
+
+---- Opened the serial port COM6 ----
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+s1: telemetry monitor every 1000 ms
+all subsystems started
+
+[VC] GP20 = emergency stop (press again to release)
+wifi: cyw43_utk_task starting (proc 1)
+
+[TELEM] seq 0  vstate 0  motion 0 (stopped)
+wifi: cyw43_init() ...
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+wifi: cyw43_init() returned, bringing interface up ...
+  line     err -64  on_line 0  junction 0
+S3: barcode disabled (S3_BARCODE_ENABLE 0)
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 0 R 0  dist 0 mm  state 0
+  raw s3   mode init  err -64  word 0x00000000  decode ok 0 fail 0
+  raw s4   imu init  hump word 0x00000000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[S2 demo] moves start in 5000 ms: clear the floor
+[IMU] state CALIBRATING
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[IMU] level zero: car moved, restarting
+[S5] obstacle task: alert below 15 cm
+[IMU] level zero: pitch -2 roll 9 (0.1 deg)
+[IMU] state ACTIVE
+
+[TELEM] seq 1  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 0  on_line 1  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 0 R 0  dist 0 mm  state 0
+  raw s3   mode tracking  err 0  word 0x580008c0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x02020000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 913-1201 mag 924 loop 920-2040 wcet 2040 per 1077-132613 late 1 err 0 | p -1 r -1 hdg 1111 d 0 L 0 R 0 | z 0 H 0/0
+
+[TELEM] seq 2  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err -63  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 0 R 0  dist 0 mm  state 0
+  raw s3   mode search-near  err -63  word 0xbd000981  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x02020000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-942 mag 930 loop 1001-2032 wcet 2040 per 2921-17193 late 1 err 0 | p -2 r -2 hdg 1080 d 0 L 0 R 0 | z 0 H 0/0
+
+[TELEM] seq 3  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err -63  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 0 R 0  dist 0 mm  state 0
+  raw s3   mode search-near  err -63  word 0x22000981  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x02020000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-936 mag 925 loop 1003-1983 wcet 2040 per 8301-11716 late 0 err 0 | p -4 r 0 hdg 953 d 0 L 0 R 0 | z 0 H 0/0
+
+[TELEM] seq 4  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 63  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 0 R 0  dist 0 mm  state 0
+  raw s3   mode search-far  err 63  word 0x87000a7f  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x02020000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-941 mag 923 loop 1003-1981 wcet 2040 per 8104-11902 late 0 err 0 | p 0 r -1 hdg 948 d 0 L 0 R 0 | z 0 H 0/0
+s1: link down, status=0 kpolls=184
+
+[TELEM] seq 5  vstate 0  motion 1 (moving)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 63  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 7 R 8  dist 0 mm  state 1
+  raw s3   mode search-far  err 63  word 0xeb000a7f  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x02020000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] impact: 1199 mg from 1 g over 3 samples (#1)
+[IMU] t ACTIVE acc 918-950 mag 923 loop 1001-2019 wcet 2040 per 7296-12704 late 0 err 0 | p 53 r 12 hdg 932 d 14 L 84 R 98 | z 0 H 0/0
+
+[TELEM] seq 6  vstate 0  motion 1 (moving)
+  motion   speed L 11  R 11 cm/s   distance 12 cm
+  line     err 63  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 793 R 792  dist 129 mm  state 1
+  raw s3   mode search-far  err 63  word 0x51000a7f  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x03320000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 923-937 mag 924 loop 1012-2132 wcet 2132 per 8174-11843 late 0 err 0 | p 67 r 36 hdg 667 d 141 L 864 R 865 | z 6 H 0/0
+[IMU] hump start at d 202 mm
+
+[TELEM] seq 7  vstate 0  motion 1 (moving)
+  motion   speed L 11  R 11 cm/s   distance 24 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  raw s2   enc L 1509 R 1524  dist 246 mm  state 1
+  raw s3   mode failed  err 0  word 0xb5000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x09150000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t HUMP_DOWN acc 924-940 mag 922 loop 1015-2040 wcet 2132 per 7239-12937 late 0 err 0 | p -34 r -19 hdg 508 d 257 L 1571 R 1586 | z 5 H 0/0
+[S2 demo] forward 30 cm: accepted 0, state 0, faults 0x0, 2000 ms, L 1678 R 1697 counts, odometer 275 mm
+
+[TELEM] seq 8  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 27 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 0 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L 1679 R 1699  dist 276 mm  state 0
+  raw s3   mode failed  err 0  word 0x1b000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0c140000  max 0 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t HUMP_UP acc 922-999 mag 922 loop 1006-2019 wcet 2132 per 8137-11905 late 0 err 0 | p 1 r 0 hdg 547 d 276 L 1679 R 1699 | z 0 H 0/0
+[IMU] hump end at d 276 mm: height 15 mm (highest 15 mm)
+
+[TELEM] seq 9  vstate 0  motion 3 (reversing)
+  motion   speed L 3  R 4 cm/s   distance 26 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L 1587 R 1589  dist 261 mm  state 1
+  raw s3   mode failed  err 0  word 0x80000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-992 mag 926 loop 1003-2001 wcet 2132 per 8091-11809 late 0 err 0 | p -89 r 166 hdg 645 d 247 L 1515 R 1511 | z 0 H 15/15
+
+[TELEM] seq 10  vstate 0  motion 3 (reversing)
+  motion   speed L 12  R 12 cm/s   distance 13 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L 802 R 796  dist 130 mm  state 1
+  raw s3   mode failed  err 0  word 0xe5000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 923-1006 mag 932 loop 1015-2010 wcet 2132 per 7990-12060 late 0 err 0 | p 99 r 46 hdg 856 d 123 L 758 R 752 | z 0 H 15/15
+s1: link down, status=0 kpolls=447
+
+[TELEM] seq 11  vstate 0  motion 3 (reversing)
+  motion   speed L 9  R 9 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L 75 R 57  dist 11 mm  state 1
+  raw s3   mode failed  err 0  word 0x4a000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 923-944 mag 926 loop 1011-2010 wcet 2132 per 7830-12127 late 0 err 0 | p -77 r -9 hdg 1082 d 6 L 50 R 32 | z 0 H 15/15
+[S2 demo] backward 30 cm: accepted 0, state 0, faults 0x0, 1950 ms, L 13 R 1 counts, odometer 1 mm
+
+[TELEM] seq 12  vstate 0  motion 0 (stopped)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L 13 R 0  dist 1 mm  state 0
+  raw s3   mode failed  err 0  word 0xaf000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-948 mag 923 loop 1002-2043 wcet 2132 per 8068-11951 late 0 err 0 | p -5 r -1 hdg 1170 d 1 L 13 R 0 | z 0 H 15/15
+
+[TELEM] seq 13  vstate 0  motion 2 (turning)
+  motion   speed L 9  R 10 cm/s   distance 0 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -189 R 252  dist 5 mm  state 1
+  raw s3   mode failed  err 0  word 0x14000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-941 mag 921 loop 1003-1977 wcet 2132 per 8229-11780 late 0 err 0 | p 21 r 31 hdg 766 d 5 L -191 R 255 | z 0 H 15/15
+
+[TELEM] seq 14  vstate 0  motion 1 (moving)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -192 R 263  dist 5 mm  state 1
+  raw s3   mode failed  err 0  word 0x79000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 920-1002 mag 921 loop 1004-1989 wcet 2132 per 8086-11704 late 0 err 0 | p -6 r -22 hdg 707 d 6 L -192 R 265 | z 0 H 15/15
+
+[TELEM] seq 15  vstate 0  motion 1 (moving)
+  motion   speed L 0  R 0 cm/s   distance 0 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 302  dist 8 mm  state 1
+  raw s3   mode failed  err 0  word 0xde000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 922-940 mag 922 loop 1000-1980 wcet 2132 per 9613-10357 late 0 err 0 | p 18 r -19 hdg 627 d 8 L -195 R 302 | z 0 H 15/15
+s1: link down, status=0 kpolls=709
+
+[TELEM] seq 16  vstate 0  motion 1 (moving)
+  motion   speed L 0  R 3 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x10 wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -196 R 401  dist 16 mm  state 1
+[IMU] t ACTIVE acc 921-1012 mag 922 loop 1008-2066 wcet 2132 per 7711-12318 late 0 err 0 | p -2 r -11 hdg 345 d 16 L -196 R 401 | z 0 H 15/15
+  raw s3   mode failed  err 0  word 0x43000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[S2 demo] left 90 deg: accepted 0, state 2, faults 0x1, 2900 ms, L -195 R 408 counts, odometer 17 mm
+[IMU] t ACTIVE acc 920-940 mag 922 loop 1001-2003 wcet 2132 per 7293-12643 late 0 err 0 | p 1 r -9 hdg 253 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 17  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0xa7000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[S2 demo] right 90 deg: accepted 1, state 2, faults 0x1, 0 ms, L -195 R 408 counts, odometer 17 mm
+[IMU] t ACTIVE acc 920-942 mag 923 loop 1004-1979 wcet 2132 per 6753-13413 late 0 err 0 | p -9 r -3 hdg 239 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 18  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0x0d000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 921-938 mag 924 loop 1003-1977 wcet 2132 per 8147-11908 late 0 err 0 | p 2 r -1 hdg 259 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 19  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0x72000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[S2 demo] U-turn: accepted 1, state 2, faults 0x1, 0 ms, L -195 R 408 counts, odometer 17 mm
+[IMU] t ACTIVE acc 920-992 mag 924 loop 1000-1994 wcet 2132 per 8122-11780 late 0 err 0 | p 5 r -1 hdg 260 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 20  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0xd7000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[S2 demo] done: reset the board to run it again
+s1: link down, status=0 kpolls=972
+[IMU] t ACTIVE acc 919-972 mag 921 loop 1000-1985 wcet 2132 per 8167-11786 late 0 err 0 | p 6 r 0 hdg 279 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 21  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0x3c000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 920-955 mag 923 loop 1006-1980 wcet 2132 per 8155-11839 late 0 err 0 | p -4 r 0 hdg 277 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 22  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0xa1000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+[IMU] t ACTIVE acc 920-992 mag 953 loop 1003-2052 wcet 2132 per 7900-12024 late 0 err 0 | p 7 r -3 hdg 330 d 17 L -195 R 408 | z 0 H 15/15
+
+[TELEM] seq 23  vstate 0  motion 6 (estop/fault)
+  motion   speed L 0  R 0 cm/s   distance 1 cm
+  line     err 0  on_line 0  junction 0
+  barcode  none yet
+  terrain  hump 15 mm
+  obstacle --   (S5: no getter yet, see s5_get_obstacle in telem_monitor.c)
+  faults   0x11 motor_stall wifi_loss
+  (telem not queued: -50)
+  raw s2   enc L -195 R 408  dist 17 mm  state 2
+  raw s3   mode failed  err 0  word 0x06000ac0  decode ok 0 fail 0
+  raw s4   imu active  hump word 0x0da20f0f  max 15 mm
+  wifi     DOWN  published 0  cmd ok 0 rejected 0
+---- Closed the serial port COM6 ----

@@ -24,12 +24,13 @@
    more. Tuned by eye on the floor, 2026-11-04: 99 turned about 5 degrees
    too little. */
 #define MOVE_TURN_SCALE_PCT     (105)
-/* Straight-move correction, tuned by eye on the floor, 2026-11-04: at 100 a
-   30 cm move went about 2 cm too far with the encoders on goal. */
-#define MOVE_DIST_SCALE_PCT     (93)
+/* Straight-move correction. Ruler on the floor, 2026-11-05: at 93 a 30 cm
+   move went about 28 cm, at 100 about 29 cm. */
+#define MOVE_DIST_SCALE_PCT     (100)
 /* Left wheel's share of a straight move. Lower it if the car veers right,
-   raise it if it veers left. First guess, the amount was not measured. */
-#define MOVE_STRAIGHT_LEFT_PCT  (98)
+   raise it if it veers left. Ruler on the floor, 2026-11-05: 98 veered about
+   5 cm left over 28 cm, 99 about 0.5 cm left (USB cable also held up). */
+#define MOVE_STRAIGHT_LEFT_PCT  (99)
 
 #define MOVE_SLOW_COUNTS        (150)   /* creep over the last ~24 mm */
 #define MOVE_COAST_COUNTS       (20)    /* cut power this early, ~3 mm */
