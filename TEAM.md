@@ -193,11 +193,11 @@ object but the µT-Kernel object type is not yet chosen.
 | IF-03 | S3, S4, S5, S1 → VC | queue (kernel type TBD, owned by VC) | `Q_events` | packed event header, bounded depth, overflow flag; header layout **CONFIRM** | Tribunal 1 |
 | IF-04 | S3, S4, S5, S1 → VC | event flag (owned by VC) | `EVG_sys` | event notification with `tk_set_flg`; wait/clear options **CONFIRM** | Tribunal 1 |
 | IF-05 | all → VC | shared word, atomic access | `g_fault_mask` | latched fault bits: motor stall, encoder fault, IMU fault, no echo, WiFi loss. Owner **CONFIRM**: VC (Version C) or S2 | Tribunal 1 |
-| IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop. Read with `s3_line_state_read()`. Bit layout in `app_program/subsystem3/line_if.h`: error 7 (offset 64), mode 3, barcode cmd 2 + cmd_seq 2 (act once when cmd_seq changes), raw sensors 3, seq 8 | Tribunal 1 (mechanism); bit layout **PROPOSED by S3 2026-11-01, needs S2 agreement** |
+| IF-06 | S3 → S2 | aligned 32-bit word, single writer, no mutex | `line_state` | line error, validity flags, 8-bit `seq`; stale data → safe stop. Read with `s3_line_state_read()`. Bit layout in `app_program/subsystem3/line_if.h`: error 7 (offset 64), mode 3, barcode cmd 2 + cmd_seq 2 (act once when cmd_seq changes), raw sensors 3, seq 8 | Tribunal 1 (mechanism); bit layout proposed by S3 2026-11-01. **S2 (Buddy 2) agrees `seq` and `mode`, 2026-11-05**: the only fields S2 reads, for the stale and FAILED stop. S2 does not read `error`, `cmd` or `cmd_seq`, so changing those needs no S2 agreement |
 | IF-07 | VC → S1 | message buffer, by-value copy (owned by S1) | `mbf_telem` (`Q_telem`) | 13-byte packed snapshot, frame v1, layout in `app_program/subsystem1/telemetry_frame.h`; VC calls `s1_telem_send()` | Tribunal 1 |
 | IF-08 | S1 → VC | message buffer (created by S1 until the VC exists; then move to VC) | `mbf_cmd` (`Q_cmd`) | validated 3-byte command frame (`CMD_STOP`, `CMD_START`, `CMD_SET_SPEED`, `CMD_PING`); VC calls `s1_cmd_recv()` | Tribunal 1 (buffer type and temporary owner: S1) |
 | IF-09 | S5 → VC | queue (kernel type TBD, owned by VC) | `Q_profile` | packed `ObstacleProfile_t`: three 9-bit distances in 32 bits | Tribunal 1 |
-| IF-10 | S2 → S4 | aligned 32-bit word, single writer (S2 encoder task), no lock; read with `motion_get_distance_mm()` (`subsystem2/motion_control.h`) | `distance_mm` (static in `subsystem2/encoder.c`) | `int32_t` cumulative distance since power-up in mm, mean of both wheels, forward positive, never reset; counts from GPIO edge interrupts (`app_program/gpio_irq.c`), published every 10 ms by `encoder_publish_task`. Host test `testing/subsystem2/host/`; on target INT-10 **PASS** (1 m push: 990 mm, 2026-10-31, `testing/subsystem4/logs/2026-10-31_int10_run34.txt`) | Implemented and tested by Buddy 4 in Buddy 2's folder (`integrate/s4-onto-main`); **Buddy 2 to sign off** |
+| IF-10 | S2 → S4, S1, S5, VC | aligned 32-bit word, single writer (S2 encoder task), no lock; read with `motion_get_distance_mm()` (`subsystem2/motion_control.h`) | `distance_mm` (static in `subsystem2/encoder.c`) | `int32_t` cumulative distance since power-up in mm, mean of both wheels, forward positive, never reset; counts from GPIO edge interrupts (`app_program/gpio_irq.c`), published every 10 ms by `encoder_publish_task`. Host test `testing/subsystem2/host/`; on target INT-10 **PASS** (1 m push: 990 mm, 2026-10-31, `testing/subsystem4/logs/2026-10-31_int10_run34.txt`) | Implemented and tested by Buddy 4 in Buddy 2's folder (`integrate/s4-onto-main`). **Code signed off by Buddy 2, 2026-11-05.** Accuracy while driving is not confirmed: floor run 3 read 274 mm on a move that looked like 30 cm by eye (`testing/subsystem2/logs/2026-11-04_target_move_demo_floor_run3.txt`), so the S2-M01 tape measure check has to settle it |
 | IF-11 | S4 → VC, S1 | aligned 32-bit word, single writer (`imu_terrain` task), no lock; read with `imu_terrain_get_hump_word()` (`subsystem4/imu_terrain.h`), unpack with the `IMU_HUMP_W_*` macros in `subsystem4/imu_hump.h` | `g_hump_word` (static in `subsystem4/imu_terrain.c`) | `[7:0]` highest hump of the run, mm (clamped at 255, never wraps); `[15:8]` last hump, mm; `[19:16]` IMU state (4 bits); `[22:20]` last event (3 bits: none, hump start, hump end, impact, fault); `[23]` valid (at least one hump measured); `[31:24]` seq (+1 per update). Written on hump start/end and state changes. Round-trip host test `testing/subsystem4/host/` | Tribunal 1 (width); layout **PROPOSED** by Buddy 4, VC and S1 to confirm |
 
 MQTT topics (broker on the laptop): `mtk3smp-pico/telem` (binary frame out, 5 Hz),
@@ -222,18 +222,21 @@ in the code; replace them as each owner creates the objects in section 5.
 
 | Object | Limit | S1 | S2 | S3 | S4 | S5 |
 |---|---|---|---|---|---|---|
-| Task | 32 | 2 | 1 | 1 | 1 | |
-| Semaphore | 16 | | 1 | | | |
-| Event flag | 16 | | | | 1 | |
+| Task | 32 | 2 | 2 | 1 | 1 | |
+| Semaphore | 16 | | | | | |
+| Event flag | 16 | | 1 | | 1 | |
 | Mailbox | 12 | | | | | |
-| Mutex | 12 | | | 1 | | |
-| Message buffer | 12 | 2 | | | 1 | |
-| Fixed memory pool | 12 | | 1 | | | |
+| Mutex | 12 | | 1 | 1 | | |
+| Message buffer | 12 | 2 | 1 | | 1 | |
+| Fixed memory pool | 12 | | | | | |
 | Variable memory pool | 12 | | | | | |
 | Cyclic handler | 12 | 1 | | 1 | | |
 | Alarm handler | 12 | | | | 1 | |
 
 (The kernel's USB and WiFi service tasks also use a few of these.)
+
+The S2 column was checked against the code on 2026-11-05. `S2_MOVE_DEMO` adds one
+task, for try-outs only. The other columns have not been rechecked.
 
 ## 7. Open points
 
@@ -244,7 +247,8 @@ in the code; replace them as each owner creates the objects in section 5.
 3. Owner of the shared GPIO interrupt dispatcher (encoders and ECHO).
 4. Kernel object type for each `Q_*` queue, the `Q_events` header layout,
    and the `EVG_sys` wait/clear options.
-5. Encoder distance word from Motion to IMU (IF-10).
+5. Closed 2026-11-05: encoder distance word from Motion to IMU (IF-10), code
+   signed off by Buddy 2 (section 5). Accuracy while driving is still open.
 6. Core assignment for each task.
 7. MQTT code inside `cyw43_utk_task` needs team and instructor agreement.
    S1's changes are listed under section 5 and are ready for review in the PR.
@@ -254,15 +258,33 @@ in the code; replace them as each owner creates the objects in section 5.
    disconnects on short WiFi stalls.
 9. The forced WiFi reconnect with motion and line tasks running (design
    review A1) needs the Motion task; run it at integration.
+10. Motion's two tasks wait with `tk_dly_tsk()`, but section 4 asks 10 ms tasks to
+    use absolute wake-up times or a cyclic handler. The measured maximum
+    `motion_tick` period is 142 ms against the 10 ms tick, cause not known
+    (`testing/subsystem2/TEST_LOG.md`). Change the code or agree an exception.
+11. Section 3 says one task drives each peripheral. Normal motor PWM comes from
+    `motion_control_task`, but `motion_stop()` and `motion_estop()` also write
+    zero PWM from the caller's task, so a stop still lands if the task is late.
+    Agree this as a safety exception or change it.
 
-## Buddy 2 motor foundation
+## Buddy 2 motion control
 
-S2 now runs `motion_task`, priority 14 on core 1, with a 10 ms delay
-between updates. Only that task writes PWM after initialization.
-`motion_control.h` provides signed duty commands with a maximum 1000 ms
-lease, stop, latched emergency stop, and status. One mutex protects commands
-across cores. Calls are non-blocking: callers must check and retry E_TMOUT.
-The existing sample pool and semaphore remain for S3/S4 source compatibility,
-but S2 no longer generates fake samples. Those example interfaces are obsolete.
-GP0/1 and GP4/5 are not configured by this motor-only implementation.
-Encoder feedback, PI tuning and distance/angle commands are pending.
+S2 runs two tasks at priority 5 on core 1: `motion_control_task` every 10 ms
+and `encoder_publish_task`, which publishes IF-10. Encoder counts come from GPIO
+edge interrupts. The API is `motion_control.h`, and setup and caller rules are in
+`testing/subsystem2/MOTOR_BRINGUP.md`.
+
+- **Modes:** SPEED (PI, updated about every 100 ms), DUTY (open loop with a
+  lease) and MOVE (encoder distance moves and turns).
+- **Line following:** S3 drives through `motion_line_drive()`, PI speed mode with
+  a lease, because duty mode stalled on the 10 mm ramp. `motion_set_duty()` stays
+  as the fallback.
+- **Stops:** `EVG_stop` (IF-02) outranks `Q_motion` (IF-01). A lease running out,
+  or stale or FAILED `line_state` (IF-06), also stops the motors.
+- **Faults:** encoder stall and wrong-direction watchdogs raise a FAULT.
+  `motion_get_fault_bits()` gives the IF-05 bits. S2 does not write
+  `g_fault_mask` until its owner is settled (section 7, point 1).
+- **Limits:** `MOTOR_TEST_HIGH_POWER` is 1 (`motor.h`), kept until S2-M07 is run
+  on battery.
+
+Test status is in `testing/subsystem2/TEST_LOG.md`.

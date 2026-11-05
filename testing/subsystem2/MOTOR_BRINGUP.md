@@ -1,45 +1,59 @@
-# Buddy 2: first integrated wheel movement
+# Buddy 2: motor and motion bring-up
 
-This change combines Buddy-2 hardware tests with main and adds a micro T-Kernel
-open-loop motor service. It does not import the separate feature branch's polling
-encoder or PI implementation. No motor moves automatically at startup.
+How to build, flash and first drive the Motion subsystem. Results are in
+`TEST_LOG.md`; this file does not record any.
 
-## Wiring assumed from Buddy-2 tests
+## Wiring
 
 Use the Robo Pico onboard motor driver and a suitable motor power supply.
 Left motor: GP10 forward, GP11 reverse. Right: GP9 forward, GP8 reverse.
-GPIOs 8–11 are control signals for the onboard driver, not direct motor power.
-Check physical left/right and forward with the wheels raised before floor tests.
-The direction mapping is an assumption based on committed tests, not a new
-hardware measurement. This implementation does not configure the encoders.
+GPIOs 8-11 are control signals for the onboard driver, not direct motor power.
+Encoders: left GP4 (A), GP5 (B); right GP0 (A), GP1 (B). Never build with
+`CRASH_REPORT=1` on the car, because it takes GP0 and GP1.
 
 ## Build and flash
 
-Follow the repository README toolchain/SDK setup. From `build_make`, run:
+Follow the repository README toolchain and SDK setup. From `build_make`:
 
 ```sh
-make -j8
+make -j8          # normal image
+make TEST=1 -j8   # test image; APP_TEST_ONLY 2 in app_main.c runs only S2
 ```
 
-Use the generated UF2, with USB console and `CRASH_REPORT=0`. Keep that console
-choice when encoders on GP0/1 are added later. The build automatically discovers
-C files under `app_program/subsystem2`.
+Both must build with 0 warnings. `APP_TEST_ONLY` is a local switch, so keep it
+at 0 in commits.
 
-## Send a first command
+Move and turn try-out: set `S2_MOVE_DEMO` to 1 (`subsystem2.h`) and
+`S3_DRIVE_SWITCH` to 0 (`subsystem3.h`). The build stops with an error if
+`S3_DRIVE_SWITCH` is still on, because two tasks would command the motors. The
+car drives by itself after boot, so raise the wheels first and keep
+`S2_MOVE_DEMO` at 0 in commits.
+
+## Which call to use
 
 Include `subsystem2/motion_control.h` from a file in `app_program`, or
-`../subsystem2/motion_control.h` from another subsystem. Call from a normal
-application task, after all subsystem initialization and start calls complete.
-Do not call from an ISR. Raise the wheels, then send one command:
+`../subsystem2/motion_control.h` from another subsystem. Only one task should
+command the motors at a time.
+
+| Need | Call | Notes |
+|---|---|---|
+| Line following | `motion_line_drive(left_rpm, right_rpm, lease_ms)` | The chosen API. PI speed mode, -30 to +30 RPM, renewed by the caller. Stops when the lease runs out or `line_state` is stale or FAILED |
+| Fixed wheel speeds | `motion_set_speed(left_rpm, right_rpm)` | Forward only, no lease: the caller must send the stop |
+| Distance or turn | `motion_move_forward`, `motion_move_backward`, `motion_turn_left`, `motion_turn_right`, `motion_u_turn` | Returns at once. Poll `motion_get_status()`: RUNNING, then STOPPED, or FAULT if a wheel stalled |
+| From the VC | `motion_send(word)` on `Q_motion` (IF-01) | Word layout in `motion_cmd.h` |
+| Open-loop fallback | `motion_set_duty(left, right, lease_ms)` | -200 to +200 (1000 = 100 %). No encoder stall watchdog. It stalled on the 10 mm ramp, so don't use it for line following |
+
+## First wheel test
+
+With the wheels raised and `S3_DRIVE_SWITCH` at 0, send one command from a
+normal application task, after all subsystem initialization and start calls:
 
 ```c
 ER er = motion_set_duty(150, 150, 500);
 CHECK(er, "first wheel test");
 ```
 
-This requests 15% forward duty for at most 500 ms, then the service removes
-motor drive. A loaded motor may not start at this duty: test raised first.
-The current limit is 20%; do not assume duty equals RPM.
+This requests 15 % forward duty for at most 500 ms. Do not assume duty equals RPM.
 
 | Command | Left | Right |
 |---|---:|---:|
@@ -50,44 +64,49 @@ The current limit is 20%; do not assume duty equals RPM.
 | Left wheel only | 150 | 0 |
 | Right wheel only | 0 | 150 |
 
-For continuous movement, renew a 300 ms lease every 100 ms from a single vehicle
-supervisor. Commands use latest-writer-wins semantics, so buddies must not send
-competing normal motion commands independently. Line following and obstacle
-avoidance should feed the supervisor. Emergency stop may be requested by any task.
+## Rules for callers
 
-- `motion_stop()` cancels the command; subsequent commands can move again.
-- `motion_estop()` latches a stop and rejects new movement.
-- `motion_clear_estop()` clears the latch and leaves movement at zero.
-- Every API return must be checked. `E_TMOUT` means mutex contention: retry
-  after yielding. A failed stop call has not been accepted.
-- The owning task runs with a 10 ms delay. Accepted stops apply on a subsequent
-  tick, subject to scheduling; this is not a hard 10 ms or 150 ms guarantee.
-- Stops coast (both driver inputs low); stopping distance is not guaranteed.
-- A command lease handles lost commands while the task is running. It is not
-  an independent hardware watchdog and cannot handle a frozen kernel.
+- Commands are latest-writer-wins, so buddies must not send competing motion
+  commands. `motion_estop()` and `motion_request_stop()` may come from any task.
+- `motion_stop()` cancels the command; later commands can move again.
+- `motion_estop()` latches a stop and refuses new movement.
+  `motion_clear_estop()` releases the latch and any FAULT, and does not restart
+  anything.
+- Check every return value. `motion_set_duty()` returning `E_TMOUT` means the
+  command lock was busy: retry next cycle. A failed stop call has not been
+  accepted.
+- Stops coast (all driver inputs low), so stopping distance is not guaranteed.
+- A lease handles lost commands while the motion task is running. It is not a
+  hardware watchdog and cannot handle a frozen kernel.
+
+## Power limit
+
+`MOTOR_TEST_HIGH_POWER` is 1 (`motor.h`): 50 % maximum and 25 % start kick,
+because the wheels did not start on laptop USB power at 20 % and 15 %. Every
+passing car run used 1, so it stays until S2-M07 is run on battery at 0.
 
 ## Validation
+
+PC tests (with MinGW, set `S2_HOST_SAN=` because it has no sanitizer):
 
 ```sh
 sh testing/subsystem2/host/run_tests.sh
 ```
 
-Host tests cover production motor/control code against fake registers and kernel
-calls: startup stop, input rejection, direction mapping, reverse pause, stop,
-expiry, latched estop, time wraparound, and mutex contention. These tests passed.
-Native syntax checking against the real project headers also passed. The Arm
-compiler and Pico SDK were unavailable in the authoring environment, so a full
-firmware link and physical wheel test have NOT been completed.
+These cover encoder counting and IF-10 (`test_encoder_distance.c`), and the move
+law and `Q_motion` word against a simple wheel model (`test_motion_move.c`). They
+do not replace the on-target tests.
 
-Next bench checks: each wheel alone, both forward, both reverse, turn directions,
-lease expiry, emergency stop, and stop latency under the integrated workload.
-Record actual results rather than marking unrun checks as passed.
+On the car: S2-U01 to S2-U15 and S2-M01 to S2-M07 in `TEST_LOG.md`. Record actual
+results rather than marking unrun checks as passed.
 
 ## Remaining Buddy 2 work
 
-Interrupt-based quadrature encoder decoding (shared GPIO ISR coordination),
-counts-per-revolution calibration, measured RPM/distance, PI speed control,
-encoder/stall fault handling, and distance/angle maneuvers remain pending.
-Other buddies can use the duty/stop API now; do not present it as calibrated
-speed, distance, or angle control. Old S3/S4 demo sample resources remain for
-source compatibility, but no fake sample producer is started.
+`TEST_LOG.md` holds the current status of each test. Still open:
+
+- Measure distance and turns with a tape measure (S2-M01, S2-M02). The current
+  scale values were tuned by eye.
+- Pass line following and the ramp (S2-M05), with no stale stops over a full lap
+  (S2-M06).
+- Run battery power at `MOTOR_TEST_HIGH_POWER` 0 (S2-M07).
+- Find the cause of the 142 ms maximum `motion_tick` period (S2-U15 open issue).
