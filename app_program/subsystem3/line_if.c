@@ -30,6 +30,10 @@ line_if_pack (line_if_state_t const *p_state)
                 << LINE_IF_CMD_SHIFT;
         word |= ((uint32_t)p_state->cmd_seq & LINE_IF_CMD_SEQ_MASK)
                 << LINE_IF_CMD_SEQ_SHIFT;
+        word |= ((uint32_t)p_state->bc_char & LINE_IF_CHAR_MASK)
+                << LINE_IF_CHAR_SHIFT;
+        word |= ((uint32_t)p_state->char_seq & LINE_IF_CHAR_SEQ_MASK)
+                << LINE_IF_CHAR_SEQ_SHIFT;
         word |= ((uint32_t)p_state->seq & LINE_IF_SEQ_MASK)
                 << LINE_IF_SEQ_SHIFT;
 
@@ -88,6 +92,10 @@ line_if_unpack (uint32_t word, line_if_state_t *p_state)
                                      & LINE_IF_CMD_SEQ_MASK);
         p_state->seq     = (uint8_t)((word >> LINE_IF_SEQ_SHIFT)
                                      & LINE_IF_SEQ_MASK);
+        p_state->bc_char  = (uint8_t)((word >> LINE_IF_CHAR_SHIFT)
+                                      & LINE_IF_CHAR_MASK);
+        p_state->char_seq = (uint8_t)((word >> LINE_IF_CHAR_SEQ_SHIFT)
+                                      & LINE_IF_CHAR_SEQ_MASK);
 
         p_state->b_centre_black =
             (0U != (word & LINE_IF_BIT(LINE_IF_RAW_C_SHIFT)));
@@ -195,4 +203,38 @@ line_if_cmd_seq (uint32_t word)
     // Cast keeps 2 bits: the mask limits the value to 0..3
     return (uint8_t)((word >> LINE_IF_CMD_SEQ_SHIFT)
                      & LINE_IF_CMD_SEQ_MASK);
+}
+
+uint8_t
+line_if_char (uint32_t word)
+{
+    // Cast keeps 5 bits: the mask limits the value to 0..31
+    return (uint8_t)((word >> LINE_IF_CHAR_SHIFT) & LINE_IF_CHAR_MASK);
+}
+
+uint8_t
+line_if_char_seq (uint32_t word)
+{
+    // Cast keeps 2 bits: the mask limits the value to 0..3
+    return (uint8_t)((word >> LINE_IF_CHAR_SEQ_SHIFT)
+                     & LINE_IF_CHAR_SEQ_MASK);
+}
+
+bool
+line_if_char_code (char letter, uint8_t *p_code)
+{
+    bool b_is_letter = false;
+
+    if ((NULL != p_code) && (letter >= 'A') && (letter <= 'Z'))
+    {
+        // Cast: the range check above keeps the result in 0..25
+        *p_code     = (uint8_t)(letter - 'A');
+        b_is_letter = true;
+    }
+    else
+    {
+        // not a letter, or nowhere to write
+    }
+
+    return b_is_letter;
 }

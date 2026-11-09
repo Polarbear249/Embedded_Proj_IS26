@@ -5,6 +5,7 @@
  */
 
 #include "subsystem3.h"
+#include "barcode_nav.h"
 
 EXPORT ID        tid_line  = 0;
 EXPORT ID        cyc_line  = 0;
@@ -35,6 +36,41 @@ s3_line_state_write (uint32_t word)
     __atomic_store_n(&g_line_state, word, __ATOMIC_RELEASE);
 }
 
+/*
+ * Barcode mapping word (barcode_nav.h). Change Requirement 1: never
+ * read-modify-write the shared word. The single writer builds each new
+ * value from its own private copy and publishes it with one atomic
+ * store; the Line task only ever loads it.
+ */
+static uint32_t g_nav_map __attribute__((aligned(4))) = NAV_MAP_EMPTY;
+static uint32_t g_nav_map_private = NAV_MAP_EMPTY;  // writer's copy
+
+EXPORT ER
+s3_nav_map_set (uint8_t movement, char letter)
+{
+    ER result = E_PAR;
+
+    if (nav_map_with(g_nav_map_private, movement, letter,
+                     &g_nav_map_private))
+    {
+        __atomic_store_n(&g_nav_map, g_nav_map_private, __ATOMIC_RELEASE);
+        result = E_OK;
+    }
+    else
+    {
+        // bad letter or movement: the mapping is unchanged
+    }
+
+    return result;
+}
+
+EXPORT uint32_t
+s3_nav_map_read (void)
+{
+    // Acquire pairs with the writer's release store
+    return __atomic_load_n(&g_nav_map, __ATOMIC_ACQUIRE);
+}
+
 EXPORT ER
 subsystem3_init (void)
 {
@@ -49,6 +85,15 @@ subsystem3_init (void)
     ccyc.cyctim = S3_PERIOD_MS;
     ccyc.cycphs = S3_PERIOD_MS;
     cyc_line = tk_cre_cyc(&ccyc);
+
+#if S3_NAV_ENABLE && S3_NAV_BENCH_MAP
+    // Temporary test mapping, see subsystem3.h. Runs before any task
+    // starts, so the single-writer rule still holds.
+    (void)s3_nav_map_set(LINE_CMD_LEFT, 'A');
+    (void)s3_nav_map_set(LINE_CMD_RIGHT, 'B');
+    (void)s3_nav_map_set(LINE_CMD_STRAIGHT, 'C');
+    (void)s3_nav_map_set(LINE_CMD_UTURN, 'D');
+#endif
 
     if (cyc_line < E_OK)
     {
@@ -68,8 +113,9 @@ subsystem3_init (void)
 EXPORT ER
 subsystem3_start (void)
 {
-    // Pinned to core 0 (TP_PRC1): the barcode interrupt is enabled on
-    // the core the task runs on. TEAM.md has not fixed cores yet.
+    // Must stay on core 0 (TP_PRC1): the shared GPIO dispatcher only
+    // enables its interrupt on core 0 (gpio_irq.c). On core 1 the attach
+    // would still succeed but the barcode edges would never arrive.
     tid_line = app_start_task((FP)line_task, S3_PRI_LINE, TP_PRC1,
                               "line_task");
 

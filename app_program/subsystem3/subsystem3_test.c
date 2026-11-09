@@ -141,33 +141,15 @@ subsystem3_test (void)
         tm_printf((UB *)"[TEST] S3-U06 done\n");
 
 #if S3_BARCODE_ENABLE
-        // S3-U07 (manual): pass a printed A/B/C/D barcode under the
-        // barcode sensor within 30 s; each decode is printed.
+        // S3-U07 (manual): pass a printed A..Z barcode under the barcode
+        // sensor within 30 s; the Line task prints each decode.
         tm_printf((UB *)"[TEST] S3-U07 pass a barcode under BC (30 s)\n");
         ok_before = g_s3_diag.decode_ok;
-        line_if_unpack(s3_line_state_read(), &was);
 
         for (waited = 0; waited < S3_BENCH_BARCODE_MS;
              waited += S3_BENCH_POLL_MS)
         {
             (void)tk_dly_tsk(S3_BENCH_POLL_MS);
-            line_if_unpack(s3_line_state_read(), &now);
-
-            if (now.cmd_seq != was.cmd_seq)
-            {
-                tm_printf((UB *)"[TEST] S3 barcode '%c' cmd=%u "
-                                "(ok %u fail %u other %u)\n",
-                          (INT)g_s3_diag.last_char, (UINT)now.cmd,
-                          (UINT)g_s3_diag.decode_ok,
-                          (UINT)g_s3_diag.decode_fail,
-                          (UINT)g_s3_diag.decode_other);
-            }
-            else
-            {
-                // no new command
-            }
-
-            was = now;
         }
 
         TEST_CHECK("S3-U07", g_s3_diag.decode_ok != ok_before,

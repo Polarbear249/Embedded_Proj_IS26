@@ -13,12 +13,13 @@
  * PC-side MQTT decoder.
  *
  *   bit 31..24  seq       8  publish counter, +1 every 10 ms, wraps
- *   bit 23..17  reserved  7  always 0
+ *   bit 23..22  char_seq  2  +1 for every decoded letter, wraps
+ *   bit 21..17  bc_char   5  latest decoded letter, 0..25 = 'A'..'Z'
  *   bit 16      raw_bc    1  barcode sensor DOUT now (1 = black)
  *   bit 15      raw_right 1  right line sensor now (1 = black)
  *   bit 14      raw_c     1  centre line sensor now (1 = black)
- *   bit 13..12  cmd_seq   2  +1 for every newly decoded barcode, wraps
- *   bit 11..10  cmd       2  latest barcode command, LINE_CMD_*
+ *   bit 13..12  cmd_seq   2  +1 at every cross-junction, wraps
+ *   bit 11..10  cmd       2  movement chosen there, LINE_CMD_*
  *   bit  9..7   mode      3  LINE_MODE_*
  *   bit  6..0   error     7  line position, offset binary, 64 = centre
  *
@@ -29,9 +30,14 @@
  * Same 7-bit offset-binary format as line_err in Buddy 1's telemetry
  * frame (subsystem1/telemetry_frame.h), so it is copied as-is.
  *
- * How Subsystem 2 acts on a barcode: remember cmd_seq; when it changes,
- * execute cmd once. Nothing has to be acknowledged, so no reader ever
- * writes shared data.
+ * Team plan (INTEGRATION.md): the Vehicle Controller keeps the pending
+ * letter and applies the MQTT mapping. It remembers char_seq and, when
+ * it changes, takes bc_char as the new pending letter; it remembers
+ * cmd_seq and, when it changes, knows a cross-junction was reached. Both
+ * counters start at 0, so bc_char means nothing until char_seq changes.
+ * While S3_NAV_ENABLE is 1 (subsystem3.h) S3 also picks the movement
+ * itself and publishes it in cmd; with it 0, cmd stays STRAIGHT. Nothing
+ * has to be acknowledged, so no reader ever writes shared data.
  *
  * This header has no kernel dependency so it also builds on a PC.
  */
@@ -55,6 +61,10 @@
 #define LINE_IF_RAW_R_SHIFT     (15U)
 #define LINE_IF_RAW_BC_SHIFT    (16U)
 #define LINE_IF_RAW_MASK        (0x01U)     // 1 bit each
+#define LINE_IF_CHAR_SHIFT      (17U)
+#define LINE_IF_CHAR_MASK       (0x1FU)     // 5 bits
+#define LINE_IF_CHAR_SEQ_SHIFT  (22U)
+#define LINE_IF_CHAR_SEQ_MASK   (0x03U)     // 2 bits
 #define LINE_IF_SEQ_SHIFT       (24U)
 #define LINE_IF_SEQ_MASK        (0xFFU)     // 8 bits
 
@@ -62,19 +72,23 @@
 #define LINE_IF_ERROR_CENTRE    (64U)
 #define LINE_IF_ERROR_MAX       (127U)
 
+// bc_char field values: 'A' = 0 .. 'Z' = 25
+#define LINE_IF_CHAR_MAX        (25U)
+
 // mode field values (6 used of 8)
 #define LINE_MODE_INIT          (0U)    // task not yet running
 #define LINE_MODE_TRACKING      (1U)    // line between or under sensors
-#define LINE_MODE_JUNCTION      (2U)    // both sensors on black
+#define LINE_MODE_JUNCTION      (2U)    // cross-junction under the car
 #define LINE_MODE_SEARCH_NEAR   (3U)    // lost: turning to last side seen
 #define LINE_MODE_SEARCH_FAR    (4U)    // lost: turning the other way
 #define LINE_MODE_FAILED        (5U)    // search gave up: stop the car
 
-// cmd field values: Project Write-up barcode table
-#define LINE_CMD_LEFT           (0U)    // barcode 'A'
-#define LINE_CMD_RIGHT          (1U)    // barcode 'B'
-#define LINE_CMD_STRAIGHT       (2U)    // barcode 'C'
-#define LINE_CMD_UTURN          (3U)    // barcode 'D'
+// cmd field values: the movement at a cross-junction. Which barcode
+// letter means which movement comes over MQTT: it is never fixed here.
+#define LINE_CMD_LEFT           (0U)
+#define LINE_CMD_RIGHT          (1U)
+#define LINE_CMD_STRAIGHT       (2U)
+#define LINE_CMD_UTURN          (3U)
 
 // Reads without a change in seq before the data counts as stale (NFR18)
 #define LINE_IF_STALE_READS     (3U)
@@ -83,6 +97,7 @@
 _Static_assert(LINE_IF_ERROR_MAX <= LINE_IF_ERROR_MASK, "error width");
 _Static_assert(LINE_MODE_FAILED <= LINE_IF_MODE_MASK, "mode width");
 _Static_assert(LINE_CMD_UTURN <= LINE_IF_CMD_MASK, "cmd width");
+_Static_assert(LINE_IF_CHAR_MAX <= LINE_IF_CHAR_MASK, "char width");
 
 // Unpacked copy of the word, for code that prefers named fields
 typedef struct
@@ -92,6 +107,8 @@ typedef struct
     uint8_t error;          // 0..127, 64 = centre
     uint8_t cmd;            // LINE_CMD_*
     uint8_t cmd_seq;        // 0..3
+    uint8_t bc_char;        // 0..25, 'A'..'Z'
+    uint8_t char_seq;       // 0..3
     bool    b_centre_black;
     bool    b_right_black;
     bool    b_barcode_black;
@@ -117,5 +134,10 @@ int8_t   line_if_error_signed(uint32_t word);
 uint8_t  line_if_mode(uint32_t word);
 uint8_t  line_if_cmd(uint32_t word);
 uint8_t  line_if_cmd_seq(uint32_t word);
+uint8_t  line_if_char(uint32_t word);
+uint8_t  line_if_char_seq(uint32_t word);
+
+// 'A'..'Z' -> 0..25 in *p_code. False, *p_code untouched, for the rest.
+bool     line_if_char_code(char letter, uint8_t *p_code);
 
 #endif /* LINE_IF_H */

@@ -14,7 +14,7 @@ _Static_assert(LINE_LOST_TICKS <= LINE_TIMER_MAX, "timer width");
 _Static_assert(LINE_SEARCH1_TICKS <= LINE_TIMER_MAX, "timer width");
 _Static_assert(LINE_SEARCH2_TICKS <= LINE_TIMER_MAX, "timer width");
 _Static_assert(LINE_DEBOUNCE_TICKS <= 3U, "debounce counter width");
-_Static_assert(LINE_JUNCTION_TICKS <= 3U, "junction counter width");
+_Static_assert(LINE_JUNCTION_TICKS <= 15U, "junction counter width");
 _Static_assert(LINE_ERR_FULL < LINE_IF_ERROR_CENTRE, "error range");
 _Static_assert(LINE_ERR_NEAR < LINE_ERR_SIDE, "near is the smaller");
 _Static_assert(LINE_ERR_GUESS <= LINE_ERR_SIDE, "a guess is gentler");

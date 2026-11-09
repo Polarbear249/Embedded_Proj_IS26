@@ -1,0 +1,55 @@
+S3 on-car barcode tuning, 2026-11-09, BEFORE the bc_run_limit_us() fix
+Image: normal build, serial shows "fw 18:30:09". Branch
+       integration-s2-s5-for-buddy5 @ 2ed56b2 + uncommitted S3 work.
+Setup: USB power, console COM17, GP7 barcode sensor (TCRT5000).
+
+EXCERPT ONLY: the "S3 barcode:" result lines, verbatim, in the order the
+runs were done, with the setup change before each group. Several
+power-ups, so the (ok, failed) counters restart. Widths are in 0.1 ms;
+at ~6 cm/s a 3 mm narrow element is ~460-500 and a 9 mm wide one ~1400.
+5242 = the 524 ms capture limit (clipped).
+
+=== 1. Potentiometer only, no slit ===
+Driven, car pivoting in line-lost search during the read:
+S3 barcode: 13 elements, widths in 0.1 ms: B458 w1687 B4995 w539 B799 w5242 B2562 w3886 B1071 w2680 B5242 w674 B3686
+Pushed by hand, sensor stuck black: no edges at all (BC=1, edges=226 constant).
+Driven, only the wide bars seen (all bars ~same width, narrow bars lost in the spaces):
+S3 barcode: 7 elements, widths in 0.1 ms: B910 w2516 B942 w2319 B972 w1170 B1004
+Pot turned towards black, pushed:
+S3 barcode: 3 elements, widths in 0.1 ms: B2123 w2291 B2253
+-> spot wider than a 3 mm bar: pot only trades lost narrow bars for lost
+   narrow spaces.
+
+=== 2. Black-tape slit added ===
+S3 barcode: 3 elements, widths in 0.1 ms: B1273 w1213 B1151
+S3 barcode: 11 elements, widths in 0.1 ms: B1107 w2182 B1124 w1956 B1241 w714 B1478 w585 B399 w1536 B719
+-> chatter gone (12 edges for 11 elements); narrow bars/spaces now visible.
+Pot nudged towards black (too far: chatter back, ~7 edges/element), e-stop
+pressed mid-read:
+S3 barcode: 11 elements, widths in 0.1 ms: B1008 w1990 B1009 w1079 B1092 w5242 B98 w312 B2123 w4448 B1047
+
+=== 3. First full-length capture ===
+S3 barcode: 29 elements, widths in 0.1 ms: B1250 w1326 B2258 w819 B1941 w694 B350 w2295 B267 w701 B357 w731 B438 w2020 B1659 w586 B440 w474 B1481 w464 B528 w405 B1693 w476 B1669 w359 B750 w1308 B5242
+-> PC decoder: RATIO error. Read backwards it is *E*: chars 1-2 match
+   exactly; char 3 fails only on the clipped last bar (B5242).
+
+=== 4. Barcode turned round (sensor no longer through the middle of the bars) ===
+S3 barcode: 4 elements, widths in 0.1 ms: B2453 w2065 B1108 w382
+-> >1.2 s of black after 4 elements ended the read.
+Car started on black, e-stop pressed at n=20: no result.
+
+=== 5. Sensor centred on the bars, start on white ===
+S3 barcode: 21 elements, widths in 0.1 ms: B764 w1182 B656 w206 B1704 w327 B1767 w353 B646 w334 B4850 w1439 B620 w80 B1799 w973 B5242 w49 B5242 w635 B5242
+-> first char = '*' correct; bars read ~1.5 mm too wide, narrow spaces
+   vanished; read ended on the hump.
+
+=== 6. Slit re-adjusted: 27 elements, all correct except the first two ===
+S3 barcode: 27 elements, widths in 0.1 ms: B277 w700 B1614 w562 B1624 w646 B326 w663 B1475 w623 B275 w713 B1490 w1725 B172 w789 B237 w802 B186 w1936 B113 w739 B1539 w576 B1474 w467 B429
+-> PC alignment: the only fit is *E* forward with elements 1-2 missing.
+S3 barcode: 27 elements, widths in 0.1 ms: B373 w669 B1692 w552 B1656 w675 B408 w692 B1594 w637 B367 w673 B1451 w1787 B304 w753 B311 w671 B296 w1917 B260 w670 B1519 w592 B1628 w652 B445
+S3 barcode: 'E' stored (ok 1, failed 1)
+S3 barcode: 27 elements, widths in 0.1 ms: B361 w603 B1660 w568 B1607 w621 B370 w658 B1545 w616 B340 w665 B1469 w1744 B260 w681 B293 w644 B256 w1915 B177 w663 B1491 w567 B1518 w593 B353
+-> 1 of 4 forward reads decoded. Cause found in code: the first wide
+   space (~175 ms) exceeded 5x the thin first bar (~30 ms), so the run
+   restarted at the second bar. Fixed in barcode_capture.c (S3-P31);
+   results after the fix: 2026-11-09_s3_barcode_after_fix.txt

@@ -29,8 +29,11 @@
  * wrong way.
  *
  * Junction / crossing line: centre, right AND barcode sensor (left
- * side) all black for LINE_JUNCTION_TICKS. The two outer sensors are
- * on opposite sides of the line, so only a crossing line covers both.
+ * side) all black for LINE_JUNCTION_TICKS. A barcode bar under the left
+ * sensor while the car drifts (centre + right black) looks the same
+ * (seen on the car), so the task passes the barcode sensor as white once
+ * a barcode run is under way (bc_capture_busy), and the time limit
+ * rejects a run's first bar, which is always narrow.
  *
  * If the centre and right sensors both stay white for LINE_LOST_TICKS,
  * the line is lost:
@@ -61,7 +64,9 @@
 #define LINE_DEBOUNCE_TICKS     (2U)    // 20 ms
 
 // Junction: all three sensors black for this many debounced cycles
-#define LINE_JUNCTION_TICKS     (2U)    // 20 ms
+// Longer than a barcode's narrow first bar, shorter than the 18 mm
+// crossing line, at driving speed. Limits the car to about 180 mm/s.
+#define LINE_JUNCTION_TICKS     (8U)    // 80 ms               TODO_TUNE
 
 // Line lost and search phases (10 ms cycles)                 TODO_TUNE
 #define LINE_LOST_TICKS         (150U)  // 1.5 s with no black reading
@@ -77,7 +82,7 @@
  * Line state. Owned by the Line task only (never shared), so C
  * bit-fields are allowed (Change Requirement 1, task-private data).
  * Widths: ticks up to 300 need 9 bits; debounce counters need 2 bits.
- * 25 bits in all.
+ * 27 bits in all.
  */
 typedef struct
 {
@@ -90,7 +95,7 @@ typedef struct
     unsigned centre_count : 2;  // cycles the raw centre reading differed
     unsigned right_count  : 2;  // cycles the raw right reading differed
     unsigned bc_count     : 2;  // cycles the raw barcode reading differed
-    unsigned all_count    : 2;  // cycles all three have been black
+    unsigned all_count    : 4;  // cycles all three have been black
 } line_logic_t;
 
 void line_logic_init(line_logic_t *p_ctx);

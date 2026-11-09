@@ -1,0 +1,87 @@
+S3 on-car run, 2026-11-09
+Image: mtk3pico_smp1_usb_cdc_wifi.uf2, normal build (TEST=0), built 18:30
+       branch integration-s2-s5-for-buddy5 @ 2ed56b2 + uncommitted S3 work
+       (S3_BARCODE_ENABLE 1, S3_NAV_SWITCH 1, S3_DRIVE_USE_SPEED 1)
+Power: USB. Console: COM17.
+
+EXCERPT ONLY. Removed: ~1000 repeated "[IMU] level zero: car moved,
+restarting" lines (S4 never finished calibrating while the car moved),
+"[IMU] t ..." status lines, "s1: link down" lines, and most of each
+[TELEM] block. Only the "raw s3" and "motion" telemetry lines are kept.
+Every kept line is verbatim and in its original order.
+
+=== Attempt 1: car did not move ===
+S3 drive: C=0 R=1 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=-41 stale=0 lease=0
+S3 barcode sensor: BC=0 edges=915 cap=0 n=0 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=58310 ms last edge=48977 ms lost=3
+[TELEM] seq 26  vstate 0  motion 6 (estop/fault)
+  faults   0x10 wifi_loss
+  raw s3   mode tracking  err 32  word 0xd400a8e0  decode ok 0 fail 0
+(same every second)
+-> motion=-41 (E_OBJ): motion_line_drive() refused, e-stop latched
+   (vehicle_controller.c: GP20 press or S5 obstacle < 15 cm). Released by
+   pressing GP20; the car then drove (attempt 2, after a reset).
+
+=== Attempt 2: drove about 1.9 m; barcode crossed, not decoded ===
+  motion   speed L 6  R 6 cm/s   distance 12 cm
+  raw s3   mode junction  err 0  word 0x8501c940  decode ok 0 fail 0
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=0 cap=2 n=0 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=4266 ms last edge=0 ms lost=0
+  raw s3   mode tracking  err -16  word 0xeb0108b0  decode ok 0 fail 0
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=0 edges=31 cap=0 n=0 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=5266 ms last edge=5219 ms lost=1
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=130 cap=1 n=0 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=182 cap=1 n=0 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=232 cap=1 n=0 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=406 cap=1 n=4 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=11266 ms last edge=11183 ms lost=1
+S3 barcode: short run (a barcode has 29)
+S3 barcode: 4 elements, widths in 0.1 ms: B3071 w590 B1080 w209
+S3 junction: no stored letter, GO STRAIGHT
+  motion   speed L 6  R 7 cm/s   distance 71 cm
+  raw s3   mode tracking  err 32  word 0x130198e0  decode ok 0 fail 0
+S3 drive: C=1 R=1 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0 stale=0 lease=0
+S3 drive: C=0 R=0 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=522 cap=2 n=0 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=0 R=0 mode=3 err=127 arm=0/200 armed=1 wheels=200/-69 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=646 cap=1 n=2 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=17266 ms last edge=17236 ms lost=1
+  motion   speed L 12  R 6 cm/s   distance 99 cm
+  raw s3   mode search-near  err 63  word 0xa70119ff  decode ok 0 fail 0
+S3 drive: C=0 R=0 mode=1 err=48 arm=0/200 armed=1 wheels=104/136 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=0 edges=727 cap=1 n=5 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=822 cap=1 n=8 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=1 R=0 mode=1 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=884 cap=1 n=10 (ok 0, failed 0) fw 18:30:09
+S3 drive: C=1 R=1 mode=1 err=74 arm=0/200 armed=1 wheels=130/110 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=977 cap=1 n=13 (ok 0, failed 0) fw 18:30:09
+S3 timing: now=22266 ms last edge=22070 ms lost=1
+S3 barcode: bars seen but not decoded (failed 1)
+S3 barcode: 13 elements, widths in 0.1 ms: B458 w1687 B4995 w539 B799 w5242 B2562 w3886 B1071 w2680 B5242 w674 B3686
+S3 drive: C=0 R=1 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=0 stale=0 lease=0
+S3 barcode sensor: BC=1 edges=1027 cap=1 n=0 (ok 0, failed 1) fw 18:30:09
+  motion   speed L 12  R 3 cm/s   distance 150 cm
+  raw s3   mode tracking  err 10  word 0xcf01d8ca  decode ok 0 fail 1
+S3 junction: no stored letter, GO STRAIGHT
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0 stale=0 lease=0
+  raw s3   mode junction  err 0  word 0x3301e940  decode ok 0 fail 1
+(junction, C=1 R=1, held from ~26 s to the end of the log at ~30 s)
+  motion   speed L 7  R 7 cm/s   distance 188 cm
+  raw s3   mode junction  err 0  word 0xc801e940  decode ok 0 fail 1
+
+=== Analysis ===
+- Expected at ~65 mm/s: narrow 3 mm ~ 460 (0.1 ms), wide 9 mm ~ 1380.
+- 5242 = BC_CAP_WIDTH_MAX (65535 x 8 us = 524 ms): clipped, element
+  held >= 524 ms (>= ~34 mm). No Code 39 element is that wide.
+- 13 elements summed ~ 3.35 s ~ 22 cm, longer than the 141 mm barcode.
+- The run started at ~17 s while the car was in search-near (mode 3,
+  pivoting 200/-69), so the sensor swept across the barcode lane.
+- edges rose by ~1000 over the run vs 30 for one clean barcode:
+  GP7 comparator still chatters (filtered by BC_CAP_SETTLE_US).

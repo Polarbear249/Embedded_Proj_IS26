@@ -16,8 +16,12 @@
  *     element is more than 3x the narrowest, so a longer white (or
  *     black) means the run has ended or was not a barcode (e.g. the
  *     sensor crossed the 18 mm line on a curve).
- *   - Comparator chatter: two changes closer than BC_CAP_GLITCH_US are
- *     a spike and are removed, so the element they split is restored.
+ *   - Comparator chatter: the TCRT5000 module's comparator flickers for
+ *     tens of microseconds at every bar edge (measured on the car
+ *     2026-11-01: bursts of 5-10 pulses of 0-64 us). A change only
+ *     counts once the level has stayed put for BC_CAP_SETTLE_US; it is
+ *     then dated at the FIRST edge of its burst, so widths stay exact.
+ *     A burst that ends on the old level (a spike) changes nothing.
  *
  * Pure C, no kernel calls: also built by the PC tests.
  */
@@ -29,9 +33,10 @@
 #include <stdint.h>
 #include "barcode_code39.h"
 
-// Shorter than this is chatter. At 1 m/s (CMD_SPEED_MAX, Buddy 1) a
-// 3 mm narrow bar lasts 3000 us, so 150 us cannot remove a real bar.
-#define BC_CAP_GLITCH_US        (150U)
+// A level must hold this long to count. At 1 m/s (CMD_SPEED_MAX, Buddy
+// 1) a 3 mm narrow bar lasts 3000 us, so 300 us cannot remove a real
+// bar; measured chatter pulses are <= 64 us.
+#define BC_CAP_SETTLE_US        (300U)
 #define BC_CAP_QUIET_FACTOR     (5U)
 #define BC_CAP_QUIET_MIN_US     (10000U)
 
@@ -42,8 +47,10 @@
 #define BC_CAP_WIDTH_MAX        (0xFFFFU)
 
 // A run that ends early with at least this many elements is reported
-// as a failed read; shorter runs are ignored as noise.
+// as a failed read. Runs of BC_CAP_SHORT_MIN.. up to that are reported
+// as BC_CAP_SHORT (bring-up diagnostics); shorter ones are ignored.
 #define BC_CAP_MIN_REPORT       (BC39_ELEMENTS_PER_CHAR)
+#define BC_CAP_SHORT_MIN        (3U)
 
 // Timestamps from the interrupt are 31 bits (bit 31 holds the level)
 #define BC_CAP_TIME_MASK        (0x7FFFFFFFU)
@@ -52,7 +59,8 @@ typedef enum
 {
     BC_CAP_NONE = 0,        // nothing new
     BC_CAP_DECODED,         // *p_char holds the data character
-    BC_CAP_FAILED           // a barcode-like run did not decode
+    BC_CAP_FAILED,          // a barcode-like run did not decode
+    BC_CAP_SHORT            // a run of 3..8 elements ended (diagnostic)
 } bc_cap_result_t;
 
 /*
@@ -62,15 +70,19 @@ typedef enum
 typedef struct
 {
     uint16_t width[BC39_SYMBOL_ELEMENTS];   // element widths, 8 us units
-    uint32_t level_start_us;    // when the current level began
-    uint32_t prev_start_us;     // when the level before it began
+    uint32_t level_start_us;    // when the settled level began
+    uint32_t raw_last_us;       // time of the latest raw edge
+    uint32_t burst_start_us;    // first raw edge since the raw level
+                                // last held for BC_CAP_SETTLE_US
     uint32_t widest_us;         // widest element of the current run
     char     decoded_char;      // result waiting for bc_capture_poll()
     uint8_t  count;             // elements stored, 0..29
-    unsigned b_black      : 1;  // current sensor level
+    uint8_t  last_count;        // elements in the run that just ended;
+                                // their widths stay in width[] until
+                                // the next run overwrites them
+    unsigned b_black      : 1;  // settled sensor level
+    unsigned b_raw_black  : 1;  // latest raw level (may be chattering)
     unsigned state        : 2;  // idle / run / wait-quiet
-    unsigned last_action  : 2;  // what the last change did (for undo)
-    unsigned b_can_undo   : 1;  // prev_start_us is valid
     unsigned pending      : 2;  // bc_cap_result_t waiting to be polled
     unsigned last_status  : 3;  // bc39_status_t of the last decode
 } bc_capture_t;
@@ -95,5 +107,13 @@ bc_cap_result_t bc_capture_poll(bc_capture_t *p_cap, uint32_t now_us,
  * Drop the current run (used after the edge ring overflowed).
  */
 void bc_capture_abort(bc_capture_t *p_cap, uint32_t now_us);
+
+/*!
+ * True once a run has stored at least one element, i.e. the barcode
+ * sensor's black is a barcode bar, not a crossing line. A run's FIRST
+ * bar returns false: a crossing line starts a run too, and it must
+ * still count as a junction.
+ */
+bool bc_capture_busy(bc_capture_t const *p_cap);
 
 #endif /* BARCODE_CAPTURE_H */

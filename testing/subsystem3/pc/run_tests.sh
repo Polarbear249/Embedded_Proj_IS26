@@ -9,8 +9,10 @@ SRC=../../../app_program/subsystem3
 OUT=${TMPDIR:-/tmp}/s3_pc_test
 gcc -std=c11 -Wall -Wextra -pedantic -Wconversion -Wshadow -Werror -O1 \
     -c $SRC/barcode_code39.c $SRC/barcode_capture.c $SRC/line_logic.c \
-    $SRC/line_if.c $SRC/line_drive.c -I$SRC
+    $SRC/line_if.c $SRC/line_drive.c $SRC/barcode_nav.c -I$SRC
 gcc -std=c11 -Wall -Wextra -O1 -I$SRC -o "$OUT" test_s3.c \
-    barcode_code39.o barcode_capture.o line_logic.o line_if.o line_drive.o
-rm -f barcode_code39.o barcode_capture.o line_logic.o line_if.o line_drive.o
+    barcode_code39.o barcode_capture.o line_logic.o line_if.o line_drive.o \
+    barcode_nav.o
+rm -f barcode_code39.o barcode_capture.o line_logic.o line_if.o \
+    line_drive.o barcode_nav.o
 "$OUT"

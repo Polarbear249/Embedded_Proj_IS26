@@ -1,0 +1,97 @@
+S3 on-car barcode runs after the bc_run_limit_us() fix, 2026-11-09
+Image: mtk3pico_smp1_usb_cdc_wifi.uf2, normal build (TEST=0),
+       serial shows "fw 20:40:47". Branch integration-s2-s5-for-buddy5
+       @ 2ed56b2 + uncommitted S3 work (incl. the fix, S3-P31).
+       S3_BARCODE_ENABLE 1, S3_NAV_SWITCH 1, S3_DRIVE_USE_SPEED 1.
+Setup: USB power, console COM17. GP7 TCRT5000 with a black-tape slit
+       (~1.5-2 mm, parallel to the bars). Printed Code 39 barcodes on a
+       flat straight section; car started on white ~5 cm before the
+       barcode and drove through at ~6 cm/s under line following.
+       GP20 e-stop released to start, pressed after the result printed.
+
+EXCERPT ONLY: the S3 barcode result lines and the counters around them,
+verbatim, in order, all from ONE power-up (counters never reset).
+IMU, telemetry and drive lines removed. Times are uptime (ms).
+
+--- pass 1 (normal direction) ---
+S3 barcode sensor: BC=0 edges=706 cap=0 n=0 (ok 0, failed 1) fw 20:40:47   (t=20269, before driving)
+S3 barcode: 'E' stored (ok 1, failed 1)                                   (t~26800)
+
+--- pass 2 (normal direction) ---
+S3 barcode sensor: BC=0 edges=1740 cap=0 n=0 (ok 1, failed 1) fw 20:40:47 (t=86279)
+S3 barcode: 'E' stored (ok 2, failed 1)                                   (t~89300)
+
+--- pass 3 (barcode flipped: read the other way) ---
+S3 barcode sensor: BC=0 edges=3038 cap=0 n=0 (ok 2, failed 2) fw 20:40:47 (t=143290)
+S3 barcode: 'E' stored (ok 3, failed 2)                                   (t~148800)
+S3 barcode: short run (a barcode has 29)                                  (after e-stop, car moved by hand; not a failure)
+S3 barcode: 4 elements, widths in 0.1 ms: B9 w2071 B2669 w437
+
+--- not logged: ok 3->4 and failed 2->3 happened between t=150 s and 750 s ---
+
+--- handling, car stationary (dist unchanged, e-stop on): counts as a failure ---
+S3 barcode sensor: BC=0 edges=7399 cap=1 n=13 (ok 4, failed 3) fw 20:40:47 (t=750320)
+S3 barcode: bars seen but not decoded (failed 4)
+S3 barcode: 13 elements, widths in 0.1 ms: B2575 w4615 B135 w5242 B2570 w5242 B4037 w439 B390 w1037 B1279 w2488 B667
+
+--- pass 4 (barcode B) ---
+S3 barcode sensor: BC=0 edges=7399 cap=0 n=0 (ok 4, failed 4) fw 20:40:47 (t=776320)
+S3 barcode: 'B' stored (ok 5, failed 4)                                   (t~781400)
+
+--- pass 5 (barcode C) ---
+S3 barcode sensor: BC=0 edges=8526 cap=0 n=0 (ok 5, failed 4) fw 20:40:47 (t=885329)
+S3 barcode: 'C' stored (ok 6, failed 4)                                   (t~891400)
+S3 junction: 'C' = GO STRAIGHT                                            (bench map, t~895400)
+
+--- handling, car stationary: counts as a failure ---
+S3 barcode sensor: BC=0 edges=10183 cap=1 n=9 (ok 6, failed 4) fw 20:40:47 (t=1021329)
+S3 barcode: bars seen but not decoded (failed 5)
+S3 barcode: 9 elements, widths in 0.1 m   (line cut off in the paste)
+
+--- pass 6: FAILED, barcode sensor had just been moved sideways ---
+S3 barcode: bars seen but not decoded (failed 6)
+S3 barcode: 16 elements, widths in 0.1 ms: B287 w850 B1717 w579 B1804 w663 B320 w2046 B423 w608 B506 w540 B686 w1518 B768 w65
+S3 junction: no stored letter, GO STRAIGHT
+S3 barcode: bars seen but not decoded (failed 7)
+S3 barcode: 11 elements, widths in 0.1 ms: B1698 w394 B524 w594 B1447 w458 B1634 w551 B400 w1745 B309
+-> one pass split in two: first 9 elements are a correct reversed '*',
+   then a 6.5 ms white and >1 s of black (both line sensors also black
+   at that moment, C=1 R=1), so the run ended and the rest started a
+   new one. Cause: new sensor position. Sensor moved back afterwards.
+
+--- pass 7 (barcode C, sensor position restored) ---
+S3 barcode sensor: BC=0 edges=11775 cap=0 n=0 (ok 6, failed 7) fw 20:40:47 (t=1137389)
+S3 barcode: 'C' stored (ok 7, failed 7)                                   (t~1140900)
+
+--- not logged: failed 7->8 happened between t=1144 s and 1261 s ---
+
+--- pass 8 (barcode C) ---
+S3 barcode sensor: BC=0 edges=13013 cap=0 n=0 (ok 7, failed 8) fw 20:40:47 (t=1261399)
+S3 barcode: 'C' stored (ok 8, failed 8)                                   (t~1266900)
+
+=== Tally (this power-up) ===
+Counters at the end: ok 8, failed 8.
+Logged driven passes: 8 -> 7 decoded (E, E, E, B, C, C, C) + 1 failed
+  (pass 6, right after the sensor was moved).
+Not in the logs: 1 decode (ok 3->4) and 4 failures (failed 0->1, 1->2,
+  2->3, 7->8); unknown whether real passes or handling.
+Known handling failures (car stationary): 2 (failed 4, failed 5).
+So this is NOT a clean NFR2 measurement: the counters mix driven passes
+with handling. Next: power-cycle, then ~20 driven passes, no handling.
+
+
+=====================================================================
+SHADOW TEST (new power-up, counters reset; same image fw 20:40:47)
+Note: shadow was casted right ontop of the barcode to see if the
+barcode can still be decoded.
+Barcode C, driven ~6 cm/s under line following, same sensor setup.
+
+S3 barcode sensor: BC=0 edges=1175 cap=0 n=0 (ok 0, failed 0) fw 20:40:47 (t=21266, before driving)
+S3 barcode sensor: BC=0 edges=1237 cap=1 n=1 (ok 0, failed 0) fw 20:40:47 (t=25268)
+S3 barcode sensor: BC=1 edges=1516 cap=1 n=10 (ok 0, failed 0) fw 20:40:47 (t=26266)
+S3 barcode sensor: BC=0 edges=1919 cap=1 n=23 (ok 0, failed 0) fw 20:40:47 (t=27266)
+S3 barcode: 'C' stored (ok 1, failed 0)                                   (t~27800)
+
+Result: PASS, decoded first time with the shadow, no failed reads
+(failed 0). The car went over the hump afterwards (hump 40 mm); no
+cross-junction was reached, so no junction movement was logged.

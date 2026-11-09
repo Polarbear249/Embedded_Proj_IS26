@@ -11,9 +11,13 @@
  * then decode it with line_if.h:
  *   line_if_error_signed(word)  steering error, < 0 = line to the left
  *   line_if_mode(word)          LINE_MODE_*  (FAILED: stop the car)
- *   line_if_cmd_seq(word)       changes once per new barcode ...
- *   line_if_cmd(word)           ... whose command is LINE_CMD_*
+ *   line_if_cmd_seq(word)       changes once per cross-junction ...
+ *   line_if_cmd(word)           ... whose movement is LINE_CMD_*
+ *   line_if_char_seq(word)      changes once per decoded letter ...
+ *   line_if_char(word)          ... which is 0..25, 'A'..'Z'
  *   line_if_is_fresh(&reader, word)   false = S3 stalled: safe stop
+ *
+ * Barcode mapping: s3_nav_map_set(), see below.
  */
 
 #ifndef SUBSYSTEM3_H
@@ -28,13 +32,37 @@
 #define S3_PERIOD_MS            (10)    // TEAM.md section 4
 
 /*
- * Barcode on/off. 0 = line following only: no GP7 interrupt, no
- * decoding, cmd stays STRAIGHT and cmd_seq never changes, so Subsystem 2
- * never sees a barcode command. raw_bc still shows the GP7 level.
- * TODO: set back to 1 once the barcode sensor works (2026-11-01: off
- * while the barcode sensor has hardware issues).
+ * Barcode on/off. 1 = GP7 edge interrupt + Code 39 decoding while the
+ * line is followed; every result is printed on the console ("S3
+ * barcode: ...") and published in bc_char / char_seq. 0 = line following
+ * only: no GP7 interrupt, no decoding, no movements, and char_seq never
+ * changes. raw_bc shows the GP7 level either way.
  */
-#define S3_BARCODE_ENABLE       (0)
+#define S3_BARCODE_ENABLE       (1)
+
+/*
+ * TEMPORARY stand-in for the Vehicle Controller's mission logic, which
+ * is not written yet (barcode_nav.h). 1 = S3 keeps the mapping, and at a
+ * cross-junction performs the stored letter's movement itself. 0 = S3
+ * only publishes the letter and counts cross-junctions in cmd_seq, for
+ * the VC to act on; cmd stays STRAIGHT. Set to 0 once the VC does this:
+ * only one module may command the motors. Needs S3_BARCODE_ENABLE.
+ */
+#define S3_NAV_SWITCH           (1)
+
+#if S3_NAV_SWITCH && S3_BARCODE_ENABLE
+#define S3_NAV_ENABLE           (1)
+#else
+#define S3_NAV_ENABLE           (0)
+#endif
+
+/*
+ * TEMPORARY, for testing before the MQTT mapping exists. 1 = start with
+ * A = left, B = right, C = forward, D = U-turn. The demo mapping MUST
+ * come from MQTT, so set this to 0 once Buddy 1's commands work.
+ * s3_nav_map_set() replaces these entries either way.
+ */
+#define S3_NAV_BENCH_MAP        (1)
 
 /*
  * Line-following drive (line_drive.h), a temporary stand-in until
@@ -66,6 +94,19 @@
  */
 IMPORT uint32_t s3_line_state_read(void);
 
+/*!
+ * Barcode mapping: letter ('A'..'Z') now means movement (LINE_CMD_*).
+ * Returns E_OK, or E_PAR for anything else. Call it from ONE task only,
+ * the one that receives the MQTT mapping commands (single writer). Takes
+ * effect at the next cross-junction.
+ */
+IMPORT ER s3_nav_map_set(uint8_t movement, char letter);
+
+/*!
+ * The current mapping word (layout in barcode_nav.h). Any task.
+ */
+IMPORT uint32_t s3_nav_map_read(void);
+
 /*
  * Diagnostics for tests and NFR11 evidence. Written only by the Line
  * task; each field is one aligned 16-bit store, so a reader never sees
@@ -76,8 +117,8 @@ typedef struct
 {
     uint16_t max_exec_us;       // longest cycle so far, us
     uint16_t overruns;          // cycles that missed the 10 ms slot
-    uint16_t decode_ok;         // barcodes decoded to A..D
-    uint16_t decode_other;      // valid Code 39, not a command
+    uint16_t decode_ok;         // barcodes decoded to A..Z
+    uint16_t decode_other;      // valid Code 39, not a letter
     uint16_t decode_fail;       // barcode-like runs that did not decode
     uint16_t edge_overflows;    // times the edge ring was full
     char     last_char;         // last decoded character, '\0' = none
