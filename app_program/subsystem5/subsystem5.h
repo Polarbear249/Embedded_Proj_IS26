@@ -69,5 +69,7 @@ ER       subsystem5_start(void);
 void     subsystem5_test(void);
 uint32_t s5_profile_pack(uint32_t left_cm, uint32_t centre_cm,
                          uint32_t right_cm, uint32_t kind, uint32_t best);
+ER       s5_get_obstacle(UB *p_found, UH *p_left_cm, UH *p_right_cm,
+                         UH *p_width_cm);
 
 #endif // SUBSYSTEM5_H

@@ -28,7 +28,8 @@
 #include "../subsystem2/motion_control.h"	/* IF-10: RPM, distance */
 #include "../subsystem3/subsystem3.h"		/* IF-06: line_state word */
 #include "../subsystem4/subsystem4.h"		/* IF-11: hump word, state */
-#include "../subsystem4/imu_hump.h"		/* IMU_HUMP_W_* field macros */
+#include "../subsystem4/imu_hump.h"		    /* IMU_HUMP_W_* field macros */
+#include "../subsystem5/subsystem5.h"		/* IF-09 word, s5_get_obstacle() */
 
 /*
  *	Subsystem 5 has no getter yet, so the obstacle fields stay empty.
@@ -42,7 +43,7 @@
  *	collect_snapshot(). Field widths: obs_ok 1 bit, the three distances
  *	9 bits each (0..511 cm), so clamp before storing.
  */
-#define S1_HAVE_S5_OBSTACLE	0
+#define S1_HAVE_S5_OBSTACLE	1
 
 /*
  *	Wheel circumference, from subsystem2/encoder.c (pi x 66 mm).

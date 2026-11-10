@@ -91,6 +91,8 @@ static void    s3_raw_flush(uint32_t now_us);
 static line_drive_t g_drive;
 static bool         g_b_was_driving = false;    // last cycle drove
 
+static volatile bool g_b_drive_enabled = true;   // VC stands S3 down in a bypass
+
 static void    s3_drive(uint8_t error, uint8_t mode);
 
 #if S3_DRIVE_USE_SPEED
@@ -155,6 +157,21 @@ s3_cyc_handler (void *exinf)
 }
 
 void
+s3_drive_set_enabled (bool b_on)
+{
+#if S3_DRIVE_ENABLE
+    g_b_drive_enabled = b_on;
+
+    if (false == b_on)
+    {
+        g_b_was_driving = false;   // Stand-down must not motion_stop()
+    }
+#else
+        (void)b_on;
+#endif
+}
+
+void
 line_task (INT stacd, void *exinf)
 {
     uint32_t start_us;
@@ -212,7 +229,6 @@ line_task (INT stacd, void *exinf)
     tm_printf((UB *)"S3: drive ON: place the car on the line, it starts "
                     "after 2 s\n");
 #endif
-
     // On the dual-core build this task may run before app_start_task()
     // has returned our ID to subsystem3_start(), so store it ourselves
     // before the cyclic handler can need it.
@@ -293,7 +309,7 @@ s3_drive (uint8_t error, uint8_t mode)
     }
 #endif
 
-    if (b_drive)
+    if (b_drive && g_b_drive_enabled)
     {
 #if S3_DRIVE_USE_SPEED
         // Same steering law, as wheel speeds through Buddy 2's PI. Any
@@ -332,7 +348,7 @@ s3_drive (uint8_t error, uint8_t mode)
 #else
     (void)err;
 #endif
-    g_b_was_driving = b_drive;
+    g_b_was_driving = (b_drive && g_b_drive_enabled); //d
 }
 
 #if S3_DRIVE_DEBUG

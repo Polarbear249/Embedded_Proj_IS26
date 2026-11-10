@@ -38,6 +38,10 @@ static uint32_t const g_scan_angle[S5_DIRECTIONS] =
     S5_ANGLE_LEFT, S5_ANGLE_CENTRE, S5_ANGLE_RIGHT
 };
 
+// 32-bit word, writen only by this task
+static volatile uint32_t g_last_profile = 0U;   // last IF-09 word sent, for s5_get_obstacle()
+static volatile bool g_b_profile_valid = false; // true if the last profile is valid (not FAULT)
+
 static s5_state_t obstacle_forward(void);
 static s5_state_t obstacle_wait_stop(void);
 static s5_state_t obstacle_scan(void);
@@ -99,6 +103,36 @@ s5_profile_pack (uint32_t left_cm, uint32_t centre_cm, uint32_t right_cm,
 
     return (left | (centre << 9) | (right << 18) | ((kind & 0x3U) << 27)
             | ((best & 0x3U) << 29));
+}
+
+ER
+s5_get_obstacle (UB *p_found, UH *p_left_cm, UH *p_right_cm, UH *p_width_cm)
+{
+    uint32_t word = g_last_profile; // One atomic load
+    uint32_t kind = S5_P_KIND(word);
+
+    if ((0 == p_found) || (0 == p_left_cm) || (0 == p_right_cm)
+        || (0 == p_width_cm))
+    {
+        return (E_PAR);
+    }
+
+    if ((false == g_b_profile_valid) || (S5_KIND_FAULT == kind))
+    {
+        *p_found = 0U;
+        *p_left_cm = 0U;
+        *p_right_cm = 0U;
+    }
+    else
+    {
+        *p_found = 1U;
+        *p_left_cm = (UH)S5_P_LEFT(word);
+        *p_right_cm = (UH)S5_P_RIGHT(word);
+    }
+
+    *p_width_cm = 0U; // No width in IF-09 yet
+
+    return (E_OK);
 }
 
 /*
@@ -267,5 +301,7 @@ obstacle_wait_release (void)
 static void
 obstacle_send (uint32_t word)
 {
+    g_last_profile = word;
+    g_b_profile_valid = true;
     (void)tk_snd_mbf(vc_mbf_profile, &word, (INT)sizeof(word), TMO_POL);
 }

@@ -107,6 +107,12 @@ IMPORT ER s3_nav_map_set(uint8_t movement, char letter);
  */
 IMPORT uint32_t s3_nav_map_read(void);
 
+/*!
+ * Runtime stand-down for a task that owns the motors (The VC's obstacle bypass). While disabled the Line Task neither drives nor stops them
+ * so its motion_stop() cannot cancel a VC move. 1 = normal line following, the power-on default.
+ */
+IMPORT void s3_drive_set_enabled(bool b_on);
+
 /*
  * Diagnostics for tests and NFR11 evidence. Written only by the Line
  * task; each field is one aligned 16-bit store, so a reader never sees
