@@ -48,12 +48,28 @@ static void      vc_drain_profiles(void);
 static void      vc_obstacle(uint32_t word);
 static void      vc_bypass_task(INT stacd, void *p_exinf);
 static bool      vc_wait_move_done(void);
-static bool      vc_bypass_manouevre(void);
+static bool      vc_line_black_now(void);
+static bool      vc_seek_line(void);
+static bool      vc_bypass_manoeuvre(uint32_t best);
 #endif
 
 static bool      vc_button_pressed(void);
 
 EXPORT ID vc_mbf_profile = 0;
+
+/*
+ * Obstacle bypass state, normal builds only. The estop task queues a
+ * profile and the bypass task acts on it: one writer each, so the
+ * volatile words need no lock.
+ */
+#if !VC_TEST_DRIVE
+static volatile bool     g_b_obstacle_stop = false;   // the last stop was ours
+static volatile bool     g_b_bypass_pending = false;
+static volatile uint32_t g_bypass_profile = 0U;
+
+// Bypass bookkeeping, touched only by vc_bypass_task and its helpers.
+static char const       *g_bypass_why = "ok";         // why the last move ended
+#endif
 
 /*!
  * Button input with pull-up (pressed = low), and the IF-09 message
@@ -238,10 +254,6 @@ vc_drive (int32_t *p_driven_mm)
  * button has been low VC_ESTOP_DEBOUNCE times in a row); holding the
  * button does not repeat it.
  */
-static volatile bool g_b_obstacle_stop = false;
-static volatile bool g_b_bypass_pending = false;
-static volatile uint32_t g_b_bypass_profile = 0U;
-
 static void
 vc_estop_task (INT stacd, void *p_exinf)
 {
@@ -321,7 +333,7 @@ vc_obstacle (uint32_t word)
             tm_printf((UB*)"[VC] obstacle at %u cm: STOP (%d), GP20"
                       " releases\n", (UINT)S5_P_CENTRE(word),
                       (INT)motion_estop());
-                g_b_obstacle_stop = true;
+            g_b_obstacle_stop = true;
         }
     }
     else if (S5_KIND_PROFILE == kind)
@@ -330,9 +342,10 @@ vc_obstacle (uint32_t word)
                   " best %s\n", (UINT)S5_P_LEFT(word),
                   (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word),
                   best_name[S5_P_BEST(word)]);
+
         if (g_b_obstacle_stop)
         {
-            g_b_bypass_profile = word;
+            g_bypass_profile = word;
             g_b_bypass_pending = true;
         }
     }
@@ -351,7 +364,8 @@ static void
 vc_toggle_estop (void)
 {
     motion_result_t result = MOTION_OK;
-    g_b_bypass_pending = false; // the operator takes the car back
+
+    g_b_bypass_pending = false;     // the operator takes the car back
     g_b_obstacle_stop = false;
 
     if (motion_is_estopped())
@@ -379,7 +393,8 @@ vc_toggle_estop (void)
 
 /*
  * Wait for the move in progress to end. Aborts on a GP20 press or a
- * fault, and treats a move that never ends as a stall.
+ * fault, and treats a move that never ends as a stall. On failure
+ * g_bypass_why says which of those it was.
  */
 static bool
 vc_wait_move_done (void)
@@ -394,55 +409,173 @@ vc_wait_move_done (void)
 
         if (vc_button_pressed())
         {
+            g_bypass_why = "GP20 pressed";
             (void)motion_estop();       // the operator aborts the manoeuvre
             return (false);
         }
 
         if (MOTION_OK != motion_get_status(&status))
         {
+            g_bypass_why = "status error";
             return (false);
         }
 
         if (MOTION_STATE_RUNNING != status.state)
         {
-            return (MOTION_STATE_FAULT != status.state);
+            if (MOTION_STATE_FAULT == status.state)
+            {
+                g_bypass_why = "motion fault";
+                return (false);
+            }
+
+            return (true);              // the move finished normally
         }
     }
 
+    g_bypass_why = "timeout";
     (void)motion_estop();               // never ended: treat as a stall
     return (false);
 }
 
 /*
- * Turn out, drive past, turn back. The e-stop must already be released.
+ * The line is under the car now. S3 keeps publishing IF-06 while it is
+ * stood down (only the drive call is gated), so the raw sensor bits are
+ * still live and can be read from here.
+ */
+static bool
+vc_line_black_now (void)
+{
+    uint32_t word = s3_line_state_read();
+
+    return (0U != ((word >> LINE_IF_RAW_C_SHIFT) & LINE_IF_RAW_MASK))
+           || (0U != ((word >> LINE_IF_RAW_R_SHIFT) & LINE_IF_RAW_MASK));
+}
+
+/*
+ * Drive at the line and stop the moment a sensor sees it.
+ * False = the distance ran out, the operator aborted, or the move
+ * failed; g_bypass_why says which.
+ */
+static bool
+vc_seek_line (void)
+{
+    motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
+    uint32_t        waited_ms = 0U;
+
+    if (MOTION_OK != motion_move_forward(VC_BYPASS_SEEK_CM))
+    {
+        g_bypass_why = "seek refused";
+        return (false);
+    }
+
+    while (waited_ms < VC_BYPASS_SEEK_MS)
+    {
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited_ms += VC_BYPASS_POLL_MS;
+
+        if (vc_line_black_now())
+        {
+            (void)motion_stop();        // cancel the rest of the approach
+            (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+            return (true);
+        }
+
+        if (vc_button_pressed())
+        {
+            g_bypass_why = "GP20 pressed in seek";
+            (void)motion_estop();
+            return (false);
+        }
+
+        if (MOTION_OK != motion_get_status(&status))
+        {
+            g_bypass_why = "status error in seek";
+            return (false);
+        }
+
+        if (MOTION_STATE_RUNNING != status.state)
+        {
+            g_bypass_why = "line not found (seek distance used up)";
+            return (false);
+        }
+    }
+
+    g_bypass_why = "line not found (seek timeout)";
+    (void)motion_stop();
+    return (false);
+}
+
+/*
+ * Turn out, drive past, swing back across the line, seek it, straighten
+ * up. The e-stop must already be released.
  */
 static bool
 vc_bypass_manoeuvre (uint32_t best)
 {
-    bool b_left = (S5_BEST_LEFT == best);
-    bool b_ok   = (MOTION_OK == motion_clear_estop());
+    bool  b_left = (S5_BEST_LEFT == best);
+    float f_turn = b_left ? S5_BYPASS_TURN_L : S5_BYPASS_TURN_R;
 
-    if (b_ok)
+    g_bypass_why = "ok";
+
+    if (MOTION_OK != motion_clear_estop())
     {
-        b_ok = (MOTION_OK == (b_left ? motion_turn_left(VC_BYPASS_TURN_DEG)
-                                     : motion_turn_right(VC_BYPASS_TURN_DEG)))
-               && vc_wait_move_done();
+        g_bypass_why = "estop clear refused";
+        return (false);
     }
 
-    if (b_ok)
+    // 1. Out of the lane
+    if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
+                             : motion_turn_right(f_turn)))
     {
-        b_ok = (MOTION_OK == motion_move_forward(VC_BYPASS_FWD_CM))
-               && vc_wait_move_done();
+        g_bypass_why = "turn refused";
+        return (false);
     }
 
-    if (b_ok && (0.0f < VC_BYPASS_RETURN_DEG))
+    if (false == vc_wait_move_done())
     {
-        b_ok = (MOTION_OK == (b_left ? motion_turn_right(VC_BYPASS_RETURN_DEG)
-                                     : motion_turn_left(VC_BYPASS_RETURN_DEG)))
-               && vc_wait_move_done();
+        return (false);
     }
 
-    return (b_ok);
+    // 2. Past the obstacle
+    if (MOTION_OK != motion_move_forward(VC_BYPASS_FWD_CM))
+    {
+        g_bypass_why = "forward refused";
+        return (false);
+    }
+
+    if (false == vc_wait_move_done())
+    {
+        return (false);
+    }
+
+    // 3. Back across the line: two turn angles, so the car points at it
+    if (MOTION_OK != (b_left ? motion_turn_right(2.0f * f_turn)
+                             : motion_turn_left(2.0f * f_turn)))
+    {
+        g_bypass_why = "return turn refused";
+        return (false);
+    }
+
+    if (false == vc_wait_move_done())
+    {
+        return (false);
+    }
+
+    // 4. Drive until a sensor is on the line
+    if (false == vc_seek_line())
+    {
+        return (false);
+    }
+
+    // 5. Straighten up
+    if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
+                             : motion_turn_right(f_turn)))
+    {
+        g_bypass_why = "straighten refused";
+        return (false);
+    }
+
+    return (vc_wait_move_done());
 }
 
 /*
@@ -472,7 +605,7 @@ vc_bypass_task (INT stacd, void *p_exinf)
         }
         else
         {
-            word = g_b_bypass_profile;
+            word = g_bypass_profile;
             best = S5_P_BEST(word);
             g_b_bypass_pending = false;
 
@@ -494,6 +627,11 @@ vc_bypass_task (INT stacd, void *p_exinf)
 
                 b_ok = vc_bypass_manoeuvre(best);
 
+                if (false == b_ok)
+                {
+                    (void)motion_estop();   // stop before handing back
+                }
+
                 s5_alert_set_enabled(true);
                 (void)s3_drive_set_enabled(true);
                 g_b_obstacle_stop = false;
@@ -505,9 +643,8 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 }
                 else
                 {
-                    (void)motion_estop();
-                    tm_printf((UB*)"[VC] bypass failed, stopped;"
-                              " GP20 releases\n");
+                    tm_printf((UB*)"[VC] bypass failed (%s), stopped;"
+                              " GP20 releases\n", g_bypass_why);
                 }
             }
         }

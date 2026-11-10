@@ -32,6 +32,9 @@
 #include "../app.h"
 #include <stdbool.h>
 
+#define S5_BYPASS_TURN_L        ((float)(S5_ANGLE_LEFT - S5_ANGLE_CENTRE))
+#define S5_BYPASS_TURN_R        ((float)(S5_ANGLE_CENTRE - S5_ANGLE_RIGHT))
+
 #define S5_PRI_MAIN             (8)         // TEAM.md section 4
 #define S5_PRC_MAIN             (TP_PRC1)   // core 0: ECHO callback core
 
@@ -48,6 +51,26 @@
 #define S5_ANGLE_LEFT           (150U) // Old is 178
 #define S5_ANGLE_CENTRE         (110U) // Old is 110
 #define S5_ANGLE_RIGHT          (78U)  // Old is 15
+
+// 5-point course scan, outer points decide the direction, all five give the obstacle's angular extent for width estimate
+#define S5_SCAN_POINTS          (5U)
+#define S5_ANGLE_HALF_L         (S5_ANGLE_LEFT  - S5_ANGLE_CENTRE)  // 40
+#define S5_ANGLE_HALF_R         (S5_ANGLE_CENTRE - S5_ANGLE_RIGHT)  // 32
+#define S5_ANGLE_LEFT_MID       (S5_ANGLE_CENTRE + (S5_ANGLE_HALF_L / 2U))
+#define S5_ANGLE_RIGHT_MID      (S5_ANGLE_CENTRE - (S5_ANGLE_HALF_R / 2U))
+
+// tan(angle) x 1000, integer only. MUST match the half-angles above:
+//   16 deg 287 | 20 deg 364 | 25 deg 466 | 30 deg 577
+//   32 deg 625 | 35 deg 700 | 40 deg 839 | 45 deg 1000
+#define S5_TAN_LEFT_MID_MILLI   (364U)      // tan(HALF_L / 2) = tan(20)
+#define S5_TAN_LEFT_MILLI       (839U)      // tan(HALF_L)     = tan(40)
+#define S5_TAN_RIGHT_MID_MILLI  (287U)      // tan(HALF_R / 2) = tan(16)
+#define S5_TAN_RIGHT_MILLI      (625U)      // tan(HALF_R)     = tan(32)
+
+_Static_assert((S5_ANGLE_HALF_L >= 20U) && (S5_ANGLE_HALF_L <= 60U), "left half-angle has no tan value in the table");
+_Static_assert((S5_ANGLE_HALF_R >= 20U) && (S5_ANGLE_HALF_R <= 60U), "right half-angle has no tan value in the table");
+_Static_assert(0U == (S5_ANGLE_HALF_L % 2U), "left mid angle not whole");
+_Static_assert(0U == (S5_ANGLE_HALF_R % 2U), "right mid angle not whole");
 
 #define S5_KIND_ALERT           (0U)
 #define S5_KIND_PROFILE         (1U)
@@ -73,5 +96,6 @@ uint32_t s5_profile_pack(uint32_t left_cm, uint32_t centre_cm,
 ER       s5_get_obstacle(UB *p_found, UH *p_left_cm, UH *p_right_cm,
                          UH *p_width_cm);
 void s5_alert_set_enabled(bool b_on);
+void s5_scan_request(void);
 
 #endif // SUBSYSTEM5_H

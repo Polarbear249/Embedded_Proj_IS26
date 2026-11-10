@@ -78,9 +78,13 @@ IMPORT ID vc_mbf_profile;
 #define VC_BYPASS_PRI           (7)         // TEAM.md 4: VC band
 #define VC_BYPASS_POLL_MS       (20)
 #define VC_BYPASS_TIMEOUT_MS    (8000U)     // per move
-#define VC_BYPASS_TURN_DEG      (45.0f)     // TUNE on the floor
+//#define VC_BYPASS_TURN_DEG      (45.0f)     // TUNE on the floor
 #define VC_BYPASS_FWD_CM        (30.0f)     // TUNE
-#define VC_BYPASS_RETURN_DEG    (45.0f)     // back to original heading; 0 = skip
+//#define VC_BYPASS_RETURN_DEG    (90.0f)     // 2x TURN_DEG to face the line again
+#define VC_BYPASS_SEEK_CM       (40.0f)     // It will drive looking for the line
+#define VC_BYPASS_SEEK_MS       (10000U)     // timeout
+#define VC_BYPASS_BACK_CM       (12.0f)     // if the line is not found, back up and try again
+#define VC_BYPASS_RETRIES       (3U)        // how many times to try the bypass manoeuvre
 
 ER vc_init(void);
 ER vc_start(void);

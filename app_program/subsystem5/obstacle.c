@@ -33,21 +33,30 @@ typedef enum
     S5_STATE_WAIT_RELEASE       // until the VC releases the stop
 } s5_state_t;
 
-static uint32_t const g_scan_angle[S5_DIRECTIONS] =
+static uint32_t const g_scan_angle[S5_SCAN_POINTS] =
 {
-    S5_ANGLE_LEFT, S5_ANGLE_CENTRE, S5_ANGLE_RIGHT
+    S5_ANGLE_LEFT, S5_ANGLE_LEFT_MID, S5_ANGLE_CENTRE, 
+    S5_ANGLE_RIGHT_MID, S5_ANGLE_RIGHT
 };
 
 // 32-bit word, writen only by this task
 static volatile uint32_t g_last_profile = 0U;   // last IF-09 word sent, for s5_get_obstacle()
+static volatile uint32_t g_last_width_cm = 0U;     // last width estimate 0 = resolvable
 static volatile bool g_b_profile_valid = false; // true if the last profile is valid (not FAULT)
 static volatile bool g_b_alert_enabled = true; // VC stand-down
+static volatile bool g_b_scan_requested = false;
 
 static s5_state_t obstacle_forward(void);
 static s5_state_t obstacle_wait_stop(void);
 static s5_state_t obstacle_scan(void);
 static s5_state_t obstacle_wait_release(void);
-static void       obstacle_send(uint32_t word);
+static void obstacle_send(uint32_t word);
+
+void
+g_b_scan_request(void)
+{
+    g_b_scan_requested = true;
+}
 
 void
 obstacle_task (INT stacd, void *exinf)
@@ -67,7 +76,15 @@ obstacle_task (INT stacd, void *exinf)
         switch (state)
         {
             case S5_STATE_FORWARD:
-                state = obstacle_forward();
+                if (g_b_scan_requested)
+                {
+                    g_b_scan_requested = false;
+                    state = S5_STATE_SCAN;
+                }
+                else
+                {
+                    state = obstacle_forward();
+                }
                 break;
 
             case S5_STATE_WAIT_STOP:
@@ -131,7 +148,7 @@ s5_get_obstacle (UB *p_found, UH *p_left_cm, UH *p_right_cm, UH *p_width_cm)
         *p_right_cm = (UH)S5_P_RIGHT(word);
     }
 
-    *p_width_cm = 0U; // No width in IF-09 yet
+    *p_width_cm = (UH)g_last_width_cm; // 0 = resolvable
 
     return (E_OK);
 }
@@ -222,70 +239,174 @@ obstacle_wait_stop (void)
 }
 
 /*
- * Coarse scan: one ping per direction. Fine scan: S5_FINE_SAMPLES pings
- * in the best direction, averaged over the valid ones. Then re-centre
- * and send the profile.
+ * Angular extent -> width. A sample counts as "obstacle" when its
+ * distance is within 50 % of the centre reading (the wall or room
+ * behind is much further away). Integer tan x 1000, so no FPU.
+ *
+ * Resolution is one 20 deg step and the sensor cone is about +/-15 deg,
+ * so anything narrower than ~12 cm at 22 cm reads as 0 (unknown). This
+ * is a limitation of one HC-SR04 on a servo, not of the maths: test the
+ * width metric on a 15-20 cm box, not on a bottle.
+ */
+static uint32_t
+obstacle_width_cm (uint32_t const *p_dist, uint32_t centre_cm)
+{
+    static uint32_t const tan_l[] =
+    {
+        0U, S5_TAN_LEFT_MID_MILLI, S5_TAN_LEFT_MILLI
+    };
+    static uint32_t const tan_r[] =
+    {
+        0U, S5_TAN_RIGHT_MID_MILLI, S5_TAN_RIGHT_MILLI
+    };
+    uint32_t blocked_cm = centre_cm + (centre_cm / 2U);
+    uint32_t extent_l = 0U;
+    uint32_t extent_r = 0U;
+
+    if ((ULTRA_NO_ECHO != p_dist[1]) && (p_dist[1] < blocked_cm))
+    {
+        extent_l = 1U;
+    }
+
+    if ((ULTRA_NO_ECHO != p_dist[0]) && (p_dist[0] < blocked_cm))
+    {
+        extent_l = 2U;
+    }
+
+    if ((ULTRA_NO_ECHO != p_dist[3]) && (p_dist[3] < blocked_cm))
+    {
+        extent_r = 1U;
+    }
+
+    if ((ULTRA_NO_ECHO != p_dist[4]) && (p_dist[4] < blocked_cm))
+    {
+        extent_r = 2U;
+    }
+
+    return ((centre_cm * (tan_l[extent_l] + tan_r[extent_r])) / 1000U);
+}
+
+/*
+ * Median of three: drops one outlier either way, so a single spurious
+ * echo neither blocks a clear side nor clears a blocked one.
+ */
+static uint32_t
+median3 (uint32_t a, uint32_t b, uint32_t c)
+{
+    uint32_t t;
+
+    if (a > b)
+    {
+        t = a; a = b; b = t;
+    }
+
+    if (b > c)
+    {
+        b = c;
+    }
+
+    return ((a > b) ? a : b);
+}
+
+/*
+ * Coarse scan: S5_SCAN_POINTS pings, +40 / +20 / 0 / -20 / -40. The
+ * three outer points decide the direction, all five give the angular
+ * extent for the width. Then one fine scan in the chosen direction,
+ * recentre and report.
  */
 static s5_state_t
 obstacle_scan (void)
 {
-    uint32_t dist_cm[S5_DIRECTIONS] = {0U, 0U, 0U};
+    uint32_t dist_cm[S5_SCAN_POINTS] = {0U, 0U, 0U, 0U, 0U};
+    static uint32_t const decision[S5_DIRECTIONS] = {0U, 2U, 4U};
     uint32_t best = S5_BEST_NONE;
     uint32_t best_cm = 0U;
+    uint32_t best_idx = 2U;
+    uint32_t best_angle = S5_ANGLE_CENTRE;
     uint32_t sum_cm = 0U;
     uint32_t valid = 0U;
     uint32_t echoes = 0U;
     uint32_t sample;
     uint32_t idx;
-
-    for (idx = 0U; idx < S5_DIRECTIONS; idx++)
+    uint32_t d;
+    for (idx = 0U; idx < S5_SCAN_POINTS; idx++)
     {
+        uint32_t a;
+        uint32_t b;
+        uint32_t c;
+
         servo_set_angle(g_scan_angle[idx]);
         (void)tk_dly_tsk(S5_SETTLE_MS);
-        dist_cm[idx] = ultrasonic_measure_cm();
+
+        a = ultrasonic_measure_cm();
+        b = ultrasonic_measure_cm();
+        c = ultrasonic_measure_cm();
+
+        dist_cm[idx] = median3(a, b, c);
 
         if (ULTRA_NO_ECHO != dist_cm[idx])
         {
             echoes++;
         }
+    }
+    /*
+     * The outer sample IS the lane: it is the direction the car drives
+     * along after the bypass turn. The mid samples are for the width
+     * only. Do not AND them in here - an object dead ahead is always
+     * inside the mid beam at 20 cm (the +/-15 deg cone reaches ~14 cm
+     * sideways), so that rule vetoes every bypass there is.
+     */
+    for (d = 0U; d < S5_DIRECTIONS; d++)
+    {
+        idx = decision[d];
 
         if (dist_cm[idx] > best_cm)
         {
             best_cm = dist_cm[idx];
-            best = idx;     // S5_BEST_LEFT / _CENTRE / _RIGHT = index
+            best = d;
+            best_idx = idx;
+            best_angle = g_scan_angle[idx];
         }
     }
-
-    if ((S5_BEST_NONE != best) && (dist_cm[best] < S5_MIN_CLEAR_CM))
+    if ((S5_BEST_NONE != best) && (best_cm < S5_MIN_CLEAR_CM))
     {
-        best = S5_BEST_NONE;   // Widest gap is still too narrow to drive through
+        best = S5_BEST_NONE;        // widest gap is still too narrow to drive
     }
-
+    if (dist_cm[2] >= S5_MIN_CLEAR_CM)
+    {
+        best = S5_BEST_CENTRE;      // way ahead is clear: do not swerve
+        best_idx = 2U;
+        best_angle = S5_ANGLE_CENTRE;
+    }
     if (S5_BEST_NONE != best)
     {
-        servo_set_angle(g_scan_angle[best]);
+        servo_set_angle(best_angle);
         (void)tk_dly_tsk(S5_SETTLE_MS);
-
         for (sample = 0U; sample < S5_FINE_SAMPLES; sample++)
         {
-            uint32_t one_cm = ultrasonic_measure_cm();  // one cycle each
-
+            uint32_t one_cm = ultrasonic_measure_cm();
             if (ULTRA_NO_ECHO != one_cm)
             {
                 sum_cm += one_cm;
                 valid++;
             }
         }
-
-        dist_cm[best] = (0U != valid) ? (sum_cm / valid) : dist_cm[best];
+        if (0U != valid)
+        {
+            dist_cm[best_idx] = sum_cm / valid;
+        }
     }
-
+    g_last_width_cm = obstacle_width_cm(dist_cm, dist_cm[2]);
+    if (S5_DIST_MASK < g_last_width_cm)
+    {
+        g_last_width_cm = S5_DIST_MASK;     // 9-bit field: telem_encode
+    }                                       // rejects the whole frame if not
     servo_set_angle(S5_ANGLE_CENTRE);
     (void)tk_dly_tsk(S5_SETTLE_MS);
-    obstacle_send(s5_profile_pack(dist_cm[0], dist_cm[1], dist_cm[2],
-                                 (0U == echoes) ? S5_KIND_FAULT 
-                                                : S5_KIND_PROFILE, best));
-
+    obstacle_send(s5_profile_pack(dist_cm[0], dist_cm[2], dist_cm[4],
+                                  (0U == echoes) ? S5_KIND_FAULT
+                                                 : S5_KIND_PROFILE,
+                                  best));
     return (S5_STATE_WAIT_RELEASE);
 }
 
