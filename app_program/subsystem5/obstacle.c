@@ -19,7 +19,7 @@
 #include "../vehicle_controller.h"          // vc_mbf_profile (IF-09)
 #include "../subsystem2/motion_control.h"   // read-only status
 
-#define S5_SETTLE_MS            (500)       // servo move, B5's value
+#define S5_SETTLE_MS            (350)       // servo move, B5's value 500 cost ~1 s per scan, 350 should be enough
 #define S5_POLL_MS              (100)
 #define S5_STOP_WAIT_POLLS      (10U)       // 1 s for the VC to stop us
 #define S5_STILL_POLLS          (2U)        // distance steady 200 ms
@@ -133,7 +133,7 @@ obstacle_forward (void)
         s_silent = 0U;
         s_close = (dist_cm < S5_ALERT_CM) ? (s_close + 1U) : 0U;
 
-        if (s_close >= S5_CONFIRM_PINGS)
+        if ((s_close >= S5_CONFIRM_PINGS) && (false == motion_is_estopped())) // Only fires when nobody ask S5 to stop
         {
             s_close = 0U;
             obstacle_send(s5_profile_pack(0U, dist_cm, 0U, S5_KIND_ALERT,
@@ -193,6 +193,7 @@ obstacle_scan (void)
     uint32_t best_cm = 0U;
     uint32_t sum_cm = 0U;
     uint32_t valid = 0U;
+    uint32_t echoes = 0U;
     uint32_t sample;
     uint32_t idx;
 
@@ -202,11 +203,21 @@ obstacle_scan (void)
         (void)tk_dly_tsk(S5_SETTLE_MS);
         dist_cm[idx] = ultrasonic_measure_cm();
 
+        if (ULTRA_NO_ECHO != dist_cm[idx])
+        {
+            echoes++;
+        }
+
         if (dist_cm[idx] > best_cm)
         {
             best_cm = dist_cm[idx];
             best = idx;     // S5_BEST_LEFT / _CENTRE / _RIGHT = index
         }
+    }
+
+    if ((S5_BEST_NONE != best) && (dist_cm[best] < S5_MIN_CLEAR_CM))
+    {
+        best = S5_BEST_NONE;   // Widest gap is still too narrow to drive through
     }
 
     if (S5_BEST_NONE != best)
@@ -231,7 +242,8 @@ obstacle_scan (void)
     servo_set_angle(S5_ANGLE_CENTRE);
     (void)tk_dly_tsk(S5_SETTLE_MS);
     obstacle_send(s5_profile_pack(dist_cm[0], dist_cm[1], dist_cm[2],
-                                  S5_KIND_PROFILE, best));
+                                 (0U == echoes) ? S5_KIND_FAULT 
+                                                : S5_KIND_PROFILE, best));
 
     return (S5_STATE_WAIT_RELEASE);
 }

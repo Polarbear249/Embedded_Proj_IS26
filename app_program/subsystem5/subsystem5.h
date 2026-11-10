@@ -34,17 +34,19 @@
 #define S5_PRI_MAIN             (8)         // TEAM.md section 4
 #define S5_PRC_MAIN             (TP_PRC1)   // core 0: ECHO callback core
 
-#define S5_ALERT_CM             (15U)       // B5's choice, TODO_TUNE
-#define S5_CONFIRM_PINGS        (2U)        // in a row
+#define S5_SENSOR_TO_FRONT_CM   (8U)       // sensor to front bumper, B5's value
+#define S5_ALERT_CM             (25U)       // B5's choice, TODO_TUNE
+#define S5_MIN_CLEAR_CM         (40U)       // Below this, no direction is passable
+#define S5_CONFIRM_PINGS        (3U)        // in a row
 #define S5_NO_ECHO_PINGS        (5U)        // in a row = sensor fault
 #define S5_FINE_SAMPLES         (5U)
 
 // Servo angles (deg). 110 = straight ahead on this mount (B5, not yet
 // fine-tuned). Which end is left: CONFIRM on the car (assumed: a larger
 // angle turns the sensor counter-clockwise seen from above = left).
-#define S5_ANGLE_LEFT           (178U)
-#define S5_ANGLE_CENTRE         (110U)
-#define S5_ANGLE_RIGHT          (15U)
+#define S5_ANGLE_LEFT           (150U) // Old is 178
+#define S5_ANGLE_CENTRE         (110U) // Old is 110
+#define S5_ANGLE_RIGHT          (78U)  // Old is 15
 
 #define S5_KIND_ALERT           (0U)
 #define S5_KIND_PROFILE         (1U)

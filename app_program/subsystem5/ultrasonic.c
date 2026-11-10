@@ -39,8 +39,10 @@ ultrasonic_init (void)
 
     if (E_OK <= er)
     {
-        er = gpio_irq_attach(ULTRA_ECHO_PIN, GPIO_IRQ_EDGE_BOTH,
-                             ultrasonic_echo_isr);
+        // Unplugged sensor must read low, not float
+        // Fakes edges and defeats the 5-ping fault detection, but the VC will stop the car anyway
+        set_w(GPIO(ULTRA_ECHO_PIN), GPIO_PDE);
+        er = gpio_irq_attach(ULTRA_ECHO_PIN, GPIO_IRQ_EDGE_BOTH, ultrasonic_echo_isr);
     }
 
     return (er);
