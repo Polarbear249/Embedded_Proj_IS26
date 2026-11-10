@@ -30,6 +30,7 @@
 
 #include <stdint.h>
 #include "../app.h"
+#include <stdbool.h>
 
 #define S5_PRI_MAIN             (8)         // TEAM.md section 4
 #define S5_PRC_MAIN             (TP_PRC1)   // core 0: ECHO callback core
@@ -71,5 +72,6 @@ uint32_t s5_profile_pack(uint32_t left_cm, uint32_t centre_cm,
                          uint32_t right_cm, uint32_t kind, uint32_t best);
 ER       s5_get_obstacle(UB *p_found, UH *p_left_cm, UH *p_right_cm,
                          UH *p_width_cm);
+void s5_alert_set_enabled(bool b_on);
 
 #endif // SUBSYSTEM5_H

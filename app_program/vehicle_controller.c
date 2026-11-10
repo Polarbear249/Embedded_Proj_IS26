@@ -46,6 +46,9 @@ static void      vc_estop_task(INT stacd, void *p_exinf);
 static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
 static void      vc_obstacle(uint32_t word);
+static void      vc_bypass_task(INT stacd, void *p_exinf);
+static bool      vc_wait_move_done(void);
+static bool      vc_bypass_manouevre(void);
 #endif
 
 static bool      vc_button_pressed(void);
@@ -95,6 +98,13 @@ vc_start (void)
                             "vc_estop");
 
     er = (tid < E_OK) ? (ER)tid : E_OK;
+
+    if (E_OK <= er)
+    {
+        tid = app_start_task((FP)vc_bypass_task, VC_BYPASS_PRI, 0,
+                             "vc_bypass");
+        er = (tid < E_OK) ? (ER)tid : E_OK;
+    }
 #endif
 
     return (er);
@@ -228,6 +238,10 @@ vc_drive (int32_t *p_driven_mm)
  * button has been low VC_ESTOP_DEBOUNCE times in a row); holding the
  * button does not repeat it.
  */
+static volatile bool g_b_obstacle_stop = false;
+static volatile bool g_b_bypass_pending = false;
+static volatile uint32_t g_b_bypass_profile = 0U;
+
 static void
 vc_estop_task (INT stacd, void *p_exinf)
 {
@@ -307,6 +321,7 @@ vc_obstacle (uint32_t word)
             tm_printf((UB*)"[VC] obstacle at %u cm: STOP (%d), GP20"
                       " releases\n", (UINT)S5_P_CENTRE(word),
                       (INT)motion_estop());
+                g_b_obstacle_stop = true;
         }
     }
     else if (S5_KIND_PROFILE == kind)
@@ -315,6 +330,11 @@ vc_obstacle (uint32_t word)
                   " best %s\n", (UINT)S5_P_LEFT(word),
                   (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word),
                   best_name[S5_P_BEST(word)]);
+        if (g_b_obstacle_stop)
+        {
+            g_b_bypass_profile = word;
+            g_b_bypass_pending = true;
+        }
     }
     else if (S5_KIND_FAULT == kind)
     {
@@ -331,6 +351,8 @@ static void
 vc_toggle_estop (void)
 {
     motion_result_t result = MOTION_OK;
+    g_b_bypass_pending = false; // the operator takes the car back
+    g_b_obstacle_stop = false;
 
     if (motion_is_estopped())
     {
@@ -351,6 +373,143 @@ vc_toggle_estop (void)
         {
             tm_printf((UB*)"[VC] GP20: emergency stop NOT latched (%d),"
                       " motors zeroed once: press again\n", (INT)result);
+        }
+    }
+}
+
+/*
+ * Wait for the move in progress to end. Aborts on a GP20 press or a
+ * fault, and treats a move that never ends as a stall.
+ */
+static bool
+vc_wait_move_done (void)
+{
+    motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
+    uint32_t        waited_ms = 0U;
+
+    while (waited_ms < VC_BYPASS_TIMEOUT_MS)
+    {
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited_ms += VC_BYPASS_POLL_MS;
+
+        if (vc_button_pressed())
+        {
+            (void)motion_estop();       // the operator aborts the manoeuvre
+            return (false);
+        }
+
+        if (MOTION_OK != motion_get_status(&status))
+        {
+            return (false);
+        }
+
+        if (MOTION_STATE_RUNNING != status.state)
+        {
+            return (MOTION_STATE_FAULT != status.state);
+        }
+    }
+
+    (void)motion_estop();               // never ended: treat as a stall
+    return (false);
+}
+
+/*
+ * Turn out, drive past, turn back. The e-stop must already be released.
+ */
+static bool
+vc_bypass_manoeuvre (uint32_t best)
+{
+    bool b_left = (S5_BEST_LEFT == best);
+    bool b_ok   = (MOTION_OK == motion_clear_estop());
+
+    if (b_ok)
+    {
+        b_ok = (MOTION_OK == (b_left ? motion_turn_left(VC_BYPASS_TURN_DEG)
+                                     : motion_turn_right(VC_BYPASS_TURN_DEG)))
+               && vc_wait_move_done();
+    }
+
+    if (b_ok)
+    {
+        b_ok = (MOTION_OK == motion_move_forward(VC_BYPASS_FWD_CM))
+               && vc_wait_move_done();
+    }
+
+    if (b_ok && (0.0f < VC_BYPASS_RETURN_DEG))
+    {
+        b_ok = (MOTION_OK == (b_left ? motion_turn_right(VC_BYPASS_RETURN_DEG)
+                                     : motion_turn_left(VC_BYPASS_RETURN_DEG)))
+               && vc_wait_move_done();
+    }
+
+    return (b_ok);
+}
+
+/*
+ * Obstacle bypass (TEAM.md 3 item 7): one manoeuvre per PROFILE. S3 and
+ * S5 are stood down first, so neither the line drive nor an S5 re-alert
+ * can cancel a move; both are re-armed on every exit path.
+ */
+static void
+vc_bypass_task (INT stacd, void *p_exinf)
+{
+    static char const * const best_name[] =
+    {
+        "left", "centre", "right", "none"
+    };
+    uint32_t word = 0U;
+    uint32_t best = S5_BEST_NONE;
+    bool     b_ok = true;
+
+    (void)stacd;
+    (void)p_exinf;
+
+    for (;;)
+    {
+        if (false == g_b_bypass_pending)
+        {
+            (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        }
+        else
+        {
+            word = g_b_bypass_profile;
+            best = S5_P_BEST(word);
+            g_b_bypass_pending = false;
+
+            if ((S5_KIND_PROFILE != S5_P_KIND(word))
+                || (S5_BEST_NONE == best))
+            {
+                tm_printf((UB*)"[VC] bypass: no passable direction"
+                          " (C %u cm), staying stopped; GP20 releases\n",
+                          (UINT)S5_P_CENTRE(word));
+            }
+            else
+            {
+                tm_printf((UB*)"[VC] bypass: best %s, L %u C %u R %u cm\n",
+                          best_name[best], (UINT)S5_P_LEFT(word),
+                          (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word));
+
+                (void)s3_drive_set_enabled(false);
+                s5_alert_set_enabled(false);
+
+                b_ok = vc_bypass_manoeuvre(best);
+
+                s5_alert_set_enabled(true);
+                (void)s3_drive_set_enabled(true);
+                g_b_obstacle_stop = false;
+
+                if (b_ok)
+                {
+                    tm_printf((UB*)"[VC] bypass done, line drive"
+                              " resumes\n");
+                }
+                else
+                {
+                    (void)motion_estop();
+                    tm_printf((UB*)"[VC] bypass failed, stopped;"
+                              " GP20 releases\n");
+                }
+            }
         }
     }
 }

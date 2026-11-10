@@ -41,6 +41,7 @@ static uint32_t const g_scan_angle[S5_DIRECTIONS] =
 // 32-bit word, writen only by this task
 static volatile uint32_t g_last_profile = 0U;   // last IF-09 word sent, for s5_get_obstacle()
 static volatile bool g_b_profile_valid = false; // true if the last profile is valid (not FAULT)
+static volatile bool g_b_alert_enabled = true; // VC stand-down
 
 static s5_state_t obstacle_forward(void);
 static s5_state_t obstacle_wait_stop(void);
@@ -135,6 +136,12 @@ s5_get_obstacle (UB *p_found, UH *p_left_cm, UH *p_right_cm, UH *p_width_cm)
     return (E_OK);
 }
 
+void
+s5_alert_set_enabled (bool b_on)
+{
+    g_b_alert_enabled = b_on;
+}
+
 /*
  * One forward ping (one cycle). Counters are static: they live across
  * calls, and only this task touches them.
@@ -167,7 +174,7 @@ obstacle_forward (void)
         s_silent = 0U;
         s_close = (dist_cm < S5_ALERT_CM) ? (s_close + 1U) : 0U;
 
-        if ((s_close >= S5_CONFIRM_PINGS) && (false == motion_is_estopped())) // Only fires when nobody ask S5 to stop
+        if ((s_close >= S5_CONFIRM_PINGS) && (false == motion_is_estopped()) && (true == g_b_alert_enabled)) // Only fires when nobody ask S5 to stop
         {
             s_close = 0U;
             obstacle_send(s5_profile_pack(0U, dist_cm, 0U, S5_KIND_ALERT,

@@ -64,6 +64,24 @@
 #define VC_PROFILE_DEPTH        (8U)
 IMPORT ID vc_mbf_profile;
 
+/*
+ * Obstacle bypass (S5 profile -> VC manoeuvre). The VC owns the motors
+ * for the whole sequence: S3 and S5 are stood down, the VC clears the
+ * e-stop, the car turns out of the lane, drives past and turns back.
+ * S5 is then re-armed and re-alerts if anything is still inside
+ * S5_ALERT_CM, which is the repeat condition.
+ *
+ * 45 deg and 30 cm are starting values: lateral offset is
+ * 30 x sin(45) = 21 cm, and the front passes the obstacle's plane at
+ * 30 x cos(45) = 21 cm beyond the 14 cm it had at the stop.
+ */
+#define VC_BYPASS_PRI           (7)         // TEAM.md 4: VC band
+#define VC_BYPASS_POLL_MS       (20)
+#define VC_BYPASS_TIMEOUT_MS    (8000U)     // per move
+#define VC_BYPASS_TURN_DEG      (45.0f)     // TUNE on the floor
+#define VC_BYPASS_FWD_CM        (30.0f)     // TUNE
+#define VC_BYPASS_RETURN_DEG    (45.0f)     // back to original heading; 0 = skip
+
 ER vc_init(void);
 ER vc_start(void);
 
