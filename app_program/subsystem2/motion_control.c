@@ -67,6 +67,16 @@
 #define MOTION_MOVE_CREEP         110
 #endif
 
+#if MOTOR_TEST_HIGH_POWER
+#define MOTION_TURN_KICK          400
+#define MOTION_TURN_CRUISE        300
+#define MOTION_TURN_CREEP         260
+#else
+#define MOTION_TURN_KICK          300
+#define MOTION_TURN_CRUISE        240
+#define MOTION_TURN_CREEP         200
+#endif
+
 #define MOTION_MAX_MOVE_CM        1000.0f
 #define MOTION_MAX_TURN_DEG       360.0f
 #define MOTION_MM_PER_CM          10.0f
@@ -940,8 +950,12 @@ static void motion_move_tick(UW dt_ms)
 static motion_result_t motion_move_request(int32_t goal_left,
                                            int32_t goal_right)
 {
-    move_duty_t duty = {MOTION_MOVE_KICK, MOTION_MOVE_CRUISE,
-                        MOTION_MOVE_CREEP};
+    bool b_turn = ((goal_left > 0) != (goal_right > 0));
+    move_duty_t duty = b_turn
+                        ? (move_duty_t){MOTION_TURN_KICK, MOTION_TURN_CRUISE,
+                                        MOTION_TURN_CREEP}
+                        : (move_duty_t){MOTION_MOVE_KICK, MOTION_MOVE_CRUISE,
+                                        MOTION_MOVE_CREEP};
 
     if (!motion_ready)
     {

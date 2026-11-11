@@ -53,7 +53,7 @@ static s5_state_t obstacle_wait_release(void);
 static void obstacle_send(uint32_t word);
 
 void
-g_b_scan_request(void)
+s5_scan_request(void)
 {
     g_b_scan_requested = true;
 }
@@ -306,6 +306,29 @@ median3 (uint32_t a, uint32_t b, uint32_t c)
     }
 
     return ((a > b) ? a : b);
+}
+
+static uint32_t
+min_valid3 (uint32_t a, uint32_t b, uint32_t c)
+{
+    uint32_t best = ULTRA_NO_ECHO;
+
+    if (ULTRA_NO_ECHO != a)
+    {
+        best = a;
+    }
+
+    if ((ULTRA_NO_ECHO != b) && ((ULTRA_NO_ECHO == best) || (b < best)))
+    {
+        best = b;
+    }
+
+    if ((ULTRA_NO_ECHO != c) && ((ULTRA_NO_ECHO == best) || (c < best)))
+    {
+        best = c;
+    }
+
+    return (best);
 }
 
 /*

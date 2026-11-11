@@ -29,8 +29,21 @@ static bool move_wheel_done(int32_t goal, int32_t now)
 static int32_t move_wheel_duty(move_t const *p_move, int32_t goal, int32_t now)
 {
     int32_t remaining = move_abs(goal) - move_progress(goal, now);
+    int32_t slow = MOVE_SLOW_COUNTS;
 
-    if (remaining <= MOVE_SLOW_COUNTS)
+    /*
+     * Creep is for landing accuracy, so it belongs on the last slice of a
+     * move - not on 60% of a short one. A fixed 150 counts is 27% of a 90
+     * degree pivot but 60% of a 40 degree one, and a scrubbing wheel at
+     * creep duty stalls there. Never creep over more than a quarter of
+     * the move.
+     */
+    if ((move_abs(goal) / 4) < slow)
+    {
+        slow = move_abs(goal) / 4;
+    }
+
+    if (remaining <= slow)
     {
         return p_move->duty.creep;
     }

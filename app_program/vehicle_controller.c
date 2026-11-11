@@ -69,6 +69,7 @@ static volatile uint32_t g_bypass_profile = 0U;
 
 // Bypass bookkeeping, touched only by vc_bypass_task and its helpers.
 static char const       *g_bypass_why = "ok";         // why the last move ended
+static uint32_t          g_bypass_retries = 0U;      // distance at the start
 #endif
 
 /*!
@@ -514,67 +515,69 @@ vc_bypass_manoeuvre (uint32_t best)
 {
     bool  b_left = (S5_BEST_LEFT == best);
     float f_turn = b_left ? S5_BYPASS_TURN_L : S5_BYPASS_TURN_R;
-
     g_bypass_why = "ok";
+    
+    if (S5_BEST_CENTRE == best)
+    {
+        g_bypass_why = "centre clear";
+        return (true);
+    }
 
     if (MOTION_OK != motion_clear_estop())
     {
         g_bypass_why = "estop clear refused";
         return (false);
     }
-
     // 1. Out of the lane
+    tm_printf((UB*)"[VC] 1/5 turn %s %d deg\n",
+              b_left ? "left" : "right", (INT)f_turn);
     if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
                              : motion_turn_right(f_turn)))
     {
         g_bypass_why = "turn refused";
         return (false);
     }
-
     if (false == vc_wait_move_done())
     {
         return (false);
     }
-
     // 2. Past the obstacle
+    tm_printf((UB*)"[VC] 2/5 forward %d cm\n", (INT)VC_BYPASS_FWD_CM);
     if (MOTION_OK != motion_move_forward(VC_BYPASS_FWD_CM))
     {
         g_bypass_why = "forward refused";
         return (false);
     }
-
     if (false == vc_wait_move_done())
     {
         return (false);
     }
-
     // 3. Back across the line: two turn angles, so the car points at it
+    tm_printf((UB*)"[VC] 3/5 turn back %d deg\n", (INT)(2.0f * f_turn));
     if (MOTION_OK != (b_left ? motion_turn_right(2.0f * f_turn)
                              : motion_turn_left(2.0f * f_turn)))
     {
         g_bypass_why = "return turn refused";
         return (false);
     }
-
     if (false == vc_wait_move_done())
     {
         return (false);
     }
-
     // 4. Drive until a sensor is on the line
+    tm_printf((UB*)"[VC] 4/5 seek line\n");
     if (false == vc_seek_line())
     {
         return (false);
     }
-
     // 5. Straighten up
+    tm_printf((UB*)"[VC] 5/5 straighten\n");
     if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
                              : motion_turn_right(f_turn)))
     {
         g_bypass_why = "straighten refused";
         return (false);
     }
-
     return (vc_wait_move_done());
 }
 
@@ -609,35 +612,35 @@ vc_bypass_task (INT stacd, void *p_exinf)
             best = S5_P_BEST(word);
             g_b_bypass_pending = false;
 
-            if ((S5_KIND_PROFILE != S5_P_KIND(word))
-                || (S5_BEST_NONE == best))
+            if (S5_KIND_PROFILE != S5_P_KIND(word))
             {
-                tm_printf((UB*)"[VC] bypass: no passable direction"
-                          " (C %u cm), staying stopped; GP20 releases\n",
-                          (UINT)S5_P_CENTRE(word));
+                // ALERT or FAULT word: nothing to act on
             }
-            else
+            else if (S5_BEST_CENTRE == best)
+            {
+                tm_printf((UB*)"[VC] bypass: centre clear at %u cm,"
+                          " carrying on\n", (UINT)S5_P_CENTRE(word));
+                (void)motion_clear_estop();
+                g_b_obstacle_stop = false;
+            }
+            else if (S5_BEST_NONE != best)
             {
                 tm_printf((UB*)"[VC] bypass: best %s, L %u C %u R %u cm\n",
                           best_name[best], (UINT)S5_P_LEFT(word),
                           (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word));
-
                 (void)s3_drive_set_enabled(false);
                 s5_alert_set_enabled(false);
-
                 b_ok = vc_bypass_manoeuvre(best);
-
                 if (false == b_ok)
                 {
                     (void)motion_estop();   // stop before handing back
                 }
-
                 s5_alert_set_enabled(true);
                 (void)s3_drive_set_enabled(true);
                 g_b_obstacle_stop = false;
-
                 if (b_ok)
                 {
+                    g_bypass_retries = 0U;  // this obstacle is behind us
                     tm_printf((UB*)"[VC] bypass done, line drive"
                               " resumes\n");
                 }
@@ -645,6 +648,39 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 {
                     tm_printf((UB*)"[VC] bypass failed (%s), stopped;"
                               " GP20 releases\n", g_bypass_why);
+                }
+            }
+            else
+            {
+                /*
+                 * Boxed in. Back off one step and rescan: more standoff
+                 * makes both side beams read further, which is what turns
+                 * "none" into a direction. Not a reverse-and-hunt - the
+                 * car keeps its heading so the line stays behind it.
+                 */
+                if (g_bypass_retries < VC_BYPASS_RETRIES)
+                {
+                    g_bypass_retries++;
+                    s5_alert_set_enabled(false);
+                    if (MOTION_OK == motion_clear_estop())
+                    {
+                        (void)motion_move_backward(VC_BYPASS_BACK_CM);
+                        (void)vc_wait_move_done();
+                    }
+                    s5_alert_set_enabled(true);
+                    s5_scan_request();
+                    tm_printf((UB*)"[VC] boxed in: reversed %d cm,"
+                              " rescanning (%u/%u)\n",
+                              (INT)VC_BYPASS_BACK_CM,
+                              (UINT)g_bypass_retries,
+                              (UINT)VC_BYPASS_RETRIES);
+                }
+                else
+                {
+                    g_bypass_retries = 0U;
+                    tm_printf((UB*)"[VC] boxed in after %u reverses,"
+                              " staying stopped; GP20 releases\n",
+                              (UINT)VC_BYPASS_RETRIES);
                 }
             }
         }
