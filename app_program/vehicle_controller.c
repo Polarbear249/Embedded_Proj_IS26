@@ -51,6 +51,7 @@ static bool      vc_wait_move_done(void);
 static bool      vc_line_black_now(void);
 static bool      vc_seek_line(void);
 static bool      vc_bypass_manoeuvre(uint32_t best);
+static bool      vc_wait_profile(UINT timeout_ms);
 #endif
 
 static bool      vc_button_pressed(void);
@@ -438,6 +439,26 @@ vc_wait_move_done (void)
     return (false);
 }
 
+/* Wait for the bypass task to be handed a fresh PROFILE after a rescan. */
+static bool
+vc_wait_profile (UINT timeout_ms)
+{
+    UINT waited = 0U;
+
+    while (waited < timeout_ms)
+    {
+        if (g_b_bypass_pending)
+        {
+            return (true);
+        }
+
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited += (UINT)VC_BYPASS_POLL_MS;
+    }
+
+    return (false);
+}
+
 /*
  * The line is under the car now. S3 keeps publishing IF-06 while it is
  * stood down (only the drive call is gated), so the raw sensor bits are
@@ -516,7 +537,7 @@ vc_bypass_manoeuvre (uint32_t best)
     bool  b_left = (S5_BEST_LEFT == best);
     float f_turn = b_left ? S5_BYPASS_TURN_L : S5_BYPASS_TURN_R;
     g_bypass_why = "ok";
-    
+
     if (S5_BEST_CENTRE == best)
     {
         g_bypass_why = "centre clear";
@@ -543,15 +564,28 @@ vc_bypass_manoeuvre (uint32_t best)
     }
     // 2. Past the obstacle
     tm_printf((UB*)"[VC] 2/5 forward %d cm\n", (INT)VC_BYPASS_FWD_CM);
+
+    /*
+     * The pivot is blind on purpose - S5 would re-latch the e-stop the
+     * instant it is cleared, with the obstacle still 20 cm ahead. The
+     * forward leg is not blind: if something is in the way S5 stops the
+     * car and this move aborts, instead of grinding into it.
+     */
+    s5_alert_set_enabled(true);
+
     if (MOTION_OK != motion_move_forward(VC_BYPASS_FWD_CM))
     {
         g_bypass_why = "forward refused";
         return (false);
     }
+
     if (false == vc_wait_move_done())
     {
         return (false);
     }
+
+    s5_alert_set_enabled(false);
+
     // 3. Back across the line: two turn angles, so the car points at it
     tm_printf((UB*)"[VC] 3/5 turn back %d deg\n", (INT)(2.0f * f_turn));
     if (MOTION_OK != (b_left ? motion_turn_right(2.0f * f_turn)
@@ -653,11 +687,12 @@ vc_bypass_task (INT stacd, void *p_exinf)
             else
             {
                 /*
-                 * Boxed in. Back off one step and rescan: more standoff
-                 * makes both side beams read further, which is what turns
-                 * "none" into a direction. Not a reverse-and-hunt - the
-                 * car keeps its heading so the line stays behind it.
+                 * Boxed in. S3 stays stood down for the whole back-off:
+                 * otherwise it drives forward the instant the e-stop
+                 * clears, straight at the thing we stopped for, while S5
+                 * is still sweeping its 2.5 s scan.
                  */
+                (void)s3_drive_set_enabled(false);
                 if (g_bypass_retries < VC_BYPASS_RETRIES)
                 {
                     g_bypass_retries++;
@@ -674,10 +709,20 @@ vc_bypass_task (INT stacd, void *p_exinf)
                               (INT)VC_BYPASS_BACK_CM,
                               (UINT)g_bypass_retries,
                               (UINT)VC_BYPASS_RETRIES);
+                    if (false == vc_wait_profile(VC_BYPASS_TIMEOUT_MS))
+                    {
+                        g_bypass_retries = 0U;
+                        (void)motion_estop();
+                        (void)s3_drive_set_enabled(true);
+                        tm_printf((UB*)"[VC] no profile after the rescan,"
+                                  " staying stopped; GP20 releases\n");
+                    }
                 }
                 else
                 {
                     g_bypass_retries = 0U;
+                    (void)motion_estop();
+                    (void)s3_drive_set_enabled(true);
                     tm_printf((UB*)"[VC] boxed in after %u reverses,"
                               " staying stopped; GP20 releases\n",
                               (UINT)VC_BYPASS_RETRIES);

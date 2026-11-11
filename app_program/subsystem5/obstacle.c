@@ -286,28 +286,6 @@ obstacle_width_cm (uint32_t const *p_dist, uint32_t centre_cm)
     return ((centre_cm * (tan_l[extent_l] + tan_r[extent_r])) / 1000U);
 }
 
-/*
- * Median of three: drops one outlier either way, so a single spurious
- * echo neither blocks a clear side nor clears a blocked one.
- */
-static uint32_t
-median3 (uint32_t a, uint32_t b, uint32_t c)
-{
-    uint32_t t;
-
-    if (a > b)
-    {
-        t = a; a = b; b = t;
-    }
-
-    if (b > c)
-    {
-        b = c;
-    }
-
-    return ((a > b) ? a : b);
-}
-
 static uint32_t
 min_valid3 (uint32_t a, uint32_t b, uint32_t c)
 {
@@ -365,13 +343,22 @@ obstacle_scan (void)
         b = ultrasonic_measure_cm();
         c = ultrasonic_measure_cm();
 
-        dist_cm[idx] = median3(a, b, c);
+        dist_cm[idx] = min_valid3(a, b, c);
 
         if (ULTRA_NO_ECHO != dist_cm[idx])
         {
             echoes++;
         }
     }
+
+    tm_printf((UB*)"[S5] scan %u/%u/%u/%u/%u cm @ %u/%u/%u/%u/%u deg\n",
+              (UINT)dist_cm[0], (UINT)dist_cm[1], (UINT)dist_cm[2],
+              (UINT)dist_cm[3], (UINT)dist_cm[4],
+              (UINT)g_scan_angle[0], (UINT)g_scan_angle[1],
+              (UINT)g_scan_angle[2], (UINT)g_scan_angle[3],
+              (UINT)g_scan_angle[4]);
+
+    /*
     /*
      * The outer sample IS the lane: it is the direction the car drives
      * along after the bypass turn. The mid samples are for the width
@@ -400,6 +387,22 @@ obstacle_scan (void)
         best = S5_BEST_CENTRE;      // way ahead is clear: do not swerve
         best_idx = 2U;
         best_angle = S5_ANGLE_CENTRE;
+    }
+    /*
+     * An off-axis object nearer than the one dead ahead is in the way of
+     * that turn. The outer ray reporting a long distance while its mid
+     * ray reports a short one is a flat surface seen at a grazing angle:
+     * the pulse bounced off down the face and returned from the far end.
+     * Believe the near one.
+     */
+    if ((S5_BEST_LEFT == best) && (dist_cm[1] < dist_cm[2]))
+    {
+        best = S5_BEST_NONE;
+    }
+
+    if ((S5_BEST_RIGHT == best) && (dist_cm[3] < dist_cm[2]))
+    {
+        best = S5_BEST_NONE;
     }
     if (S5_BEST_NONE != best)
     {
