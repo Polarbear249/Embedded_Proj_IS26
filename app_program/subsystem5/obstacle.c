@@ -359,7 +359,6 @@ obstacle_scan (void)
               (UINT)g_scan_angle[4]);
 
     /*
-    /*
      * The outer sample IS the lane: it is the direction the car drives
      * along after the bypass turn. The mid samples are for the width
      * only. Do not AND them in here - an object dead ahead is always
@@ -378,15 +377,35 @@ obstacle_scan (void)
             best_angle = g_scan_angle[idx];
         }
     }
+
     if ((S5_BEST_NONE != best) && (best_cm < S5_MIN_CLEAR_CM))
     {
         best = S5_BEST_NONE;        // widest gap is still too narrow to drive
     }
-    if (dist_cm[2] >= S5_CENTRE_CLEAR_CM)
+
+    if (S5_BEST_CENTRE == best)
     {
-        best = S5_BEST_CENTRE;      // way ahead is clear: do not swerve
-        best_idx = 2U;
-        best_angle = S5_ANGLE_CENTRE;
+        /*
+         * The lane won the comparison. Only a genuinely empty lane means
+         * "drive straight"; otherwise fall back to the better of the two
+         * sides rather than throwing the whole decision away.
+         */
+        if (dist_cm[2] >= S5_CENTRE_CLEAR_CM)
+        {
+            best_idx = 2U;
+            best_angle = S5_ANGLE_CENTRE;
+        }
+        else
+        {
+            best_idx = (dist_cm[0] >= dist_cm[4]) ? 0U : 4U;
+            best     = (0U == best_idx) ? S5_BEST_LEFT : S5_BEST_RIGHT;
+            best_angle = g_scan_angle[best_idx];
+
+            if (dist_cm[best_idx] < S5_MIN_CLEAR_CM)
+            {
+                best = S5_BEST_NONE;
+            }
+        }
     }
     /*
      * An off-axis object nearer than the one dead ahead is in the way of

@@ -69,8 +69,9 @@ static volatile bool     g_b_bypass_pending = false;
 static volatile uint32_t g_bypass_profile = 0U;
 
 // Bypass bookkeeping, touched only by vc_bypass_task and its helpers.
-static char const       *g_bypass_why = "ok";         // why the last move ended
-static uint32_t          g_bypass_retries = 0U;      // distance at the start
+static char const       *g_bypass_why = "ok";        // Manouvres on this obstacle
+static uint32_t          g_bypass_retries = 0U;      // Reverses on this obstacle
+static uint32_t          g_bypass_attempts = 0U;     // Manouvres on this obstacle
 #endif
 
 /*!
@@ -604,12 +605,18 @@ vc_bypass_manoeuvre (uint32_t best)
     {
         return (false);
     }
+
     // 4. Drive until a sensor is on the line
     tm_printf((UB*)"[VC] 4/5 seek line\n");
+    s5_alert_set_enabled(true);
+
     if (false == vc_seek_line())
     {
         return (false);
     }
+
+    s5_alert_set_enabled(false);
+
     // 5. Straighten up
     tm_printf((UB*)"[VC] 5/5 straighten\n");
     if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
@@ -663,15 +670,30 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 (void)motion_clear_estop();
                 (void)s3_drive_set_enabled(true);
                 g_b_obstacle_stop = false;
+                g_bypass_attempts = 0U;
             }
             else if (S5_BEST_NONE != best)
             {
                 tm_printf((UB*)"[VC] bypass: best %s, L %u C %u R %u cm\n",
                           best_name[best], (UINT)S5_P_LEFT(word),
                           (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word));
-                (void)s3_drive_set_enabled(false);
-                s5_alert_set_enabled(false);
-                b_ok = vc_bypass_manoeuvre(best);
+
+                g_bypass_attempts++;
+
+                if (g_bypass_attempts > VC_BYPASS_ATTEMPTS)
+                {
+                    /* An alert during a forward leg queues a fresh
+                       profile and starts another manoeuvre; without this
+                       the car nudges forward for ever. */
+                    g_bypass_why = "too many attempts";
+                    b_ok = false;
+                }
+                else
+                {
+                    (void)s3_drive_set_enabled(false);
+                    s5_alert_set_enabled(false);
+                    b_ok = vc_bypass_manoeuvre(best);
+                }
                 if (false == b_ok)
                 {
                     (void)motion_estop();   // stop before handing back
@@ -682,6 +704,7 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 if (b_ok)
                 {
                     g_bypass_retries = 0U;  // this obstacle is behind us
+                    g_bypass_attempts = 0U;
                     tm_printf((UB*)"[VC] bypass done, line drive"
                               " resumes\n");
                 }

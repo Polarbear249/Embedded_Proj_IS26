@@ -40,15 +40,15 @@
 
 #define S5_SENSOR_TO_FRONT_CM   (8U)       // sensor to front bumper, B5's value
 #define S5_ALERT_CM             (25U)       // B5's choice, TODO_TUNE
-#define S5_MIN_CLEAR_CM         (34U)       // Below this, no direction is passable
+#define S5_MIN_CLEAR_CM         (40U)       // Below this, no direction is passable
 #define S5_CENTRE_CLEAR_CM      (50U)       // Centre counts as "clear" only this far out
 #define S5_CONFIRM_PINGS        (3U)        // in a row
 #define S5_NO_ECHO_PINGS        (5U)        // in a row = sensor fault
 #define S5_FINE_SAMPLES         (5U)
 
-// Servo angles (deg). 110 = straight ahead on this mount (B5, not yet
-// fine-tuned). Which end is left: CONFIRM on the car (assumed: a larger
-// angle turns the sensor counter-clockwise seen from above = left).
+// Servo angles (deg). 110 = straight ahead. A LARGER angle swings the
+// sensor towards the car's left: confirmed against the car, the 150 deg
+// beam sees what is beside the left flank.
 #define S5_ANGLE_LEFT           (150U)
 #define S5_ANGLE_CENTRE         (110U)
 #define S5_ANGLE_RIGHT          (78U)
