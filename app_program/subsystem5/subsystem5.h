@@ -41,6 +41,7 @@
 #define S5_SENSOR_TO_FRONT_CM   (8U)       // sensor to front bumper, B5's value
 #define S5_ALERT_CM             (25U)       // B5's choice, TODO_TUNE
 #define S5_MIN_CLEAR_CM         (34U)       // Below this, no direction is passable
+#define S5_CENTRE_CLEAR_CM      (50U)       // Centre counts as "clear" only this far out
 #define S5_CONFIRM_PINGS        (3U)        // in a row
 #define S5_NO_ECHO_PINGS        (5U)        // in a row = sensor fault
 #define S5_FINE_SAMPLES         (5U)

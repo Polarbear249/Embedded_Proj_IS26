@@ -382,7 +382,7 @@ obstacle_scan (void)
     {
         best = S5_BEST_NONE;        // widest gap is still too narrow to drive
     }
-    if (dist_cm[2] >= S5_MIN_CLEAR_CM)
+    if (dist_cm[2] >= S5_CENTRE_CLEAR_CM)
     {
         best = S5_BEST_CENTRE;      // way ahead is clear: do not swerve
         best_idx = 2U;
@@ -420,6 +420,11 @@ obstacle_scan (void)
         if (0U != valid)
         {
             dist_cm[best_idx] = sum_cm / valid;
+        }
+
+        if ((S5_BEST_CENTRE != best) && (dist_cm[best_idx] < S5_MIN_CLEAR_CM))
+        {
+            best = S5_BEST_NONE;
         }
     }
     g_last_width_cm = obstacle_width_cm(dist_cm, dist_cm[2]);

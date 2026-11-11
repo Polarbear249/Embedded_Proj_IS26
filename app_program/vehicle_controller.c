@@ -430,6 +430,12 @@ vc_wait_move_done (void)
                 return (false);
             }
 
+            if (motion_is_estopped())
+            {
+                g_bypass_why = "obstacle during move";
+                return(false);
+            }
+
             return (true);              // the move finished normally
         }
     }
@@ -655,6 +661,7 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 tm_printf((UB*)"[VC] bypass: centre clear at %u cm,"
                           " carrying on\n", (UINT)S5_P_CENTRE(word));
                 (void)motion_clear_estop();
+                (void)s3_drive_set_enabled(true);
                 g_b_obstacle_stop = false;
             }
             else if (S5_BEST_NONE != best)
