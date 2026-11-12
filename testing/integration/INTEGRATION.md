@@ -19,7 +19,7 @@ Test results: `testing/integration/TEST_LOG.md`, `testing/subsystem4/TEST_LOG.md
 | S3 Line / barcode | Buddy 3 (`zaynulabidyn-coder`) | `line_tracing_only` + barcode on the GPIO dispatcher; **11-13: outputs the character 0-25, no hard-coded mapping** (PC: A-Z both directions PASS) | all 3 IR sensors toggle (S3-U06 PASS); **line following loses the line within ~1 s**; barcode disabled |
 | S4 IMU / terrain | Buddy 4 (`Polarbear249`) | full task, calibration, side + front hump model, smoothing, trace | calibration done on the raised mount (runs 37-39); hump: real-trace replay 1 hump / 9 mm for a 10 mm ramp, **car re-run pending** |
 | S5 Obstacle | Buddy 5 (`TypeAlyce`) | PR #9 merged 2026-11-13 (built, PC-checked, **not run on the car**) | no |
-| Vehicle Controller | Buddy 4 | GP20 e-stop, VC test drive; IF-09 obstacle stop in PR #9 | e-stop yes; mission logic (barcode -> junction -> turn) **not written** |
+| Vehicle Controller | Buddy 4 | GP20 e-stop, VC test drive, IF-09 obstacle stop; **mission logic `vc_mission.c` (branch `vc-mission`)**: pending character, mapping word, junction -> movement, 22 PC checks; decisions **logged only** (no `Q_motion` yet, mapping not yet sent by S1) | e-stop yes; mission logic not run on the car |
 
 Build state (2026-11-13, after PR #9 + review fixes): `make -j8` and `make TEST=1 -j8`
 0 errors, 0 warnings; PC tests S1, S2, S3 (72 checks), S4 all pass. `main` builds again.
@@ -72,7 +72,8 @@ and `master` is gone. **Everyone: `git fetch --prune` and branch off `main`.**
    (section 0); Buddy 2 and Buddy 3 please read the commits and object if needed.
 4. Fix line following enough for a demo lap (Buddy 3 with Buddy 2, section 4).
 5. ~~Merge PR #10 into `main`~~ **done 2026-11-13** (merge commit, history kept).
-6. Close #2 and #8; delete the stale branches in section 1.
+6. ~~Close #2 and #8~~ GitHub marked both **merged** automatically (their commits are
+   on `main`). Delete the stale branches in section 1.
 7. **From then on, one trunk:** every change is a short branch off `main`
    (`s3-left-sensor`, `vc-mission`, ...), a PR to `main`, merged only after it builds
    (both builds, 0 warnings), passes the PC tests and has a car test logged. Changes
@@ -93,7 +94,7 @@ Buddy 2's and Buddy 3's folders made during integration.
 | 2 | **Barcode A-Z, both directions, sensor on the left** (CLAUDE.md 1b): code table with source, decoder outputs a 5-bit character, not a command; pin change approved first | B3 | pin approval |
 | 3 | **Cross-junction event** distinct from "both sensors black" | B3 | 1 |
 | 4 | **Mapping over MQTT** (4 distinct characters -> forward / U-turn / left / right, binary frame, `Q_cmd`), PC script to send it, decoder script for telemetry | B1 | VC frame agreed |
-| 5 | **VC mission logic**: pending character slot, applies the MQTT mapping at the cross-junction, sends the movement to Motion (`Q_motion`) | B4 | 2, 3, 4 |
+| 5 | **VC mission logic**: pending character slot, applies the MQTT mapping at the cross-junction, sends the movement to Motion (`Q_motion`). **Started 2026-11-13** (`vc_mission.c`, PC-tested, logs only); still needs `Q_motion` (B2), the mapping command (B1), a real cross-junction event (B3) | B4 | 2, 3, 4 |
 | 6 | **`EVG_stop`, `Q_events` + `EVG_sys`, `g_fault_mask`** (one shared header with every packed layout, round-trip tests) | B4 with all | - |
 | 7 | **Obstacle bypass + line reacquisition** (Week 10 metrics: detection, width, direction, reacquisition, < 3 s) | B5 + B4 (VC) + B2 | PR #9, 1 |
 | 8 | Hump on the car: right-wheel ramp, full-width ramp, flat run (FR7 evidence) | B4 | - |
@@ -230,6 +231,8 @@ make TEST=1 -j8
 sh testing/subsystem2/host/run_tests.sh    # encoder counting + IF-10
 sh testing/subsystem3/pc/run_tests.sh      # line logic, barcode, drive
 sh testing/subsystem4/host/run_tests.sh    # hump model: 19 simulated + run 45 replay
+sh testing/subsystem1/pc/run_tests.sh      # telemetry / command frames (v2)
+sh testing/vehicle_controller/pc/run_tests.sh  # VC mission logic
 ```
 Images for single-subsystem tests: set `APP_TEST_ONLY` (1..5) in `app_main.c` for a
 `TEST=1` build that runs only that subsystem's tests (keep 0 in commits).

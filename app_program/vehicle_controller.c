@@ -1,7 +1,8 @@
 /*
  * vehicle_controller.c
  * Vehicle Controller, see vehicle_controller.h. So far: the GP20
- * emergency stop, the S5 obstacle stop (IF-09) and the test drive.
+ * emergency stop, the S5 obstacle stop (IF-09), the test drive, and the
+ * barcode/junction mission logic (vc_mission.c, decisions logged only).
  */
 
 #include "vehicle_controller.h"
@@ -10,7 +11,8 @@
 #include "subsystem5/subsystem5.h"      // IF-09 word layout
 #include "subsystem4/imu_terrain.h"
 #include "subsystem4/imu_hump.h"
-#include "subsystem3/subsystem3.h"      // S3_DRIVE_ENABLE
+#include "subsystem3/subsystem3.h"      // S3_DRIVE_ENABLE, IF-06
+#include "vc_mission.h"
 
 #if VC_TEST_DRIVE && S3_DRIVE_ENABLE
 // Two motor commanders: turn one off (S3_DRIVE_SWITCH in subsystem3.h)
@@ -46,6 +48,13 @@ static void      vc_estop_task(INT stacd, void *p_exinf);
 static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
 static void      vc_obstacle(uint32_t word);
+static void      vc_mission_poll(void);
+
+// Mission state: owned by the vc_estop task only (vc_mission.h)
+static vc_mission_t g_mission = { VC_MAP_NONE, VC_CHAR_NONE };
+static uint8_t      g_last_char_seq   = 0U;
+static bool         g_b_was_junction  = false;
+static bool         g_b_mission_ready = false;
 #endif
 
 static bool      vc_button_pressed(void);
@@ -257,6 +266,74 @@ vc_estop_task (INT stacd, void *p_exinf)
         }
 
         vc_drain_profiles();
+        vc_mission_poll();
+    }
+}
+
+/*
+ * Mission logic (CLAUDE.md 1b), polled every VC_ESTOP_POLL_MS from IF-06:
+ * a new char_seq = a new barcode character (stored in the one pending
+ * slot); a rising edge of LINE_MODE_JUNCTION = a junction, where the
+ * mapped movement is chosen. Only this task touches g_mission, so it
+ * needs no lock.
+ *
+ * Today the decision is LOGGED only: Q_motion does not exist yet and S3's
+ * line drive still owns the motors. TODO(B4): send the movement through
+ * Q_motion once S2 provides it; take the mapping from Q_cmd once Buddy 1
+ * adds the mapping command (until then the mapping stays VC_MAP_NONE and
+ * every junction logs FORWARD + NO_MAPPING, as 1b requires).
+ * Caveat: S3 still reports "both sensors black" as a junction; a real
+ * cross-junction event is Buddy 3's open item.
+ * Sampling: 20-30 ms; char_seq (2 bits) wraps only after 4 decodes, and
+ * crossing an 18 mm line at ~70 mm/s takes ~250 ms (derived), so neither
+ * is missed.
+ */
+static void
+vc_mission_poll (void)
+{
+    uint32_t word;
+    uint8_t  seq;
+    uint8_t  move;
+    uint8_t  flags = 0U;
+    bool     b_junction;
+
+    word       = s3_line_state_read();      // IF-06, one atomic load
+    seq        = line_if_char_seq(word);
+    b_junction = (LINE_MODE_JUNCTION == line_if_mode(word));
+
+    if (!g_b_mission_ready)
+    {
+        // first poll: take the current values as the baseline
+        g_last_char_seq   = seq;
+        g_b_was_junction  = b_junction;
+        g_b_mission_ready = true;
+    }
+    else
+    {
+        if (seq != g_last_char_seq)
+        {
+            g_last_char_seq = seq;
+            vc_mission_on_char(&g_mission, line_if_char(word));
+            tm_printf((UB*)"[VC] barcode '%c' stored\n",
+                      (INT)('A' + (INT)line_if_char(word)));
+        }
+        else
+        {
+            // no new barcode
+        }
+
+        if (b_junction && !g_b_was_junction)
+        {
+            move = vc_mission_on_junction(&g_mission, &flags);
+            tm_printf((UB*)"[VC] junction: %s (flags 0x%x, not yet sent)\n",
+                      vc_move_name(move), (UINT)flags);
+        }
+        else
+        {
+            // no new junction
+        }
+
+        g_b_was_junction = b_junction;
     }
 }
 
