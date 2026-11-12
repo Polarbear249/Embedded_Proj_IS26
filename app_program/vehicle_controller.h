@@ -48,7 +48,7 @@
 #define VC_ESTOP_POLL_MS        (20)
 #define VC_ESTOP_DEBOUNCE       (2U)        // polls low in a row = press
 
-// Test only: below motion_control_task (14) on the same core, so a
+// Test only: below motion_control_task (5) on the same core, so a
 // command never interrupts motion_update() halfway (S2 commands are not
 // yet queued through Q_motion). The agreed VC priority is P7.
 #define VC_TEST_PRI             (15)
