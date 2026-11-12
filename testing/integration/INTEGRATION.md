@@ -1,46 +1,54 @@
 # Integration log: how the subsystems were put together
 
 Maintained by Buddy 4 (integration branch owner, Vehicle Controller writer).
-Last update **2026-11-04**. Integration branch `integrate/s4-onto-main`, head
-`880204c` (pushed). Not yet merged into `main`: that is draft PR **#10**.
+Last update **2026-11-13**. PR #9 (S5) merged into `integrate/s4-onto-main`,
+then the integration branch merged into **`main`** (PR **#10**). From now on
+`main` is the only trunk (section 2 step 7).
 Test results: `testing/integration/TEST_LOG.md`, `testing/subsystem4/TEST_LOG.md`.
 
 **Read section 0 first if you only have two minutes.**
 
 ---
 
-## 0. Where we are (2026-11-04)
+## 0. Where we are (2026-11-13)
 
 | Subsystem | Owner (GitHub) | On the integration branch | Tested on the car (integrated image) |
 |---|---|---|---|
 | S1 WiFi / telemetry | Buddy 1 (`FitrizDanialy`) | PR #3 + telemetry monitor PR #6 (merged 11-03) | console monitor yes; WiFi/MQTT link not yet in the integrated image |
 | S2 Motion | Buddy 2 (`dinesh379`) | PR #2 + integration fixes + duty mode + e-stop latch | encoders (1 m -> 990 mm), PI speed mode drives straight 1.5 m and climbs a 10 mm ramp; e-stop latches |
-| S3 Line / barcode | Buddy 3 (`zaynulabidyn-coder`) | `line_tracing_only` + barcode on the GPIO dispatcher | all 3 IR sensors toggle (S3-U06 PASS); **line following loses the line within ~1 s**; barcode disabled |
+| S3 Line / barcode | Buddy 3 (`zaynulabidyn-coder`) | `line_tracing_only` + barcode on the GPIO dispatcher; **11-13: outputs the character 0-25, no hard-coded mapping** (PC: A-Z both directions PASS) | all 3 IR sensors toggle (S3-U06 PASS); **line following loses the line within ~1 s**; barcode disabled |
 | S4 IMU / terrain | Buddy 4 (`Polarbear249`) | full task, calibration, side + front hump model, smoothing, trace | calibration done on the raised mount (runs 37-39); hump: real-trace replay 1 hump / 9 mm for a 10 mm ramp, **car re-run pending** |
-| S5 Obstacle | Buddy 5 (`TypeAlyce`) | **not yet**: rework in PR #9 (built, not run on the car) | no |
+| S5 Obstacle | Buddy 5 (`TypeAlyce`) | PR #9 merged 2026-11-13 (built, PC-checked, **not run on the car**) | no |
 | Vehicle Controller | Buddy 4 | GP20 e-stop, VC test drive; IF-09 obstacle stop in PR #9 | e-stop yes; mission logic (barcode -> junction -> turn) **not written** |
 
-Build state: integration branch `make -j8` and `make TEST=1 -j8` 0 errors, 0 warnings.
-**`main` does not build** (12 errors in `subsystem5/` since PR #5); PR #9 fixes it.
+Build state (2026-11-13, after PR #9 + review fixes): `make -j8` and `make TEST=1 -j8`
+0 errors, 0 warnings; PC tests S1, S2, S3 (72 checks), S4 all pass. `main` builds again.
+
+Review fixes made by Buddy 4 before the merge (Buddy 2 / 3 / 1 please read the commits):
+- `099012b` S3 outputs the barcode **character** (IF-06 `bc_char` 5 bits), telemetry
+  frame **v2** (14 bytes, `bc_char` 5 bits). Buddy 1: your PC decoder must use v2.
+- `0e1f617` Motion and encoder-publish tasks on **P5** (were 14/12). **Re-check on the car.**
+- `eef3961` `testing/subsystem5/.vscode` untracked.
+Still open from the review: tabs in S1/`app_main.c` (Barr-C layout), `MOTOR_TEST_HIGH_POWER 1`
+(B2 to decide), S1 LED on GP19, drive API (problem 16).
 
 ---
 
 ## 1. Branches: what each one is for
 
 ```text
-main  (the team's real trunk: PRs #3, #4, #5 merged here)
- └── integrate/s4-onto-main   integration branch (B1+B2+B3+B4+VC)  ── PR #10 (draft) ──> main
-      └── s5-rework-onto-integration   Buddy 5's work, reworked     ── PR #9 ──> integration
+main  (the only trunk: PRs #3, #4, #5, then #9 via the integration branch, then #10)
+ └── short branches off main (vc-mission, s3-left-sensor, ...) ── PR ──> main
 ```
 
 | Branch | Status | What to do |
 |---|---|---|
-| `main` | **the final branch** everything ends up in; currently broken build (S5) | becomes the only trunk after PR #10 |
-| `integrate/s4-onto-main` | where all subsystems are merged and tested together on the car | merge into `main` via PR #10, then retire it |
-| `s5-rework-onto-integration` | PR #9, Buddy 5 to review | merge into the integration branch |
-| `ultra-implementation1` | PR #8 (and closed #7): Buddy 5's original, already included in #9 | close #8 after #9 merges |
-| `feature/buddy2-motion-control` | PR #2: Buddy 2's original, already included in the integration branch | close #2 after #10 merges |
-| `buddy1-telem-monitor`, `line_tracing_only` | already merged into the integration branch | delete after #10 |
+| `main` | **the only trunk**; contains every subsystem since 2026-11-13 (PR #10) | branch off it |
+| `integrate/s4-onto-main` | merged into `main` 2026-11-13 (PR #10) | delete once everyone has pulled `main` |
+| `s5-rework-onto-integration` | PR #9, merged into the integration branch 2026-11-13 (`d4de6ad`) | delete |
+| `ultra-implementation1` | PR #8 (and closed #7): Buddy 5's original, included via #9 | close #8, delete |
+| `feature/buddy2-motion-control` | PR #2: Buddy 2's original, included in #10 | close #2, delete |
+| `buddy1-telem-monitor`, `line_tracing_only`, `integration-s2-s5-for-buddy5` | merged / superseded | delete |
 | ~~`master`~~ | **deleted 2026-11-04**; GitHub default branch switched to `main` the same day. Its two unique commits (`5368c35`, `6db49e1`, early S4 work, superseded) are kept in the tag `archive/master-2026-10-26` | nothing |
 | `IMU_Branch` | obsolete standalone S4 (`6745fa8` deletes other subsystems: never merge) | delete |
 | `Buddy-2`, `Buddy-3`, `buddy1-wifi`, `ultrasonic-isolate2` | 0 commits ahead of `main` (fully merged) | delete |
@@ -54,18 +62,17 @@ and `master` is gone. **Everyone: `git fetch --prune` and branch off `main`.**
 
 ## 2. Integration order (from now)
 
-1. **Buddy 5 reviews PR #9** (section 4). On merge, resolve the only conflict,
-   `.vscode/settings.json`, by **deleting** the file: `main` removed it (`9c45ceb`,
-   hard-coded absolute path), while the integration branch still has it and
-   `e20af4e` added `"cmake.sourceDirectory": "C:/Users/thans/..."` (a personal path).
-2. Build `make -j8` + `make TEST=1 -j8`, PC tests, then on the car: obstacle stop
-   with a hand at ~10 cm, profile printed, GP20 resumes.
-3. **Buddy 2 and Buddy 3 review their folders** on the integration branch (PR #10
-   lists Buddy 4's edits in `subsystem2/`).
+1. ~~Buddy 5 reviews PR #9~~ **merged 2026-11-13** by Buddy 4 (conflict
+   `.vscode/settings.json` resolved by deleting it). Buddy 5: please still read
+   `S5_REWORK_FOR_BUDDY5.md` and answer the questions in section 4.
+2. ~~Build + PC tests~~ done 2026-11-13 (0 errors / 0 warnings, all PC tests pass).
+   **Still to do on the car:** obstacle stop with a hand at ~10 cm, profile printed,
+   GP20 resumes; re-check timing with Motion on P5.
+3. ~~Reviews of `subsystem2/` and `subsystem3/`~~ made by Buddy 4 as review fixes
+   (section 0); Buddy 2 and Buddy 3 please read the commits and object if needed.
 4. Fix line following enough for a demo lap (Buddy 3 with Buddy 2, section 4).
-5. **Merge PR #10 into `main`** (merge commit, not squash: keeps everyone's commits).
-6. Close #2 and #8; delete the stale branches in section 1 (default branch already
-   switched to `main`, `master` deleted, 2026-11-04).
+5. ~~Merge PR #10 into `main`~~ **done 2026-11-13** (merge commit, history kept).
+6. Close #2 and #8; delete the stale branches in section 1.
 7. **From then on, one trunk:** every change is a short branch off `main`
    (`s3-left-sensor`, `vc-mission`, ...), a PR to `main`, merged only after it builds
    (both builds, 0 warnings), passes the PC tests and has a car test logged. Changes
