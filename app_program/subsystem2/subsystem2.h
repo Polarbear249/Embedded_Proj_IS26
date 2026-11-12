@@ -12,7 +12,8 @@
 #include "../app.h"
 #include "motion_control.h"
 
-#define S2_PRI_PRODUCER		14	/* priority band 14-15 (TEAM.md) */
+#define S2_PRI_MOTION		5	/* TEAM.md section 4: Motion = P5 */
+#define S2_PRI_ENCODER		5	/* IF-10 publish, same band */
 #define S2_DIST_PERIOD_MS	10	/* IF-10 publish period, 1 tick */
 
 /* Private to subsystem 2 */

@@ -81,8 +81,8 @@ EXPORT ER subsystem2_init(void)
  *
  * Both tasks are pinned to core 1 (TP_PRC2).
  *
- * Encoder publish task priority: 12
- * Motion task priority: S2_PRI_PRODUCER (14)
+ * Encoder publish task priority: S2_PRI_ENCODER (5)
+ * Motion task priority: S2_PRI_MOTION (5), TEAM.md section 4
  *
  * Smaller priority numbers indicate higher
  * scheduling priority in micro T-Kernel.
@@ -95,7 +95,7 @@ EXPORT ER subsystem2_start(void)
     /* Start the IF-10 distance publish task */
     encoder_tid = app_start_task(
         encoder_publish_task,
-        12,
+        S2_PRI_ENCODER,
         TP_PRC2,
         "encoder_publish_task"
     );
@@ -108,7 +108,7 @@ EXPORT ER subsystem2_start(void)
     /* Start the motion-control task */
     motion_tid = app_start_task(
         motion_control_task,
-        S2_PRI_PRODUCER,
+        S2_PRI_MOTION,
         TP_PRC2,
         "motion_control_task"
     );
