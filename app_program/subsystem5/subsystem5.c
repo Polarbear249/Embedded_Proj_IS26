@@ -1,29 +1,38 @@
 /*
- *	subsystem5.c
- *	Subsystem 5 -- <name>.  EMPTY TEMPLATE.
+ * subsystem5.c
+ * Subsystem 5 (Buddy 5, Daryl): servo ultrasonic scanning and obstacle
+ * profiling, see subsystem5.h.
  *
- *	subsystem5_init():  create this subsystem's kernel objects
- *	                    (semaphores, mailboxes, ...).  Do not start
- *	                    tasks here.
- *	subsystem5_start(): create and start this subsystem's tasks, e.g.
- *	    ID tid = app_start_task(my_task, S5_PRI_MAIN, 0, "my_task");
- *	    return (tid < E_OK) ? tid : E_OK;
- *
- *	Drivers for this subsystem's hardware go in this folder as
- *	drv_<name>.c / drv_<name>.h, called only from the task that owns
- *	the peripheral (TEAM.md section 3).
- *
- *	Record every pin, task, object and interface in TEAM.md.
+ * subsystem5_init() runs after subsystem2_init() (PWM block out of
+ * reset) and on core 0 (gpio_irq_attach() rule). Kernel objects: none of
+ * its own; the profile goes to the VC's message buffer vc_mbf_profile
+ * (the receiver owns the object, TEAM.md section 5).
  */
 
 #include "subsystem5.h"
+#include "obstacle.h"
+#include "ultrasonic.h"
+#include "servo.h"
 
-EXPORT ER subsystem5_init(void)
+ER
+subsystem5_init (void)
 {
-	return E_OK;
+    ER er = ultrasonic_init();
+
+    if (E_OK <= er)
+    {
+        er = servo_init();
+    }
+
+    return (er);
 }
 
-EXPORT ER subsystem5_start(void)
+// Pinned to core 0, where the ECHO callback runs (ultrasonic.c)
+ER
+subsystem5_start (void)
 {
-	return E_OK;
+    ID tid = app_start_task(obstacle_task, S5_PRI_MAIN, S5_PRC_MAIN,
+                            "obstacle_task");
+
+    return ((tid < E_OK) ? (ER)tid : E_OK);
 }

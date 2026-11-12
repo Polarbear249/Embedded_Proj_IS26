@@ -1,0 +1,96 @@
+# S5 Ultrasonic unit test, run 3, 2026-10-26
+# image: subsystem5_test build 2
+# console output as pasted by the tester, input also by tester
+# wiring: Grove port GP6/GP7, TRIG on GP6, ECHO on GP7, powered via 3.3V
+# tester notes: Tester started pointing at the ceiling (~265cm), then inserted hand (~50cm).
+# Hand was slowly moved towards the sensor. The readings smoothly tracked the approach
+# until it crossed the 15cm threshold and triggered the state change exactly at 14.8cm.
+# Terminal input successfully rejected invalid characters (a,d,c,s,r) before accepting 'b' and 'l'.
+
+---- Opened the serial port /dev/ttyACM0 ----
+
+[TEST] ===== Starting Subsystem 5: S5-U05, U06, U07 =====
+[TEST] S5-U06: Waiting for obstacle < 15cm...
+Raw Pulse: 15259 us  |  Distance: 263.1 cm
+Raw Pulse: 15384 us  |  Distance: 265.2 cm
+Raw Pulse: 15336 us  |  Distance: 264.4 cm
+Raw Pulse: 15385 us  |  Distance: 265.3 cm
+Raw Pulse: 15310 us  |  Distance: 264.0 cm
+Raw Pulse: 15409 us  |  Distance: 265.7 cm
+Raw Pulse: 15435 us  |  Distance: 266.1 cm
+Raw Pulse: 15410 us  |  Distance: 265.7 cm
+Raw Pulse: 3125 us  |  Distance: 53.9 cm
+Raw Pulse: 2862 us  |  Distance: 49.3 cm
+Raw Pulse: 2826 us  |  Distance: 48.7 cm
+Raw Pulse: 2882 us  |  Distance: 49.7 cm
+Raw Pulse: 2812 us  |  Distance: 48.5 cm
+Raw Pulse: 2907 us  |  Distance: 50.1 cm
+Raw Pulse: 2947 us  |  Distance: 50.8 cm
+Raw Pulse: 2943 us  |  Distance: 50.7 cm
+Raw Pulse: 15505 us  |  Distance: 267.3 cm
+Raw Pulse: 2604 us  |  Distance: 44.9 cm
+Raw Pulse: 2518 us  |  Distance: 43.4 cm
+Raw Pulse: 2720 us  |  Distance: 46.9 cm
+Raw Pulse: 2315 us  |  Distance: 39.9 cm
+Raw Pulse: 2305 us  |  Distance: 39.7 cm
+Raw Pulse: 2285 us  |  Distance: 39.4 cm
+Raw Pulse: 2431 us  |  Distance: 41.9 cm
+Raw Pulse: 2178 us  |  Distance: 37.6 cm
+Raw Pulse: 2112 us  |  Distance: 36.4 cm
+Raw Pulse: 2199 us  |  Distance: 37.9 cm
+Raw Pulse: 2047 us  |  Distance: 35.3 cm
+Raw Pulse: 1798 us  |  Distance: 31.0 cm
+Raw Pulse: 1711 us  |  Distance: 29.5 cm
+Raw Pulse: 1662 us  |  Distance: 28.7 cm
+Raw Pulse: 1616 us  |  Distance: 27.9 cm
+Raw Pulse: 1544 us  |  Distance: 26.6 cm
+Raw Pulse: 1478 us  |  Distance: 25.5 cm
+Raw Pulse: 1428 us  |  Distance: 24.6 cm
+Raw Pulse: 1433 us  |  Distance: 24.7 cm
+Raw Pulse: 1165 us  |  Distance: 20.1 cm
+Raw Pulse: 1124 us  |  Distance: 19.4 cm
+Raw Pulse: 1165 us  |  Distance: 20.1 cm
+Raw Pulse: 1129 us  |  Distance: 19.5 cm
+Raw Pulse: 1099 us  |  Distance: 18.9 cm
+Raw Pulse: 1089 us  |  Distance: 18.8 cm
+Raw Pulse: 1139 us  |  Distance: 19.6 cm
+Raw Pulse: 1110 us  |  Distance: 19.1 cm
+Raw Pulse: 1084 us  |  Distance: 18.7 cm
+Raw Pulse: 1084 us  |  Distance: 18.7 cm
+Raw Pulse: 1079 us  |  Distance: 18.6 cm
+Raw Pulse: 1024 us  |  Distance: 17.7 cm
+Raw Pulse: 1003 us  |  Distance: 17.3 cm
+Raw Pulse: 942 us   |  Distance: 16.2 cm
+Raw Pulse: 922 us   |  Distance: 15.9 cm
+Raw Pulse: 892 us   |  Distance: 15.4 cm
+Raw Pulse: 861 us   |  Distance: 14.8 cm
+[TEST] S5-U06 PASS - Obstacle detected at 14.8 cm. State -> STOP_AND_PROFILE.
+
+[TEST] S5-U05: STOP_REQUEST sent to Q_motion. Waiting for BRAKE_ACK...
+[TEST] Input 'B' to simulate BRAKE_ACK.
+---- Sent utf8 encoded message: "a" ----
+[TEST] Invalid input. Please type 'B'.
+---- Sent utf8 encoded message: "d" ----
+[TEST] Invalid input. Please type 'B'.
+---- Sent utf8 encoded message: "c" ----
+[TEST] Invalid input. Please type 'B'.
+---- Sent utf8 encoded message: "b" ----
+[TEST] S5-U05 PASS - BRAKE_ACK received. Proceeding to scan (simulated).
+
+[TEST] S5-U07: Scan complete. State -> REACQUIRE_LINE_AFTER_BYPASS.
+[TEST] Input 'L' to simulate line reacquired.
+---- Sent utf8 encoded message: "d" ----
+[TEST] Invalid input. Please type 'L'.
+---- Sent utf8 encoded message: "s" ----
+[TEST] Invalid input. Please type 'L'.
+---- Sent utf8 encoded message: "r" ----
+[TEST] Invalid input. Please type 'L'.
+---- Sent utf8 encoded message: "l" ----
+[TEST] S5-U07 PASS - Line reacquired. State -> SCAN_IDLE.
+
+[TEST] === test run end ===
+
+# Annotation:
+# All test cases pass.
+# The continuous approach test proves the distance readings smoothly decrease as the object gets closer. It also further affirms that 5cm noise is partly due to human error. 
+# The 15cm threshold triggered accurately between 15.4cm & 14.8cm.
