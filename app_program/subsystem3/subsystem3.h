@@ -11,8 +11,8 @@
  * then decode it with line_if.h:
  *   line_if_error_signed(word)  steering error, < 0 = line to the left
  *   line_if_mode(word)          LINE_MODE_*  (FAILED: stop the car)
- *   line_if_cmd_seq(word)       changes once per new barcode ...
- *   line_if_cmd(word)           ... whose command is LINE_CMD_*
+ *   line_if_char_seq(word)      changes once per new barcode ...
+ *   line_if_char(word)          ... whose character is 0..25 ('A'..'Z')
  *   line_if_is_fresh(&reader, word)   false = S3 stalled: safe stop
  */
 
@@ -29,8 +29,8 @@
 
 /*
  * Barcode on/off. 0 = line following only: no GP7 interrupt, no
- * decoding, cmd stays STRAIGHT and cmd_seq never changes, so Subsystem 2
- * never sees a barcode command. raw_bc still shows the GP7 level.
+ * decoding, bc_char stays LINE_CHAR_NONE and char_seq never changes, so
+ * no reader sees a barcode. raw_bc still shows the GP7 level.
  * TODO: set back to 1 once the barcode sensor works (2026-11-01: off
  * while the barcode sensor has hardware issues).
  */

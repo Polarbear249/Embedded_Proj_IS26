@@ -33,7 +33,8 @@
  *   - every command carries a short lease: if this task stops, Buddy
  *     2's motion task stops the motors by itself
  *
- * Barcode commands (cmd / cmd_seq) are NOT acted on yet.
+ * Barcode characters (bc_char / char_seq) are not acted on here: the
+ * Vehicle Controller maps them to a movement (CLAUDE.md 1b).
  *
  * Pure C, no kernel calls: also built by the PC tests.
  */

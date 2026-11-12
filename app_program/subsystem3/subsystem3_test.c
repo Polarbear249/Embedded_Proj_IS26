@@ -153,11 +153,11 @@ subsystem3_test (void)
             (void)tk_dly_tsk(S3_BENCH_POLL_MS);
             line_if_unpack(s3_line_state_read(), &now);
 
-            if (now.cmd_seq != was.cmd_seq)
+            if (now.char_seq != was.char_seq)
             {
-                tm_printf((UB *)"[TEST] S3 barcode '%c' cmd=%u "
+                tm_printf((UB *)"[TEST] S3 barcode '%c' char=%u "
                                 "(ok %u fail %u other %u)\n",
-                          (INT)g_s3_diag.last_char, (UINT)now.cmd,
+                          (INT)g_s3_diag.last_char, (UINT)now.bc_char,
                           (UINT)g_s3_diag.decode_ok,
                           (UINT)g_s3_diag.decode_fail,
                           (UINT)g_s3_diag.decode_other);

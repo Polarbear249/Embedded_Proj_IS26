@@ -327,11 +327,12 @@ static void test_capture(void)
     sim_t s;
     const uint32_t speeds[] = {50U, 100U, 200U, 400U, 700U, 1000U};
     int ok = 1;
-    char cmds[] = "ABCD";
+    char cmds[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";   /* CLAUDE.md 1b: A-Z */
+    const int n_chars = (int)(sizeof(cmds) - 1U);
 
     /* Start close to the 31-bit wrap so the wrap is crossed */
     for (size_t v = 0; v < sizeof(speeds) / sizeof(speeds[0]); v++) {
-        for (int k = 0; k < 4; k++) {
+        for (int k = 0; k < n_chars; k++) {
             for (int dir = 0; dir < 2; dir++) {
                 sim_init(&s, 0x7FFFFFFFU - 100000U);
                 sim_run_to(&s, s.now + 50000U);
@@ -345,12 +346,12 @@ static void test_capture(void)
             }
         }
     }
-    CHECK("S3-P06", ok, "A-D at 50..1000 mm/s, both directions, across "
+    CHECK("S3-P06", ok, "A-Z at 50..1000 mm/s, both directions, across "
           "the timer wrap");
 
     ok = 1;
     for (size_t v = 0; v < sizeof(speeds) / sizeof(speeds[0]); v++) {
-        for (int k = 0; k < 4; k++) {
+        for (int k = 0; k < n_chars; k++) {
             for (int dir = 0; dir < 2; dir++) {
                 sim_init(&s, 1000U);
                 sim_run_to(&s, s.now + 50000U);
@@ -594,12 +595,12 @@ static void test_line_if(void)
 
     for (unsigned err = 0; err <= 127U; err += 7U) {
         for (unsigned mode = 0; mode <= LINE_MODE_FAILED; mode++) {
-            for (unsigned cmd = 0; cmd < 4U; cmd++) {
+            for (unsigned cmd = 0; cmd <= LINE_CHAR_NONE; cmd++) {
                 memset(&in, 0, sizeof(in));
                 in.error = (uint8_t)err;
                 in.mode = (uint8_t)mode;
-                in.cmd = (uint8_t)cmd;
-                in.cmd_seq = (uint8_t)((cmd + 1U) & 3U);
+                in.bc_char = (uint8_t)cmd;
+                in.char_seq = (uint8_t)((cmd + 1U) & 3U);
                 in.seq = (uint8_t)(err * 2U + mode);
                 in.b_centre_black = (mode & 1U) != 0U;
                 in.b_right_black = (cmd & 1U) != 0U;
@@ -615,9 +616,26 @@ static void test_line_if(void)
     in.error = 200U;                    /* out of range: masked */
     CHECK("S3-P16", (line_if_pack(&in) & ~0x7FU) == 0U,
           "out-of-range error cannot spill into other fields");
-    CHECK("S3-P16", (line_if_pack(&in) & 0xFF800000U & 0x00FE0000U) == 0U,
-          "reserved bits stay 0");
+    in.error = 127U;                    /* every field at its maximum */
+    in.mode = 7U;
+    in.bc_char = LINE_CHAR_NONE;
+    in.char_seq = 3U;
+    in.seq = 255U;
+    in.b_centre_black = true;
+    in.b_right_black = true;
+    in.b_barcode_black = true;
+    CHECK("S3-P16", (line_if_pack(&in) & 0x00C00C00U) == 0U,
+          "reserved bits 23..22 and 11..10 stay 0");
 
+    memset(&in, 0, sizeof(in));
+    in.bc_char = 0x3FU;                 /* out of range: masked */
+    CHECK("S3-P16", line_if_pack(&in) == (0x1FU << 17),
+          "out-of-range char cannot spill into other fields");
+    in.bc_char = 25U;
+    CHECK("S3-P16", line_if_char(line_if_pack(&in)) == 25U,
+          "char 'Z' = 25 read back by line_if_char");
+
+    memset(&in, 0, sizeof(in));
     in.error = 0U;
     CHECK("S3-P17", line_if_error_signed(line_if_pack(&in)) == -64,
           "error 0 -> -64");

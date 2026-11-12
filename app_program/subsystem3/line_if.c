@@ -26,10 +26,10 @@ line_if_pack (line_if_state_t const *p_state)
                 << LINE_IF_ERROR_SHIFT;
         word |= ((uint32_t)p_state->mode & LINE_IF_MODE_MASK)
                 << LINE_IF_MODE_SHIFT;
-        word |= ((uint32_t)p_state->cmd & LINE_IF_CMD_MASK)
-                << LINE_IF_CMD_SHIFT;
-        word |= ((uint32_t)p_state->cmd_seq & LINE_IF_CMD_SEQ_MASK)
-                << LINE_IF_CMD_SEQ_SHIFT;
+        word |= ((uint32_t)p_state->bc_char & LINE_IF_CHAR_MASK)
+                << LINE_IF_CHAR_SHIFT;
+        word |= ((uint32_t)p_state->char_seq & LINE_IF_CHAR_SEQ_MASK)
+                << LINE_IF_CHAR_SEQ_SHIFT;
         word |= ((uint32_t)p_state->seq & LINE_IF_SEQ_MASK)
                 << LINE_IF_SEQ_SHIFT;
 
@@ -82,10 +82,10 @@ line_if_unpack (uint32_t word, line_if_state_t *p_state)
                                      & LINE_IF_ERROR_MASK);
         p_state->mode    = (uint8_t)((word >> LINE_IF_MODE_SHIFT)
                                      & LINE_IF_MODE_MASK);
-        p_state->cmd     = (uint8_t)((word >> LINE_IF_CMD_SHIFT)
-                                     & LINE_IF_CMD_MASK);
-        p_state->cmd_seq = (uint8_t)((word >> LINE_IF_CMD_SEQ_SHIFT)
-                                     & LINE_IF_CMD_SEQ_MASK);
+        p_state->bc_char  = (uint8_t)((word >> LINE_IF_CHAR_SHIFT)
+                                      & LINE_IF_CHAR_MASK);
+        p_state->char_seq = (uint8_t)((word >> LINE_IF_CHAR_SEQ_SHIFT)
+                                      & LINE_IF_CHAR_SEQ_MASK);
         p_state->seq     = (uint8_t)((word >> LINE_IF_SEQ_SHIFT)
                                      & LINE_IF_SEQ_MASK);
 
@@ -183,16 +183,16 @@ line_if_mode (uint32_t word)
 }
 
 uint8_t
-line_if_cmd (uint32_t word)
+line_if_char (uint32_t word)
 {
-    // Cast keeps 2 bits: the mask limits the value to 0..3
-    return (uint8_t)((word >> LINE_IF_CMD_SHIFT) & LINE_IF_CMD_MASK);
+    // Cast keeps 5 bits: the mask limits the value to 0..31
+    return (uint8_t)((word >> LINE_IF_CHAR_SHIFT) & LINE_IF_CHAR_MASK);
 }
 
 uint8_t
-line_if_cmd_seq (uint32_t word)
+line_if_char_seq (uint32_t word)
 {
     // Cast keeps 2 bits: the mask limits the value to 0..3
-    return (uint8_t)((word >> LINE_IF_CMD_SEQ_SHIFT)
-                     & LINE_IF_CMD_SEQ_MASK);
+    return (uint8_t)((word >> LINE_IF_CHAR_SEQ_SHIFT)
+                     & LINE_IF_CHAR_SEQ_MASK);
 }

@@ -29,7 +29,7 @@ IMPORT ID	tid_wifi;
 IMPORT void	wifi_task(INT stacd, void *exinf);
 
 /* IF-07: Vehicle Controller -> S1. Message buffer owned by S1; each message
-   is one 13-byte frame (TELEM_LEN), copied by value. */
+   is one 14-byte frame (TELEM_LEN, v2), copied by value. */
 IMPORT ID	mbf_telem;
 /* IF-08: S1 -> Vehicle Controller. Message buffer holding validated 3-byte
    command frames (CMD_LEN). Created by S1 until the Vehicle Controller exists

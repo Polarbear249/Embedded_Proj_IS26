@@ -34,7 +34,7 @@ static void random_telem(T_TELEM *t)
 	t->line_ok = (uint8_t)(rand() & 1);
 	t->junction = (uint8_t)(rand() & 1);
 	t->bc_ok = (uint8_t)(rand() & 1);
-	t->bc_cmd = (uint8_t)(rand() & 3);
+	t->bc_char = (uint8_t)(rand() & 0x1F);
 	t->hump_mm = (uint8_t)rand();
 	t->obs_ok = (uint8_t)(rand() & 1);
 	t->obs_left = (uint16_t)(rand() & 0x1FF);
@@ -52,31 +52,47 @@ int main(void)
 
 	/* S1-P01: size and version byte */
 	memset(&t, 0, sizeof(t));
-	CHECK("S1-P01", telem_encode(&t, f) == FRAME_OK && TELEM_LEN == 13U &&
-	      f[0] == 0x01U && f[11] == 0U && f[12] == 0U,
-	      "all-zero frame is 13 bytes, version byte 0x01");
+	CHECK("S1-P01", telem_encode(&t, f) == FRAME_OK && TELEM_LEN == 14U &&
+	      f[0] == 0x02U && f[12] == 0U && f[13] == 0U,
+	      "all-zero frame is 14 bytes, version byte 0x02");
 
 	/* S1-P02: hand-computed golden vector fixes the bit order */
 	memset(&t, 0, sizeof(t));
 	t.seq = 0x15U; t.vstate = 0x5U; t.mstate = 0x3U; t.faults = 0x11U;
 	t.speed_l = 0x12U; t.speed_r = 0x34U; t.dist_cm = 0xABCDU;
 	ok = (telem_encode(&t, f) == FRAME_OK) &&
-	     f[0] == 0x01U && f[1] == 0xADU && f[2] == 0x71U && f[3] == 0x12U &&
+	     f[0] == 0x02U && f[1] == 0xADU && f[2] == 0x71U && f[3] == 0x12U &&
 	     f[4] == 0x34U && f[5] == 0xABU && f[6] == 0xCDU;
-	CHECK("S1-P02", ok, "golden bytes 01 AD 71 12 34 AB CD (MSB-first, no swapping)");
+	CHECK("S1-P02", ok, "golden bytes 02 AD 71 12 34 AB CD (MSB-first, no swapping)");
 
-	/* S1-P03: last field sits in the last bits */
+	/* S1-P03: last field sits just before the 5 pad bits:
+	   obs_width = bits 98..106 -> f[12] = 0x3F, f[13] = 0xE0 */
 	memset(&t, 0, sizeof(t));
 	t.obs_width = 0x1FFU;
-	ok = (telem_encode(&t, f) == FRAME_OK) && f[11] == 0x01U && f[12] == 0xFFU;
-	CHECK("S1-P03", ok, "obs_width 0x1FF fills the final 9 bits");
+	ok = (telem_encode(&t, f) == FRAME_OK) && f[11] == 0x00U &&
+	     f[12] == 0x3FU && f[13] == 0xE0U;
+	CHECK("S1-P03", ok, "obs_width 0x1FF fills bits 98..106, pad stays 0");
+
+	/* S1-P03b: bc_char 'Z' (25) sits in bits 66..70 (golden) */
+	memset(&t, 0, sizeof(t));
+	t.bc_char = 25U;
+	ok = (telem_encode(&t, f) == FRAME_OK) && f[8] == 0x32U && f[7] == 0U &&
+	     f[9] == 0U;
+	CHECK("S1-P03b", ok, "bc_char 25 -> byte 8 = 0x32 (5-bit character field)");
+
+	/* S1-P03c: a non-zero pad bit is rejected */
+	memset(&t, 0, sizeof(t));
+	ok = (telem_encode(&t, f) == FRAME_OK);
+	f[13] |= 0x01U;
+	ok = ok && telem_decode(f, TELEM_LEN, &u) == FRAME_ERR_RANGE;
+	CHECK("S1-P03c", ok, "pad bits must be 0");
 
 	/* S1-P04: maximum value of every field round-trips */
 	memset(&big, 0, sizeof(big));
 	big.seq = 31; big.vstate = 7; big.mstate = 6; big.faults = 31;
 	big.speed_l = 255; big.speed_r = 255; big.dist_cm = 65535;
 	big.line_err = 127; big.line_ok = 1; big.junction = 1; big.bc_ok = 1;
-	big.bc_cmd = 3; big.hump_mm = 255; big.obs_ok = 1;
+	big.bc_char = 31; big.hump_mm = 255; big.obs_ok = 1;
 	big.obs_left = 511; big.obs_right = 511; big.obs_width = 511;
 	ok = telem_encode(&big, f) == FRAME_OK &&
 	     telem_decode(f, TELEM_LEN, &u) == FRAME_OK && same(&big, &u);
@@ -101,14 +117,14 @@ int main(void)
 	ok = telem_decode(f, 0, &u) == FRAME_ERR_LEN &&
 	     telem_decode(f, TELEM_LEN - 1U, &u) == FRAME_ERR_LEN &&
 	     telem_decode(g, TELEM_LEN + 1U, &u) == FRAME_ERR_LEN;
-	CHECK("S1-P06", ok, "length 0, 12 and 14 rejected");
+	CHECK("S1-P06", ok, "length 0, 13 and 15 rejected");
 
 	/* S1-P07: unknown version rejected */
 	memcpy(g, f, TELEM_LEN);
 	g[0] = 0x00U; ok = telem_decode(g, TELEM_LEN, &u) == FRAME_ERR_VERSION;
-	g[0] = 0x02U; ok = ok && telem_decode(g, TELEM_LEN, &u) == FRAME_ERR_VERSION;
+	g[0] = 0x01U; ok = ok && telem_decode(g, TELEM_LEN, &u) == FRAME_ERR_VERSION;
 	g[0] = 0xFFU; ok = ok && telem_decode(g, TELEM_LEN, &u) == FRAME_ERR_VERSION;
-	CHECK("S1-P07", ok, "version 0, 2 and 255 rejected");
+	CHECK("S1-P07", ok, "version 0, 1 (old 13-byte frame) and 255 rejected");
 
 	/* S1-P08: out-of-range motion state rejected on decode and encode */
 	memcpy(g, f, TELEM_LEN);
@@ -124,7 +140,7 @@ int main(void)
 	t = big; t.vstate = 8;      ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
 	t = big; t.faults = 32;     ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
 	t = big; t.line_err = 128;  ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
-	t = big; t.bc_cmd = 4;      ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
+	t = big; t.bc_char = 32;    ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
 	t = big; t.obs_left = 512;  ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
 	t = big; t.obs_width = 512; ok = ok && telem_encode(&t, f) == FRAME_ERR_RANGE;
 	CHECK("S1-P09", ok, "too-wide fields are refused, never truncated");

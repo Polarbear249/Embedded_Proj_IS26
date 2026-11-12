@@ -13,12 +13,14 @@
  * PC-side MQTT decoder.
  *
  *   bit 31..24  seq       8  publish counter, +1 every 10 ms, wraps
- *   bit 23..17  reserved  7  always 0
+ *   bit 23..22  reserved  2  always 0
+ *   bit 21..17  bc_char   5  latest decoded character, 0..25 = 'A'..'Z',
+ *                            LINE_CHAR_NONE (31) until the first decode
  *   bit 16      raw_bc    1  barcode sensor DOUT now (1 = black)
  *   bit 15      raw_right 1  right line sensor now (1 = black)
  *   bit 14      raw_c     1  centre line sensor now (1 = black)
- *   bit 13..12  cmd_seq   2  +1 for every newly decoded barcode, wraps
- *   bit 11..10  cmd       2  latest barcode command, LINE_CMD_*
+ *   bit 13..12  char_seq  2  +1 for every newly decoded barcode, wraps
+ *   bit 11..10  reserved  2  always 0
  *   bit  9..7   mode      3  LINE_MODE_*
  *   bit  6..0   error     7  line position, offset binary, 64 = centre
  *
@@ -29,8 +31,11 @@
  * Same 7-bit offset-binary format as line_err in Buddy 1's telemetry
  * frame (subsystem1/telemetry_frame.h), so it is copied as-is.
  *
- * How Subsystem 2 acts on a barcode: remember cmd_seq; when it changes,
- * execute cmd once. Nothing has to be acknowledged, so no reader ever
+ * Barcode (CLAUDE.md 1b): S3 reports the decoded CHARACTER only, never a
+ * movement. The character-to-movement mapping arrives over MQTT at run
+ * time and the Vehicle Controller applies it, so no mapping is compiled
+ * in here. A reader remembers char_seq; when it changes, bc_char holds
+ * a new character. Nothing has to be acknowledged, so no reader ever
  * writes shared data.
  *
  * This header has no kernel dependency so it also builds on a PC.
@@ -47,10 +52,10 @@
 #define LINE_IF_ERROR_MASK      (0x7FU)     // 7 bits
 #define LINE_IF_MODE_SHIFT      (7U)
 #define LINE_IF_MODE_MASK       (0x07U)     // 3 bits
-#define LINE_IF_CMD_SHIFT       (10U)
-#define LINE_IF_CMD_MASK        (0x03U)     // 2 bits
-#define LINE_IF_CMD_SEQ_SHIFT   (12U)
-#define LINE_IF_CMD_SEQ_MASK    (0x03U)     // 2 bits
+#define LINE_IF_CHAR_SEQ_SHIFT  (12U)
+#define LINE_IF_CHAR_SEQ_MASK   (0x03U)     // 2 bits
+#define LINE_IF_CHAR_SHIFT      (17U)
+#define LINE_IF_CHAR_MASK       (0x1FU)     // 5 bits
 #define LINE_IF_RAW_C_SHIFT     (14U)
 #define LINE_IF_RAW_R_SHIFT     (15U)
 #define LINE_IF_RAW_BC_SHIFT    (16U)
@@ -70,11 +75,9 @@
 #define LINE_MODE_SEARCH_FAR    (4U)    // lost: turning the other way
 #define LINE_MODE_FAILED        (5U)    // search gave up: stop the car
 
-// cmd field values: Project Write-up barcode table
-#define LINE_CMD_LEFT           (0U)    // barcode 'A'
-#define LINE_CMD_RIGHT          (1U)    // barcode 'B'
-#define LINE_CMD_STRAIGHT       (2U)    // barcode 'C'
-#define LINE_CMD_UTURN          (3U)    // barcode 'D'
+// bc_char field values: 0..25 = 'A'..'Z' (character - 'A')
+#define LINE_CHAR_MAX           (25U)   // 'Z'
+#define LINE_CHAR_NONE          (31U)   // nothing decoded yet
 
 // Reads without a change in seq before the data counts as stale (NFR18)
 #define LINE_IF_STALE_READS     (3U)
@@ -82,7 +85,8 @@
 // Range guards: each value must fit its field
 _Static_assert(LINE_IF_ERROR_MAX <= LINE_IF_ERROR_MASK, "error width");
 _Static_assert(LINE_MODE_FAILED <= LINE_IF_MODE_MASK, "mode width");
-_Static_assert(LINE_CMD_UTURN <= LINE_IF_CMD_MASK, "cmd width");
+_Static_assert(LINE_CHAR_NONE <= LINE_IF_CHAR_MASK, "char width");
+_Static_assert(LINE_CHAR_MAX < LINE_CHAR_NONE, "char none");
 
 // Unpacked copy of the word, for code that prefers named fields
 typedef struct
@@ -90,8 +94,8 @@ typedef struct
     uint8_t seq;            // 0..255
     uint8_t mode;           // LINE_MODE_*
     uint8_t error;          // 0..127, 64 = centre
-    uint8_t cmd;            // LINE_CMD_*
-    uint8_t cmd_seq;        // 0..3
+    uint8_t bc_char;        // 0..25 = 'A'..'Z', or LINE_CHAR_NONE
+    uint8_t char_seq;       // 0..3
     bool    b_centre_black;
     bool    b_right_black;
     bool    b_barcode_black;
@@ -115,7 +119,7 @@ int8_t   line_if_error_signed(uint32_t word);
 
 // One-field accessors (no struct needed)
 uint8_t  line_if_mode(uint32_t word);
-uint8_t  line_if_cmd(uint32_t word);
-uint8_t  line_if_cmd_seq(uint32_t word);
+uint8_t  line_if_char(uint32_t word);
+uint8_t  line_if_char_seq(uint32_t word);
 
 #endif /* LINE_IF_H */

@@ -2,7 +2,7 @@
  *	telem_monitor.c
  *	Subsystem 1 -- the vehicle snapshot, in words, on the serial monitor.
  *
- *	Why: the MQTT telemetry frame is packed binary (13 bytes, minimum-bit
+ *	Why: the MQTT telemetry frame is packed binary (14 bytes, minimum-bit
  *	requirement), so nobody can read it by eye while calibrating. This
  *	prints the SAME snapshot as text, once a second, so what the team
  *	reads here is exactly what a remote listener receives.
@@ -53,8 +53,8 @@
 EXPORT ID	tid_telem;
 
 static UW	s_telem_seq;
-static UB	s_last_cmd_seq;		/* IF-06 cmd_seq, to spot a new barcode */
-static UB	s_cmd_seq_valid;
+static UB	s_last_char_seq;	/* IF-06 char_seq, to spot a new barcode */
+static UB	s_char_seq_valid;
 
 /* ---------------------------------------------------------------------
  *	Names, for the printed lines only. The numbers themselves are what
@@ -85,17 +85,6 @@ static const char *line_mode_name(UB mode)
 	case LINE_MODE_SEARCH_FAR:	return "search-far";
 	case LINE_MODE_FAILED:		return "failed";
 	default:			return "?";
-	}
-}
-
-static const char *bc_cmd_name(UB cmd)
-{
-	switch (cmd) {
-	case LINE_CMD_LEFT:	return "LEFT";
-	case LINE_CMD_RIGHT:	return "RIGHT";
-	case LINE_CMD_STRAIGHT:	return "STRAIGHT";
-	case LINE_CMD_UTURN:	return "U-TURN";
-	default:		return "?";
 	}
 }
 
@@ -135,8 +124,10 @@ EXPORT void s1_telem_print(const T_TELEM *snap)
 		  (int)snap->line_err - (int)LINE_IF_ERROR_CENTRE,
 		  (unsigned int)snap->line_ok, (unsigned int)snap->junction);
 
-	if (snap->bc_ok != 0U) {
-		tm_printf((UB*)"  barcode  %s\n", bc_cmd_name(snap->bc_cmd));
+	if ((snap->bc_ok != 0U) && (snap->bc_char <= LINE_CHAR_MAX)) {
+		tm_printf((UB*)"  barcode  '%c' (%u)\n",
+			  (int)('A' + (int)snap->bc_char),
+			  (unsigned int)snap->bc_char);
 	} else {
 		tm_printf((UB*)"  barcode  none yet\n");
 	}
@@ -249,20 +240,20 @@ static void collect_line(T_TELEM *snap)
 			|| (ls.mode == LINE_MODE_JUNCTION)) ? 1U : 0U;
 	snap->junction  = (ls.mode == LINE_MODE_JUNCTION) ? 1U : 0U;
 
-	/* cmd is only meaningful once cmd_seq has moved at least once:
-	   before any barcode is decoded the field is still its reset value,
-	   and reporting that as "barcode LEFT" would be an invented reading. */
-	if (s_cmd_seq_valid == 0U) {
-		s_last_cmd_seq = ls.cmd_seq;
-		s_cmd_seq_valid = 1U;
-	} else if (ls.cmd_seq != s_last_cmd_seq) {
-		s_last_cmd_seq = ls.cmd_seq;
+	/* bc_char is only meaningful once char_seq has moved at least once:
+	   before any barcode is decoded it is LINE_CHAR_NONE (CLAUDE.md 1b:
+	   S3 reports the character; the VC maps it to a movement). */
+	if (s_char_seq_valid == 0U) {
+		s_last_char_seq = ls.char_seq;
+		s_char_seq_valid = 1U;
+	} else if (ls.char_seq != s_last_char_seq) {
+		s_last_char_seq = ls.char_seq;
 		snap->bc_ok = 1U;
 	}
 	if (g_s3_diag.decode_ok > 0U) {
 		snap->bc_ok = 1U;		/* at least one real decode */
 	}
-	snap->bc_cmd = ls.cmd;
+	snap->bc_char = ls.bc_char;
 }
 
 static void collect_terrain(T_TELEM *snap)

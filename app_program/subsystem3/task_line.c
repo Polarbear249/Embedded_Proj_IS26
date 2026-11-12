@@ -28,7 +28,7 @@ _Static_assert(DRIVE_LEASE_MS <= MOTION_MAX_LEASE_MS, "S2 lease limit");
 
 #define S3_EXEC_MAX_US          (0xFFFFU)   // diag field is 16 bits
 #define S3_COUNT_MAX            (0xFFFFU)   // diag counters saturate
-#define S3_CMD_SEQ_MASK         (0x03U)     // cmd_seq is 2 bits
+#define S3_CHAR_SEQ_MASK        (0x03U)     // char_seq is 2 bits
 
 /*
  * Task-private state (only this task touches it): bit-fields allowed.
@@ -38,8 +38,8 @@ static bc_capture_t g_capture;
 
 static struct
 {
-    unsigned cmd     : 2;   // LINE_CMD_*
-    unsigned cmd_seq : 2;   // +1 per decoded command
+    unsigned bc_char  : 5;  // 0..25 = 'A'..'Z', LINE_CHAR_NONE
+    unsigned char_seq : 2;  // +1 per decoded character
     unsigned seq     : 8;   // publish counter
 } g_out;
 
@@ -64,7 +64,7 @@ static void    s3_drive_debug(uint8_t error, uint8_t mode, int16_t left,
 #if S3_BARCODE_ENABLE
 static void    s3_drain_edges(void);
 static void    s3_poll_barcode(uint32_t now_us);
-static bool    s3_cmd_of(char data_char, uint8_t *p_cmd);
+static bool    s3_char_index(char data_char, uint8_t *p_index);
 #endif
 static void    s3_publish(uint8_t error, uint8_t mode);
 static void    s3_update_diag(uint32_t start_us);
@@ -114,8 +114,8 @@ line_task (INT stacd, void *exinf)
 
     line_logic_init(&g_line);
     bc_capture_init(&g_capture, drv_ir_barcode_black(), drv_ir_now_us());
-    g_out.cmd     = LINE_CMD_STRAIGHT;
-    g_out.cmd_seq = 0U;
+    g_out.bc_char  = LINE_CHAR_NONE;
+    g_out.char_seq = 0U;
     g_out.seq     = 0U;
     g_seen_overflows = drv_ir_overflows();
 #if S3_DRIVE_ENABLE
@@ -279,23 +279,24 @@ static void
 s3_poll_barcode (uint32_t now_us)
 {
     char            data_char = '\0';
-    uint8_t         cmd;
+    uint8_t         index = 0U;
     bc_cap_result_t result;
 
     result = bc_capture_poll(&g_capture, now_us, &data_char);
 
     if (BC_CAP_DECODED == result)
     {
-        if (s3_cmd_of(data_char, &cmd))
+        if (s3_char_index(data_char, &index))
         {
-            // New command: Subsystem 2 acts once when cmd_seq changes
-            g_out.cmd     = cmd & LINE_IF_CMD_MASK;
-            g_out.cmd_seq = (g_out.cmd_seq + 1U) & S3_CMD_SEQ_MASK;
+            // New character: the VC maps it to a movement (CLAUDE.md
+            // 1b) and acts once when char_seq changes
+            g_out.bc_char  = index & LINE_IF_CHAR_MASK;
+            g_out.char_seq = (g_out.char_seq + 1U) & S3_CHAR_SEQ_MASK;
             s3_count(&g_s3_diag.decode_ok);
         }
         else
         {
-            // valid Code 39 but not A-D (e.g. 'Z'): no command
+            // valid Code 39 but not A-Z (digit, '-', ...): ignored
             s3_count(&g_s3_diag.decode_other);
         }
 
@@ -312,37 +313,26 @@ s3_poll_barcode (uint32_t now_us)
 }
 
 /*!
- * Barcode character -> command (Project Write-up table).
+ * Barcode character -> index 0..25 for 'A'..'Z'. No movement here: the
+ * mapping comes over MQTT and the Vehicle Controller applies it.
  */
 static bool
-s3_cmd_of (char data_char, uint8_t *p_cmd)
+s3_char_index (char data_char, uint8_t *p_index)
 {
-    bool b_is_cmd = true;
+    bool b_letter = false;
 
-    switch (data_char)
+    if ((data_char >= 'A') && (data_char <= 'Z'))
     {
-        case 'A':
-            *p_cmd = LINE_CMD_LEFT;
-            break;
-
-        case 'B':
-            *p_cmd = LINE_CMD_RIGHT;
-            break;
-
-        case 'C':
-            *p_cmd = LINE_CMD_STRAIGHT;
-            break;
-
-        case 'D':
-            *p_cmd = LINE_CMD_UTURN;
-            break;
-
-        default:
-            b_is_cmd = false;
-            break;
+        // Range checked above, so the difference is 0..25
+        *p_index = (uint8_t)((uint8_t)data_char - (uint8_t)'A');
+        b_letter = true;
+    }
+    else
+    {
+        // not a letter: no character to report
     }
 
-    return b_is_cmd;
+    return b_letter;
 }
 
 #endif /* S3_BARCODE_ENABLE */
@@ -362,8 +352,8 @@ s3_publish (uint8_t error, uint8_t mode)
     state.seq             = (uint8_t)g_out.seq;
     state.mode            = mode;
     state.error           = error;
-    state.cmd             = (uint8_t)g_out.cmd;
-    state.cmd_seq         = (uint8_t)g_out.cmd_seq;
+    state.bc_char         = (uint8_t)g_out.bc_char;
+    state.char_seq        = (uint8_t)g_out.char_seq;
     state.b_centre_black  = drv_ir_centre_black();
     state.b_right_black   = drv_ir_right_black();
     state.b_barcode_black = drv_ir_barcode_black();
