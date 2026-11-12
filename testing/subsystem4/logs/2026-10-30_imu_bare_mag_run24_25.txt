@@ -1,0 +1,59 @@
+Date:    2026-10-30
+Runs:    24 and 25 (bare-module magnetometer spin, S4-U33/U34, first try)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted imu_unit_test.c
+         (IMU_TEST_BARE_MAG 1, before the vertical-axis / 2 % error change)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2 (make TEST=1)
+Setup:   GY-511 off the car on its wires, turned by hand on a table.
+         Run 24: module on its edge (acc x=-986 mg: X vertical).
+         Run 25: module flat, upside down (acc z=-920 mg: Z vertical).
+         S1/S2/S5 results as in run 23 (not repeated below).
+Result:
+  Run 24: spin about X, so the circle was in Y/Z; the test then only
+          looked at X/Y (span x=1342), so S4-U33 FAIL is not meaningful.
+          191 read errors (I2C, wires flexing while turned). Y/Z ranges
+          y=-3029..5760 z=-5036..7121: radius about 4400..6100 counts
+          (0.35..0.49 gauss at 0.080 mgauss/LSB, derived).
+  Run 25: X/Y circle ROUND: span x=14881 y=14268 (ratio 104 %), centre
+          x=-1009 y=-48 counts. S4-U33 FAIL only because of 8 read errors
+          (limit 0). S4-U34 then ran with NO offset (fallback), so its
+          55 % / RMS 18 % is the uncorrected circle: not a real check.
+          Z moved 1651 / 2081 counts: tilted by hand while turning.
+          Radius about 7300 counts = 0.58 gauss (derived), above the
+          expected horizontal Earth field; sensitivity tolerance or a
+          local field, unverified.
+  Conclusion: the sensor and driver give a round circle off the car
+          (run 25), unlike every car spin (ratio 15..158 %). The test
+          was changed after these runs: vertical axis from the
+          accelerometer, read errors up to 2 % allowed.
+
+---- run 24 console (S4 part) ----
+[IMU] at rest: OK  acc mg x=-986 y=3 z=18  mag x=1230 y=674 z=-4909
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] BARE MODULE MAG: module off the car, on a wooden/plastic table
+[IMU] >>> spin 1/2  SPIN: bare module flat on a wooden/plastic table, turn it on the spot  (5 s)
+[IMU] mag range x=583..1925 y=-3029..5760 z=-5036..7121  (191 read errors)
+[IMU] span x=1342 y=8789 counts (x/y = 15 %, 100 = no soft-iron)
+[IMU] bare chip offset (do NOT paste, car only): MAG_OFF x=1254 y=1365
+[IMU] WARNING: Z moved 12157 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U33 FAIL  flat spin: 0 errors, no saturation, X and Y span >= 2000   (../app_program/subsystem4/imu_unit_test.c:1072)
+[IMU] >>> spin 2/2  SPIN again (check): same spot, same way, keep it flat  (5 s)
+[IMU] X/Y radius raw 1422..6647 (spread 129 %)  corrected 1422..6647 (spread 129 %)
+[IMU] corrected radius over all 1000 samples: RMS spread 34 % of the mean (min/max is 129 %)
+[IMU] WARNING: Z moved 11799 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U34 FAIL  corrected X/Y radius spread <= 25 % of its mean   (../app_program/subsystem4/imu_unit_test.c:1089)
+
+---- run 25 console (S4 part) ----
+[IMU] at rest: OK  acc mg x=45 y=3 z=-920  mag x=5909 y=1428 z=2004
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] BARE MODULE MAG: module off the car, on a wooden/plastic table
+[IMU] >>> spin 1/2  SPIN: bare module flat on a wooden/plastic table, turn it on the spot  (5 s)
+[IMU] mag range x=-8450..6431 y=-7182..7086 z=981..2632  (8 read errors)
+[IMU] span x=14881 y=14268 counts (x/y = 104 %, 100 = no soft-iron)
+[IMU] bare chip offset (do NOT paste, car only): MAG_OFF x=-1009 y=-48
+[IMU] WARNING: Z moved 1651 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U33 FAIL  flat spin: 0 errors, no saturation, X and Y span >= 2000   (../app_program/subsystem4/imu_unit_test.c:1072)
+[IMU] >>> spin 2/2  SPIN again (check): same spot, same way, keep it flat  (5 s)
+[IMU] X/Y radius raw 4925..8696 (spread 55 %)  corrected 4925..8696 (spread 55 %)
+[IMU] corrected radius over all 996 samples: RMS spread 18 % of the mean (min/max is 55 %)
+[IMU] WARNING: Z moved 2081 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U34 FAIL  corrected X/Y radius spread <= 25 % of its mean   (../app_program/subsystem4/imu_unit_test.c:1089)

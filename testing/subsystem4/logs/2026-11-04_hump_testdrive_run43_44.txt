@@ -1,0 +1,79 @@
+Runs 43-44: VC test drive (PI 20 RPM, 1500 mm) after the threshold change
+(ON 4.0 deg, OFF 2.5 deg, impact 800 mg). Image hump_test_drive.uf2 built
+2026-11-03 22:48. USB cable attached (tester walks along).
+Run 43: 10 mm ramp under the right wheel at 2 places (positions CONFIRM).
+Run 44: flat, no ramp. Condensed to [IMU]/[VC] lines (p, r in 0.1 deg).
+
+Results
+- Run 44 (flat): NO hump start (was a false start at drive-off before).
+  One impact 1255 mg at d ~1098 with p -13.1 deg: a bump/floor edge or the
+  cable snagging (CONFIRM). Drove 1503 mm.
+- Run 43: hump start at d 434 on ramp 1, r -5.5 deg -> z 10 mm (10 mm ramp,
+  correct). The event never ended: tilt snapshots after the ramp (1 Hz,
+  max |p|,|r|): 1.2 1.5 3.8 1.6 1.4 1.1 3.0 0.6 1.9 2.1 6.9 2.7 3.5 3.1 deg,
+  so the 105 mm continuous stretch below 2.5 deg never happened; at
+  len 1000 mm the event was DROPPED (too long) and the 10 mm peak was lost.
+  VC: "humps: last 0 mm, highest 0 mm, valid 0". Impacts 1079 / 1283 mg.
+- Conclusion: the end rule (continuous quiet stretch) is the weak point,
+  not the height model. Next: 25 Hz trace (IMU_HUMP_TRACE) to see whether
+  the driving tilt is fast vibration or a once-per-wheel-turn (207 mm)
+  oscillation before choosing a filter.
+
+--- run 43 (ramp x2) ---
+[IMU] level zero: pitch 18 roll 12 (0.1 deg)
+[IMU] t ACTIVE | p 10 r -12  d 39   L 227 R 257 | z 0
+[IMU] t ACTIVE | p -6 r -2   d 76   | z 0
+[IMU] t ACTIVE | p 17 r 15   d 124  | z 0
+[IMU] t ACTIVE | p -20 r 5   d 170  | z 0
+[IMU] t ACTIVE | p -15 r -2  d 229  | z 0
+[IMU] t ACTIVE | p 3 r -17   d 291  | z 0
+[IMU] t ACTIVE | p -21 r -24 d 351  | z 0
+[IMU] t ACTIVE | p -31 r -36 d 410  | z 0
+[IMU] hump start at d 434 mm
+[IMU] t HUMP_UP   | p -15 r -55 d 484  L 2875 R 3060 | z 10
+[IMU] impact: 1079 mg from 1 g over 2 samples (#1)
+[IMU] t HUMP_UP   | p 12 r -10  d 552  | z 1
+[IMU] t HUMP_UP   | p -15 r -3  d 621  | z 0
+[IMU] t HUMP_DOWN | p -38 r -33 d 689  | z 6
+[IMU] t HUMP_UP   | p 10 r -16  d 757  | z 3
+[IMU] t HUMP_DOWN | p -6 r 14   d 825  | z 2
+[IMU] t HUMP_DOWN | p -7 r -11  d 894  | z 2
+[IMU] t HUMP_DOWN | p -30 r -3  d 961  | z 0
+[IMU] t HUMP_DOWN | p 6 r -1    d 1028 | z 0
+[IMU] impact: 1283 mg from 1 g over 2 samples (#2)
+[IMU] t HUMP_DOWN | p -19 r 19  d 1096 | z 3
+[IMU] t HUMP_DOWN | p 21 r -12  d 1170 | z 2
+[IMU] t HUMP_UP   | p 69 r 0    d 1237 | z 0
+[IMU] t HUMP_DOWN | p -27 r 5   d 1307 | z 0
+[IMU] t HUMP_UP   | p 34 r -35  d 1373 | z 6
+[IMU] t ACTIVE    | p 12 r -31  d 1445 | z 0
+[VC] stopped: distance reached, drove 1503 mm | humps: last 0 mm, highest 0 mm, valid 0
+
+--- run 44 (flat) ---
+[IMU] level zero: pitch 13 roll 12 (0.1 deg)
+[IMU] t ACTIVE | p -54 r 51 d 35  | z 10      (drive-off, no start)
+[IMU] t ACTIVE | p 3 r 7    d 55  L 230 R 453
+[IMU] t ACTIVE | p 14 r 16  d 102
+[IMU] t ACTIVE | p 21 r -10 d 163
+[IMU] t ACTIVE | p -5 r 8   d 222
+[IMU] t ACTIVE | p -4 r 6   d 286
+[IMU] t ACTIVE | p -20 r 3  d 350
+[IMU] t ACTIVE | p 6 r 1    d 417
+[IMU] t ACTIVE | p 22 r 24  d 482
+[IMU] t ACTIVE | p -3 r -11 d 550
+[IMU] t ACTIVE | p -6 r -24 d 622
+[IMU] t ACTIVE | p -12 r 2  d 689
+[IMU] t ACTIVE | p 6 r -2   d 757
+[IMU] t ACTIVE | p -28 r 2  d 823
+[IMU] t ACTIVE | p 53 r -22 d 891 | z 7
+[IMU] t ACTIVE | p -20 r 1  d 959
+[IMU] t ACTIVE | p -22 r 16 d 1028
+[IMU] impact: 1255 mg from 1 g over 4 samples (#1)
+[IMU] t ACTIVE | p -131 r -17 d 1098 | z 3
+[IMU] t ACTIVE | p -15 r -7 d 1168
+[IMU] t ACTIVE | p 2 r 1    d 1238
+[IMU] t ACTIVE | p -3 r 2   d 1306
+[IMU] t ACTIVE | p 14 r 21  d 1375
+[IMU] t ACTIVE | p -7 r -2  d 1443
+[VC] stopped: distance reached, drove 1503 mm | humps: last 0 mm, highest 0 mm, valid 0
+Periods 6.6-13.5 ms, err 0, wcet 2.08 ms in both runs.

@@ -29,7 +29,7 @@ IMPORT ID	tid_wifi;
 IMPORT void	wifi_task(INT stacd, void *exinf);
 
 /* IF-07: Vehicle Controller -> S1. Message buffer owned by S1; each message
-   is one 13-byte frame (TELEM_LEN), copied by value. */
+   is one 14-byte frame (TELEM_LEN, v2), copied by value. */
 IMPORT ID	mbf_telem;
 /* IF-08: S1 -> Vehicle Controller. Message buffer holding validated 3-byte
    command frames (CMD_LEN). Created by S1 until the Vehicle Controller exists
@@ -55,6 +55,17 @@ IMPORT UW	s1_cmd_rejected(void);
 /* Hooks called by lib/liblwip/.../mqtt_utk.c inside the WiFi service task. */
 IMPORT uint32_t	mqtt_app_tx(uint8_t *buf, uint32_t max);
 IMPORT void	mqtt_app_rx(const char *topic, const uint8_t *data, uint32_t len);
+
+/* Telemetry monitor (telem_monitor.c): the vehicle snapshot in words on
+   the serial monitor, so the team can calibrate without decoding the MQTT
+   frame by hand. s1_telem_print() is callable from any task. telem_task()
+   gathers the snapshot and belongs in vehicle_controller.c once the VC
+   takes IF-07 over. */
+#define S1_PRI_TELEM	11		/* below the WiFi task, above the stub */
+#define S1_TELEM_MS	1000U		/* one printed snapshot per second */
+IMPORT ID	tid_telem;
+IMPORT void	telem_task(INT stacd, void *exinf);
+IMPORT void	s1_telem_print(const T_TELEM *snap);
 
 /* Read-only WiFi state, safe to call from any task. */
 IMPORT BOOL	s1_wifi_link_up(void);

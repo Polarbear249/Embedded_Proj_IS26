@@ -1,0 +1,78 @@
+Run 39: IMU unit tests, S4-only image (APP_TEST_ONLY 4)
+Date: 2026-11-03. Image: s4_only_smp1_usb_cdc_wifi_test.uf2, branch
+integrate/s4-onto-main 8aaf476 + uncommitted (run 37 mag offset, APP_TEST_ONLY).
+Confirms the S4-only image: "only 4", no S1/S2/S3/S5 tests.
+Results: bench 7/7 PASS, S4-U23 PASS (1.3/0.9 deg). Pose 2 "turned" read the
+same as pose 1 to the mg (21/4/1094 vs 21/4/1093): car NOT turned, so the mount
+/ floor split is invalid. Pose 3 was the 23 mm block under the ball caster
+(nose-up check S4-U19), not "flat again": pitch +16.0 deg vs level (run 35:
++15.7, run 12: +15.5) -> nose-up check PASS; S4-U24 FAIL is that procedure,
+not a fault (S4-U24 already PASS in run 37). Mag spins not run (paste ends).
+|a| at rest 1092-1094 mg raw (run 37: 1117-1123, runs 23-36: 1006-1029).
+The block angle agrees with run 35, so the high |a| is a common scale on all
+axes, which cancels in atan2: pitch/roll and hump heights are not affected.
+
+--- console ---
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+[IMU] test build: imu_terrain not started, unit tests own I2C1
+all subsystems started
+
+[TEST] === test run start (only 4, 0 = all) ===
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+S3: barcode disabled (S3_BARCODE_ENABLE 0)
+
+[IMU] ===== subsystem 4 IMU test (GY-511 / LSM303D) =====
+[IMU] keep the car flat and still
+[TEST] S4-U09 PASS  I2C1 SDA/SCL idle high (pull-ups ok)
+[TEST] S4-U11 PASS  I2C1 init + sensor configuration writes ACKed
+[IMU] init: OK (abort src 0x0)
+[IMU] I2C1 scan: 0x1d  (1 found)
+[TEST] S4-U14 PASS  bus scan finds the LSM303D at 0x1D
+[IMU] WHO_AM_I: OK, 0x49 (expect 0x49)
+[TEST] S4-U12 PASS  LSM303D WHO_AM_I reads 0x49
+[IMU] CTRL1: OK, 0x5f (expect 0x5f)
+[TEST] S4-U13 PASS  LSM303D configured (CTRL1 read back)
+[IMU] at rest: OK  acc mg x=14 y=3 z=1096  mag x=1951 y=-4695 z=767
+[TEST] S4-U06 PASS  accel at rest reads 1 g +-20 %
+[TEST] S4-U07 PASS  magnetometer reads a field, no axis saturated
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] ----- level zero: you need tape to mark where the car stands -----
+
+[IMU] >>> pose 1/3  FLAT: car on the floor, mark both wheels and the ball with tape  (5 s)
+s1: link down, status=0 kpolls=184
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=447
+[IMU] avg mg x=14 y=5 z=1092  |a|=1092  spread 333 mg  (50/50 reads ok)
+[IMU] FAIL still: axis X moved 333 mg (limit 60) min -296 max 37
+[IMU] pose rejected (reason above), again
+
+[IMU] >>> pose 1/3  FLAT: car on the floor, mark both wheels and the ball with tape  (5 s)
+s1: link down, status=0 kpolls=709
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=972
+[IMU] avg mg x=21 y=4 z=1093  |a|=1093  spread 18 mg  (50/50 reads ok)
+[IMU] level reference (mount + floor)  pitch 1.3 deg  roll 0.9 deg
+[TEST] S4-U23 PASS  level zero captured (car flat, still)
+
+[IMU] >>> pose 2/3  TURNED: same spot, car turned 180 deg (nose where the tail was)  (5 s)
+s1: link down, status=0 kpolls=1234
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=1497
+[IMU] avg mg x=21 y=4 z=1094  |a|=1094  spread 25 mg  (50/50 reads ok)
+[IMU] turned 180  pitch 1.3 deg  roll 0.9 deg
+[IMU] mount tilt  (ref + turned) / 2  pitch 1.3 deg  roll 0.9 deg
+[IMU] floor slope (ref - turned) / 2  pitch 0.0 deg  roll 0.0 deg
+
+[IMU] >>> pose 3/3  FLAT again: original direction, wheels and ball on the tape marks  (5 s)
+[IMU] hands off, measuring in 3 s
+s1: link down, status=0 kpolls=1759
+[IMU] avg mg x=311 y=0 z=1049  |a|=1094  spread 23 mg  (50/50 reads ok)
+[IMU] flat again vs level  pitch 16.0 deg  roll -0.2 deg
+[TEST] S4-U24 FAIL  flat again reads pitch and roll 0 +-0.5 deg   (../app_program/subsystem4/imu_unit_test.c:1022)
+[TEST] subsystem4 IMU level zero SUMMARY 1 passed, 1 failed
+[IMU] ----- magnetometer: turn the car slowly by hand, flat, 2 full turns -----
+[IMU] no watch, ring or phone on that hand, power bank away, motors off
+[IMU] vertical axis Z: the circle is in X/Y

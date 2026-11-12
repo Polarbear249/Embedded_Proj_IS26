@@ -46,7 +46,7 @@ static int telem_in_range(const T_TELEM *t)
 	       (t->mstate <= TELEM_MSTATE_MAX) && fits(t->faults, 5U) &&
 	       fits(t->line_err, 7U) && fits(t->line_ok, 1U) &&
 	       fits(t->junction, 1U) && fits(t->bc_ok, 1U) &&
-	       fits(t->bc_cmd, 2U) && fits(t->obs_ok, 1U) &&
+	       fits(t->bc_char, 5U) && fits(t->obs_ok, 1U) &&
 	       fits(t->obs_left, 9U) && fits(t->obs_right, 9U) &&
 	       fits(t->obs_width, 9U);
 }
@@ -77,7 +77,7 @@ T_FRAME_STATUS telem_encode(const T_TELEM *in, uint8_t out[TELEM_LEN])
 	put_bits(out, &pos, 1U, in->line_ok);
 	put_bits(out, &pos, 1U, in->junction);
 	put_bits(out, &pos, 1U, in->bc_ok);
-	put_bits(out, &pos, 2U, in->bc_cmd);
+	put_bits(out, &pos, 5U, in->bc_char);
 	put_bits(out, &pos, 8U, in->hump_mm);
 	put_bits(out, &pos, 1U, in->obs_ok);
 	put_bits(out, &pos, 9U, in->obs_left);
@@ -111,13 +111,17 @@ T_FRAME_STATUS telem_decode(const uint8_t *buf, uint32_t len, T_TELEM *out)
 	t.line_ok = (uint8_t)get_bits(buf, &pos, 1U);
 	t.junction = (uint8_t)get_bits(buf, &pos, 1U);
 	t.bc_ok = (uint8_t)get_bits(buf, &pos, 1U);
-	t.bc_cmd = (uint8_t)get_bits(buf, &pos, 2U);
+	t.bc_char = (uint8_t)get_bits(buf, &pos, 5U);
 	t.hump_mm = (uint8_t)get_bits(buf, &pos, 8U);
 	t.obs_ok = (uint8_t)get_bits(buf, &pos, 1U);
 	t.obs_left = (uint16_t)get_bits(buf, &pos, 9U);
 	t.obs_right = (uint16_t)get_bits(buf, &pos, 9U);
 	t.obs_width = (uint16_t)get_bits(buf, &pos, 9U);
 	if (t.mstate > TELEM_MSTATE_MAX) {
+		return FRAME_ERR_RANGE;
+	}
+	/* the pad bits are written as 0 by telem_encode() */
+	if (get_bits(buf, &pos, TELEM_PAD_BITS) != 0U) {
 		return FRAME_ERR_RANGE;
 	}
 	*out = t;

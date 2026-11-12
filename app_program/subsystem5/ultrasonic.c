@@ -1,55 +1,117 @@
+/*
+ * ultrasonic.c
+ * Subsystem 5 (Buddy 5): HC-SR04+ ranging, see ultrasonic.h.
+ *
+ * Shared data: g_echo_state, g_rise_us, g_fall_us are written by the
+ * ECHO callback (interrupt context, core 0: gpio_irq.h) and read by the
+ * obstacle task, which is pinned to core 0 as well (subsystem5.c), so
+ * the interrupt simply preempts the task and volatile word access is
+ * enough (no cross-core ordering involved). The task writes only
+ * g_echo_state, and only while no pulse is expected (before TRIG).
+ * Worst-case blocking: none; ultrasonic_measure_cm() sleeps one cycle.
+ */
+
 #include "ultrasonic.h"
+#include <sys/machine.h>
+#include "../gpio_irq.h"
 
-#define TRIG_PIN 16
-#define ECHO_PIN 17
+#define ULTRA_ARMED             (0U)    // waiting for the rising edge
+#define ULTRA_ROSE              (1U)    // rising edge seen
+#define ULTRA_DONE              (2U)    // both edges seen
+#define ULTRA_IDLE              (3U)    // not measuring: ignore edges
 
-ER ultrasonic_init(void) {
-    // Trigger pin (Output)
-    gpio_set_pin(TRIG_PIN);     // T-Kernel BSP function to set pin mode
-    gpio_set_dir(TRIG_PIN, 1);  // 1 = Output
-    gpio_set_val(TRIG_PIN, 0);  // Start LOW
+static volatile uint32_t g_echo_state = ULTRA_IDLE;
+static volatile uint32_t g_rise_us = 0U;
+static volatile uint32_t g_fall_us = 0U;
 
-    // Echo pin (Input)
-    gpio_set_pin(ECHO_PIN);
-    gpio_set_dir(ECHO_PIN, 0);  // 0 = Input
+static void ultrasonic_echo_isr(uint32_t pin, uint32_t events);
 
-    
-    return E_OK;
+ER
+ultrasonic_init (void)
+{
+    ER er = gpio_set_pin(ULTRA_TRIG_PIN, GPIO_MODE_OUT);
+
+    if (E_OK <= er)
+    {
+        gpio_set_val(ULTRA_TRIG_PIN, 0);
+        er = gpio_set_pin(ULTRA_ECHO_PIN, GPIO_MODE_IN);
+    }
+
+    if (E_OK <= er)
+    {
+        er = gpio_irq_attach(ULTRA_ECHO_PIN, GPIO_IRQ_EDGE_BOTH,
+                             ultrasonic_echo_isr);
+    }
+
+    return (er);
+}
+
+/*!
+ * One measurement: TRIG pulse, then sleep one cycle (60-70 ms at the
+ * 10 ms tick) while the callback timestamps ECHO. Task context only.
+ */
+uint32_t
+ultrasonic_measure_cm (void)
+{
+    uint32_t t0_us;
+    uint32_t width_us;
+    uint32_t state;
+    uint32_t dist_cm = ULTRA_NO_ECHO;
+
+    g_echo_state = ULTRA_ARMED;
+
+    t0_us = in_w(TIMER_TIMERAWL);
+    gpio_set_val(ULTRA_TRIG_PIN, 1);
+
+    while ((in_w(TIMER_TIMERAWL) - t0_us) < ULTRA_TRIG_US)
+    {
+        // 10 us: the only busy wait
+    }
+
+    gpio_set_val(ULTRA_TRIG_PIN, 0);
+    (void)tk_dly_tsk(ULTRA_CYCLE_MS);
+
+    state = g_echo_state;
+    g_echo_state = ULTRA_IDLE;
+
+    if (ULTRA_DONE == state)
+    {
+        width_us = g_fall_us - g_rise_us;       // wraps correctly
+        dist_cm = width_us / ULTRA_US_PER_CM;
+        dist_cm = (dist_cm > ULTRA_MAX_CM) ? ULTRA_MAX_CM : dist_cm;
+        dist_cm = (0U == dist_cm) ? 1U : dist_cm;   // 0 means no echo
+    }
+    else
+    {
+        // ARMED: no rising edge (sensor missing or dead). ROSE: ECHO
+        // still high a full cycle later. Both: no valid reading.
+        dist_cm = ULTRA_NO_ECHO;
+    }
+
+    return (dist_cm);
 }
 
 /*
-    Measures distance in centimeters.
-    Returns -1.0 if no echo is received (timeout).
-    WARNING: This function blocks the CPU using busy-waiting loops.
-*/
-float ultrasonic_measure(void) {
-    SYSTIM start_time, current_time;
-    UW pulse_width_us;
-    
-    // Send a 10 microsecond HIGH pulse to trigger the sensor
-    gpio_set_val(TRIG_PIN, 1);
-    tk_dly_tsk(1); // T-Kernel delay is in ms. 1ms is plenty for a 10us trigger
-    gpio_set_val(TRIG_PIN, 0);
+ * ECHO edge (interrupt context): store the time, nothing else.
+ */
+static void
+ultrasonic_echo_isr (uint32_t pin, uint32_t events)
+{
+    uint32_t now_us = in_w(TIMER_TIMERAWL);
 
-    // Wait for the ECHO pin to go HIGH
-    tk_get_tim(&start_time);
-    while (gpio_get_val(ECHO_PIN) == 0) {
-        tk_get_tim(&current_time);
-        // 5ms timeout
-        if ((current_time.lo - start_time.lo) > 5) return -1.0; 
+    (void)pin;
+
+    if ((ULTRA_ARMED == g_echo_state)
+        && (0U != (events & GPIO_IRQ_EDGE_RISE)))
+    {
+        g_rise_us = now_us;
+        g_echo_state = ULTRA_ROSE;
     }
 
-    // Wait for the ECHO pin to go LOW
-    tk_get_tim(&start_time);
-    while (gpio_get_val(ECHO_PIN) == 1) {
-        tk_get_tim(&current_time);
-        // 30ms timeout
-        if ((current_time.lo - start_time.lo) > 30) return -1.0; 
+    if ((ULTRA_ROSE == g_echo_state)
+        && (0U != (events & GPIO_IRQ_EDGE_FALL)))
+    {
+        g_fall_us = now_us;
+        g_echo_state = ULTRA_DONE;
     }
-    
-    // Calculate pulse width in milliseconds (since tk_get_tim is ms)
-    pulse_width_us = (current_time.lo - start_time.lo) * 1000; 
-    
-    // Return distance in cm
-    return (float)pulse_width_us / 58.0;
 }

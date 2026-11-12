@@ -6,11 +6,17 @@
  *	No kernel or network calls here: pure functions that can be unit-tested
  *	on a PC (testing/subsystem1/pc/).
  *
- *	TELEMETRY FRAME v1: 13 bytes, fields packed MSB-first, in this order:
+ *	TELEMETRY FRAME v2: 14 bytes, fields packed MSB-first, in this order:
  *	  version 8 | seq 5 | vstate 3 | mstate 3 | faults 5 | speed_l 8 |
  *	  speed_r 8 | dist_cm 16 | line_err 7 | line_ok 1 | junction 1 |
- *	  bc_ok 1 | bc_cmd 2 | hump_mm 8 | obs_ok 1 | obs_left 9 | obs_right 9 |
- *	  obs_width 9                                         = 104 bits
+ *	  bc_ok 1 | bc_char 5 | hump_mm 8 | obs_ok 1 | obs_left 9 |
+ *	  obs_right 9 | obs_width 9 | pad 5 (always 0)        = 112 bits
+ *
+ *	v2 (2026-11-13): the 2-bit barcode COMMAND became the 5-bit barcode
+ *	CHARACTER (0..25 = 'A'..'Z', 31 = none yet), because the character-to-
+ *	movement mapping now arrives over MQTT and is applied by the Vehicle
+ *	Controller (CLAUDE.md 1b). +3 bits pushed the frame from 13 to 14
+ *	bytes. A v1 frame is rejected (version byte).
  *
  *	COMMAND FRAME v1: 3 bytes, MSB-first:
  *	  version 8 | cmd 4 | arg 8 | seq 4                   = 24 bits
@@ -21,8 +27,9 @@
 
 #include <stdint.h>
 
-#define TELEM_VERSION		1U
-#define TELEM_LEN		13U
+#define TELEM_VERSION		2U
+#define TELEM_LEN		14U
+#define TELEM_PAD_BITS		5U	/* 107 data bits in 112 */
 #define TELEM_MSTATE_MAX	6U	/* seven motion states: 0..6 */
 
 /* Fault bits (individual bits of one mask, not separate integers). */
@@ -61,7 +68,7 @@ typedef struct {
 	uint8_t		line_ok;	/* 1 bit */
 	uint8_t		junction;	/* 1 bit */
 	uint8_t		bc_ok;		/* 1 bit */
-	uint8_t		bc_cmd;		/* 2 bits */
+	uint8_t		bc_char;	/* 5 bits, 0..25 = 'A'..'Z', 31 none */
 	uint8_t		hump_mm;	/* 8 bits, clamped by the sender */
 	uint8_t		obs_ok;		/* 1 bit */
 	uint16_t	obs_left;	/* 9 bits, cm */

@@ -1,0 +1,46 @@
+Date:    2026-10-30
+Run:     27 (car mode, first run with the soft-iron scale)
+Branch:  integrate/s4-onto-main 70823b4 + uncommitted imu_calib.c/h,
+         imu_unit_test.c (IMU_TEST_BARE_MAG 0, offset + scale check)
+Image:   build_make/mtk3pico_smp1_usb_cdc_wifi_test.uf2 (make TEST=1)
+Setup:   GY-511 remounted on the car (since run 26). Tester's note: each
+         spin was only HALF a turn (spin 1 turned 180 deg, spin 2 turned
+         back to the start), not the 2 full turns the prompt asks for.
+Result:  Bench 7/7. Level zero S4-U23/U24 PASS: mount tilt pitch 1.6 roll
+         0.7 deg (before the remount -0.8/-0.6), floor slope 0.0/0.0,
+         back on the marks 0.0/-0.1 deg.
+         Magnetometer: INVALID as a calibration (half turns). With 180 deg
+         each axis sees at most part of its range, so the min/max centre
+         (offset x=-2462 y=421) and spans (ratio 78 %, scale X=1139
+         Y=890) are biased. Spin 2: offset only RMS 8 % (min/max 34 %),
+         offset + scale RMS 14 % (53 %): the scale from partial spans made
+         it worse. Z moved 868 / 799 counts (tilted). S4-U25 PASS and
+         S4-U26 FAIL are not meaningful; repeat with 2 full turns.
+         Mount: at rest mag z=+3665 and acc x=+22 mg again (as run 26):
+         the axis map still needs the nose-up check.
+
+---- console (S4 part) ----
+[IMU] at rest: OK  acc mg x=22 y=0 z=1058  mag x=1026 y=-2682 z=3665
+[TEST] subsystem4 IMU bench SUMMARY 7 passed, 0 failed
+[IMU] avg mg x=26 y=0 z=1063  |a|=1063  spread 15 mg  (50/50 reads ok)
+[IMU] level reference (mount + floor)  pitch 1.6 deg  roll 0.7 deg
+[TEST] S4-U23 PASS  level zero captured (car flat, still)
+[IMU] turned 180  pitch 1.6 deg  roll 0.8 deg
+[IMU] mount tilt  (ref + turned) / 2  pitch 1.6 deg  roll 0.7 deg
+[IMU] floor slope (ref - turned) / 2  pitch 0.0 deg  roll 0.0 deg
+[IMU] flat again vs level  pitch 0.0 deg  roll -0.1 deg
+[TEST] S4-U24 PASS  flat again reads pitch and roll 0 +-0.5 deg
+[IMU] vertical axis Z: the circle is in X/Y
+[IMU] mag range x=-5486..562 y=-3449..4291 z=3027..3895  (0 read errors)
+[IMU] span X=6048 Y=7740 counts (ratio 78 %, 100 = no soft-iron)
+[IMU] paste into imu_calib.h: MAG_OFF x=-2462 y=421 z=0
+[IMU] soft-iron scale x1000: X=1139 Y=890 (1000 = none)
+[IMU] WARNING: vertical axis Z moved 868 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U25 PASS  flat spin: read errors <= 2 %, no saturation, both horizontal spans >= 2000
+[IMU] radius raw 3344..5730 (spread 52 %)  corrected 3922..5578 (spread 34 %)
+[IMU] over all 1000 samples, spread of the radius:
+[IMU]   offset only     RMS 8 %  min/max 34 %
+[IMU]   offset + scale  RMS 14 %  min/max 53 %
+[IMU] paste into imu_calib.h: MAG_SCALE x=1139 y=890 z=1000
+[IMU] WARNING: vertical axis Z moved 799 counts (flat spin: <= 500): it was tilted while turned
+[TEST] S4-U26 FAIL  radius spread (offset + scale) <= 25 % of its mean   (../app_program/subsystem4/imu_unit_test.c:1142)
