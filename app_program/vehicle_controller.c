@@ -29,13 +29,15 @@ typedef enum
     VC_STOP_TIME,
     VC_STOP_IMU_FAULT,
     VC_STOP_MOTION_FAULT,
-    VC_STOP_REFUSED
+    VC_STOP_REFUSED,
+    VC_STOP_LIFTED
 } vc_stop_t;
 
 static char const * const g_stop_name[] =
 {
     "distance reached", "button", "time limit", "IMU fault",
-    "Motion fault (wheel stalled?)", "Motion refused the command"
+    "Motion fault (wheel stalled?)", "Motion refused the command",
+    "car lifted or overturned (IMU)"
 };
 
 static void      vc_test_task(INT stacd, void *p_exinf);
@@ -46,6 +48,7 @@ static void      vc_estop_task(INT stacd, void *p_exinf);
 static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
 static void      vc_obstacle(uint32_t word);
+static void      vc_check_lifted(void);
 #endif
 
 static bool      vc_button_pressed(void);
@@ -204,6 +207,11 @@ vc_drive (int32_t *p_driven_mm)
             why = VC_STOP_MOTION_FAULT;
             b_done = true;
         }
+        else if (imu_terrain_is_lifted())
+        {
+            why = VC_STOP_LIFTED;
+            b_done = true;
+        }
         else
         {
             // keep driving
@@ -241,6 +249,7 @@ vc_estop_task (INT stacd, void *p_exinf)
     for (;;)
     {
         tk_dly_tsk(VC_ESTOP_POLL_MS);
+        vc_check_lifted();              // first: shortest stop latency
 
         if (vc_button_pressed())
         {
@@ -327,12 +336,40 @@ vc_obstacle (uint32_t word)
     }
 }
 
+/*
+ * Lifted or overturned (S4, prof's change 2026-11-13): stop at once and
+ * latch. Lifting the car ends the demo run. The latch is the same as the
+ * GP20 stop; vc_toggle_estop() refuses to release it while the IMU still
+ * reports the car lifted, so the wheels cannot start in the hand.
+ * Latency (derived): the IMU recognises the lift (sim: 70-160 ms after
+ * the lift starts), this task sees it within one 20-30 ms poll.
+ */
+static void
+vc_check_lifted (void)
+{
+    if (imu_terrain_is_lifted() && !motion_is_estopped())
+    {
+        tm_printf((UB*)"[VC] car lifted / overturned: STOP (%d), end of"
+                  " run; put it down, then GP20 releases\n",
+                  (INT)motion_estop());
+    }
+    else
+    {
+        // on its wheels, or already stopped
+    }
+}
+
 static void
 vc_toggle_estop (void)
 {
     motion_result_t result = MOTION_OK;
 
-    if (motion_is_estopped())
+    if (motion_is_estopped() && imu_terrain_is_lifted())
+    {
+        tm_printf((UB*)"[VC] GP20: still lifted / overturned, stop kept;"
+                  " put the car down level first\n");
+    }
+    else if (motion_is_estopped())
     {
         result = motion_clear_estop();
         tm_printf((UB*)"[VC] GP20: stop released (%d); the line drive"

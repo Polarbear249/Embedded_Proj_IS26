@@ -97,6 +97,8 @@ static const char *imu_state_name(imu_terrain_state_t st)
 	case IMU_TERRAIN_FAULT:		return "FAULT";
 	case IMU_TERRAIN_HUMP_UP:	return "hump-up";
 	case IMU_TERRAIN_HUMP_DOWN:	return "hump-down";
+	case IMU_TERRAIN_LIFTED:		return "LIFTED";
+	case IMU_TERRAIN_OVERTURNED:	return "OVERTURNED";
 	default:			return "?";
 	}
 }

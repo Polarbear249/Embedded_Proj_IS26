@@ -22,7 +22,7 @@ config/wifi_secrets.h
 *.avi
 *.mkv
 
-CLAUDE.md
+CLAUDE.md/
 handoff.md
 graphify-out/
 # macOS
@@ -44,3 +44,6 @@ build/
 *.hex
 *.map
 *.dis
+
+# Claude Code local worktrees and settings
+.claude/

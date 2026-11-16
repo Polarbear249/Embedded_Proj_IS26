@@ -12,8 +12,17 @@
  * Then hump detection and height (imu_hump.c) from the pitch and the
  * IF-10 wheel distance; the result is the IF-11 hump word. Samples
  * that are not mostly gravity (|a| far from 1 g) are kept out of the
- * tilt filter; a short strong one is reported as an IMPACT event.
- * Turn detection is not here yet.
+ * tilt filter. Turn detection is not here yet.
+ *
+ * LIFT / OVERTURN (prof's change 2026-11-13, replaces collision /
+ * impact detection): imu_lift.c watches every sample. A lifted car
+ * (upward acceleration) or an overturned one (tilt > 45 deg for 200 ms)
+ * puts the task in IMU_TERRAIN_LIFTED / IMU_TERRAIN_OVERTURNED. The IMU
+ * never drives the motors: the Vehicle Controller polls
+ * imu_terrain_get_state() every 20 ms and latches motion_estop(); in the
+ * demo, lifting the car ends the run. Back on its wheels, level and still
+ * for 1 s, the task returns to ACTIVE, but the motors stay stopped until
+ * GP20 is pressed. Hump detection pauses while lifted.
  *
  * Timing (A7 evidence): burst time, loop time (WCET over the window)
  * and period jitter are measured on the RP2040 1 us hardware timer and
@@ -27,9 +36,8 @@
  * reference is kept (the mount did not move), so it goes straight back
  * to ACTIVE.
  *
- * Priority: team table P9 (TEAM.md section 4). Pinned to core 0: the
- * motion tasks (S2) are pinned to core 1 and still use the template
- * priorities 12/14, so P9 on core 1 would preempt them.
+ * Priority: team table P9 (TEAM.md section 4). Pinned to core 0; the
+ * motion tasks (S2, P5) are pinned to core 1.
  */
 
 #ifndef IMU_TERRAIN_H
@@ -44,8 +52,9 @@
 #define IMU_TERRAIN_PERIOD_MS   (10U)
 
 // State, 4 bits (CLAUDE.md section 6). The task runs INIT, CALIBRATING,
-// ACTIVE and FAULT; HUMP_UP / HUMP_DOWN are what the IF-11 word reports
-// while ACTIVE and on a hump (FR8: climbing / descending).
+// ACTIVE, FAULT, LIFTED and OVERTURNED; HUMP_UP / HUMP_DOWN are what the
+// IF-11 word reports while ACTIVE and on a hump (FR8: climbing /
+// descending). LIFTED / OVERTURNED = stop the motors (see above).
 typedef enum
 {
     IMU_TERRAIN_INIT = 0,
@@ -53,8 +62,13 @@ typedef enum
     IMU_TERRAIN_ACTIVE,
     IMU_TERRAIN_FAULT,
     IMU_TERRAIN_HUMP_UP,
-    IMU_TERRAIN_HUMP_DOWN
+    IMU_TERRAIN_HUMP_DOWN,
+    IMU_TERRAIN_LIFTED,         // picked up: end of run, motors stop
+    IMU_TERRAIN_OVERTURNED      // tipped over: motors stop
 } imu_terrain_state_t;
+
+// True in LIFTED or OVERTURNED: the Vehicle Controller must stop
+bool                imu_terrain_is_lifted(void);
 
 ER                  imu_terrain_init(void);
 ER                  imu_terrain_start(void);
