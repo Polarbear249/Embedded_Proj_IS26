@@ -18,6 +18,7 @@ imu_lift_init (imu_lift_t *p_lift)
         p_lift->base_q     = 0;
         p_lift->calm_avg   = 0;
         p_lift->peak_sum   = 0;
+        p_lift->hold_count = 0U;
         p_lift->tilt_count = 0U;
         p_lift->calm_count = 0U;
         p_lift->b_latched  = false;
@@ -39,18 +40,55 @@ imu_lift_update (imu_lift_t *p_lift, int32_t dev_mg, int32_t pitch_ddeg,
     imu_lift_result_t result = IMU_LIFT_NONE;
     int32_t           tilt = 0;
     int32_t           dev_hp = 0;
+    int32_t           dev = dev_mg;
 
     if (NULL != p_lift)
     {
+        // impact veto: a bang of 1 g or more is never a hand lift (car
+        // data: lifts <= 885 mg, false events >= 1028 mg); forget the
+        // speed estimate and ignore the next IMU_LIFT_IMPACT_HOLD samples
+        if (imu_lift_abs(dev_mg) >= IMU_LIFT_IMPACT_MG)
+        {
+            p_lift->hold_count = IMU_LIFT_IMPACT_HOLD;
+        }
+        else
+        {
+            // no impact
+        }
+
+        // a single jolt or knock must not count more than a lift's worth
+        if (dev > IMU_LIFT_CLAMP_MG)
+        {
+            dev = IMU_LIFT_CLAMP_MG;
+        }
+        else if (dev < -IMU_LIFT_CLAMP_MG)
+        {
+            dev = -IMU_LIFT_CLAMP_MG;
+        }
+        else
+        {
+            // in range
+        }
+
         tilt = imu_lift_abs(pitch_ddeg);
         tilt = (imu_lift_abs(roll_ddeg) > tilt)
                ? imu_lift_abs(roll_ddeg) : tilt;
 
         // remove the slow baseline (bias, drift), then leaky integral
-        dev_hp = dev_mg - (p_lift->base_q / IMU_LIFT_BASE_Q);
-        p_lift->base_q += ((dev_mg * IMU_LIFT_BASE_Q) - p_lift->base_q)
+        dev_hp = dev - (p_lift->base_q / IMU_LIFT_BASE_Q);
+        p_lift->base_q += ((dev * IMU_LIFT_BASE_Q) - p_lift->base_q)
                           / IMU_LIFT_BASE_DIV;
-        p_lift->vel_sum += dev_hp - (p_lift->vel_sum / IMU_LIFT_LEAK_DIV);
+        if (0U != p_lift->hold_count)
+        {
+            p_lift->hold_count--;
+            p_lift->vel_sum = 0;            // vetoed: impact going on
+        }
+        else
+        {
+            p_lift->vel_sum += dev_hp
+                               - (p_lift->vel_sum / IMU_LIFT_LEAK_DIV);
+        }
+
         p_lift->calm_avg += (dev_hp - p_lift->calm_avg)
                             / IMU_SETTLE_AVG_DIV;
         p_lift->peak_sum = (p_lift->vel_sum > p_lift->peak_sum)

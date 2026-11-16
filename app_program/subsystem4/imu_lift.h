@@ -9,8 +9,12 @@
  * imu_terrain task, which owns the state (no lock).
  *
  * LIFTED: the accelerometer cannot see height, but it sees the upward
- * acceleration of a lift. dev = |a| - g_ref (g_ref = |a| measured at
- * level zero). A slow baseline of dev (time constant about 2.6 s) is
+ * acceleration of a lift. dev = upward acceleration (g_ref = |a| at
+ * level zero). Since 2026-11-16 the caller passes the acceleration
+ * ALONG GRAVITY, (a . f) / |f| - g_ref (imu_terrain.c imu_vert_mg()),
+ * not |a| - g_ref: the line follower's jolts made |a| as large as a
+ * hand lift (run 10), but cancel along gravity (run 11, replay with vz).
+ * A slow baseline of dev (time constant about 2.6 s) is
  * subtracted first, so a bias that remains or drifts cancels; then the
  * rest is integrated with a leak:
  *     sum += (dev - base) - sum / IMU_LIFT_LEAK_DIV   (mg x samples)
@@ -19,6 +23,22 @@
  * A short spike (ramp edge, bump) adds little and is followed by an
  * opposite spike, so it does not reach the threshold; a hand lift keeps
  * accelerating upwards for 100-300 ms.
+ * CLAMP (2026-11-16, measured): every dev sample is limited to
+ * +-IMU_LIFT_CLAMP_MG before it is used. Car traces (logs
+ * 2026-11-16_lift_run03/04): false lifts were single jolts / knocks of
+ * 1000-1500 mg lasting 20-40 ms (clipping the +-2 g range, and each
+ * 50 Hz accelerometer reading is seen twice by the 100 Hz task), while a
+ * real hand lift was 443-885 mg sustained for about 100 ms. With the
+ * clamp one spike can add at most 2 x IMU_LIFT_CLAMP_MG to the sum;
+ * a sustained lift still adds plenty. Replay: replay_lift.c.
+ * IMPACT VETO (2026-11-16, measured): the clamp alone let through a
+ * longer bang (run 06 block 3: 2451 / 1191 / 1052 / 479 mg, ~80 ms over
+ * 1 g, after the nose dipped). Every false event so far peaked at
+ * >= 1028 mg with clipping; every hand lift at <= 885 mg without. So a
+ * sample with |dev| >= IMU_LIFT_IMPACT_MG zeroes the speed estimate and
+ * holds it at zero for IMU_LIFT_IMPACT_HOLD samples (200 ms).
+ * LIMIT: a lift that starts with a jerk of 1 g or more is ignored for
+ * those 200 ms; lift smoothly (it is a hand lift, not a throw).
  * LIMIT (documented, derived): a hump climbed faster than about
  * IMU_LIFT_VEL_MM_S vertically would read as a lift, and a lift slower
  * than that is not seen. Demo instruction: lift the car briskly, at
@@ -51,6 +71,13 @@
 #ifndef IMU_LIFT_VEL_MM_S
 #define IMU_LIFT_VEL_MM_S       (200)       // estimated upward speed
 #endif
+#ifndef IMU_LIFT_CLAMP_MG
+#define IMU_LIFT_CLAMP_MG       (300)       // per-sample limit, measured
+#endif
+#ifndef IMU_LIFT_IMPACT_MG
+#define IMU_LIFT_IMPACT_MG      (1000)      // |dev| at or above: impact
+#endif
+#define IMU_LIFT_IMPACT_HOLD    (20U)       // 200 ms vetoed after it
 // sum threshold = speed / 0.0981 = speed x 10000 / 981
 #define IMU_LIFT_SUM_THRESH     ((IMU_LIFT_VEL_MM_S * 10000) / 981)
 #define IMU_LIFT_BASE_DIV       (256)       // baseline: about 2.6 s
@@ -76,6 +103,7 @@ typedef struct
     int32_t  base_q;            // slow baseline of dev, mg x 16
     int32_t  calm_avg;          // short average of dev - base, mg
     int32_t  peak_sum;          // highest vel_sum since last read
+    uint32_t hold_count;        // samples left in an impact veto
     uint32_t tilt_count;        // samples in a row beyond OVERTURN
     uint32_t calm_count;        // samples in a row level and still
     bool     b_latched;         // LIFTED or OVERTURNED in force

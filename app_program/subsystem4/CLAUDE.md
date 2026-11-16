@@ -20,7 +20,9 @@ will be used to signal the end of the run."
   `IMU_TERRAIN_OVERTURNED` (7) (still 4 bits); events `IMU_EVT_LIFTED` (3, the old IMPACT
   code) and `IMU_EVT_OVERTURNED` (5) (still 3 bits). `imu_terrain_is_lifted()` is the
   reader API.
-- **Lifted:** `dev = |a| - g_ref` (g_ref = |a| at level zero), minus a slow baseline
+- **Lifted:** `dev` = acceleration along the gravity estimate minus g_ref (g_ref = |a| at
+  level zero; since 2026-11-16 not `|a| - g_ref`, which counted line-follower jolts as
+  lifts, runs 10-11), minus a slow baseline
   (about 2.6 s), integrated with a leak (320 ms) = estimated upward speed. LIFTED at
   **200 mm/s** (derived). **Overturned:** pitch or roll beyond **45 deg for 200 ms**.
 - **Stop:** the IMU only reports. The Vehicle Controller polls `imu_terrain_is_lifted()`
