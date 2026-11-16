@@ -127,6 +127,25 @@ Buddy 2's and Buddy 3's folders made during integration.
 3. `MOTOR_TEST_HIGH_POWER 1` (50 % max, added for laptop-USB power): keep or tune.
 4. Priorities 12/14 -> the TEAM.md table; owner of `g_fault_mask` (VC per Version C?).
 5. Encoder L/R labels are confirmed correct on the car (run 38): nothing to change.
+6. **Wheels stall when starting from rest in duty mode (2026-11-17, section 6 #19).**
+   A turning wheel keeps going at low duty, but from rest it often does not start:
+   left wheel stuck at 120/1000 while the right turned (S4 lift runs 09, 12); both
+   stuck at 152/88 (run 13); inner wheel at 69-88 stalls. Duty mode has no start kick
+   and no stall check, so the car silently stops or drags off the line. Asked:
+   - a. **Measure** each wheel on the floor, power bank (and once on laptop USB):
+     the lowest duty that starts it from rest, and the lowest that keeps it turning.
+     Log it in `testing/subsystem2/`. The values below depend on these numbers.
+   - b. **Start kick in duty mode** (inside `motion_tick()`, no API change): if a
+     wheel is commanded non-zero but its encoder has not moved for ~50 ms, apply
+     `MOTION_START_PWM` for 2-3 ticks, then the commanded duty.
+   - c. **Minimum running duty**: raise any non-zero command to at least the measured
+     keep-turning level, so the inner wheel of a correction does not fade out.
+   - Check: stop / release on the line and restart from rest 5 times; both encoder
+     counts rise within 0.2 s every time. Logs showing the stalls (S4 folder):
+     `testing/subsystem4/logs/2026-11-16_lift_run09_*`, `2026-11-17_lift_run12_*`,
+     `2026-11-17_lift_run13_*` (search `enc L`).
+   - Long term (with Buddy 3): IF-06 has S2 steering; closed-loop wheel speeds would
+     remove this, but the PI loop runs every 100 ms, too slow to steer as it is.
 
 ### Buddy 3 (`zaynulabidyn-coder`)
 1. **Review `subsystem3/`** as merged (barcode moved to `gpio_irq_attach`).
@@ -141,6 +160,21 @@ Buddy 2's and Buddy 3's folders made during integration.
 5. S3-U01 fails only when it overlaps the WiFi start-up at boot (331 ms for 200 ms);
    with a 5 s delay it passes (209.8 ms). Either move U01 later in the test or the
    team sets `APP_TEST_SETTLE_MS` (default 0) in `app_main.c`.
+6. **Line drive powers are below the wheels' start threshold (2026-11-17, section 6
+   #19; Buddy 2 item 6).** `line_drive.h` sends open-loop 69-152 (BASE 120 +-32,
+   search -69/200); from rest the wheels often do not start at these values. If Buddy
+   2's start kick (Buddy 2 6b) is not ready before the demo, stopgap in
+   `subsystem3/line_drive.h` / `line_drive.c`:
+   - raise `DRIVE_BASE_DUTY` 120 -> ~150-160 (max correction then ~192, under
+     `MOTION_MAX_DUTY` 200);
+   - in `line_drive_clamp()`, lift any forward command between 0 and Buddy 2's
+     measured keep-turning duty up to that duty;
+   - retune `DRIVE_KP_NUM` if the car now overshoots (it drives faster). One change
+     at a time, one logged run each.
+7. **Side effects for S4, fixed when the stall is fixed:** a car pushing on one
+   stalled wheel rocks and the hump detector logs fake humps (20 mm in run 12,
+   76 mm in run 11). The lift detector is no longer fooled by the line follower's
+   jolts (S4 now uses the acceleration along gravity, section 6 #18).
 
 ### Buddy 5 (`TypeAlyce`)
 1. **Review PR #9** (details: `testing/integration/S5_REWORK_FOR_BUDDY5.md`).
@@ -192,6 +226,8 @@ Buddy 2's and Buddy 3's folders made during integration.
 | 15 | S3-U01: 200 ms read 331 ms | test window overlaps the WiFi start-up at boot (first guess "telemetry printing" was **wrong**, disproved by a rerun) | `APP_TEST_SETTLE_MS` 5000 -> 209.8 ms PASS | `logs/2026-11-03_s3_only_tick_loss.txt` |
 | 16 | Car stalled half-way up a 10 mm ramp | duty mode open loop, climbing wheel at 8.8 % (cap 20 %) | PI speed mode climbs it (to decide: B2/B3) | runs 40-45 |
 | 17 | Hump never ended / false starts / 30 mm on flat | driving vibration (pitch sd 1.9 deg, uncorrelated beyond 6 mm) and drive-off kick (+14 / -20 deg) | 16 mm distance smoothing + 60 mm drive-off guard; real-trace replay test | run 45 trace, `replay_trace.c` |
+| 18 | Line follower stopped by itself ~1 s after starting (power bank, after the 11-13 lift/overturn change) | S4 lift detector integrated \|a\| - g: the S3 duty steps shake the car (forward / sideways / rocking), which adds to \|a\| as much as a hand lift (282 vs 233 mm/s); no clamp/leak setting separated them | lift input = acceleration **along gravity** (`imu_vert_mg()`): jolts cancel, lifts stay positive. Line following 0 false stops, lifts caught, GP20 kept while lifted | S4 lift runs 10-13, `replay_lift.c ... vz`, S4 TEST_LOG U38-U41 |
+| 19 | Wheel(s) stop and stay stopped while line following | duty mode is open loop with no start kick: from rest the wheels need more than the 69-152 duty S3 sends (static > kinetic friction) | **open**: Buddy 2 start kick + minimum duty, Buddy 3 stopgap (section 4) | S4 lift runs 09, 12, 13 (`enc L` frozen) |
 
 ---
 

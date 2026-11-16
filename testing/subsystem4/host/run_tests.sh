@@ -35,3 +35,5 @@ cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
 # run 11 (line follower + 4 hand lifts) replayed with the vz column, the
 # firmware input since 2026-11-16 (runs 03-08 have no vz: dev input)
 "$rlf" $LOGS/2026-11-16_lift_run11_line_follow_vz_lifts.txt NNNNLLLNNLN vz
+"$rlf" $LOGS/2026-11-17_lift_run12_vz_line_follow_lift.txt LN vz
+"$rlf" $LOGS/2026-11-17_lift_run13_U41_gp20_while_lifted.txt L vz
