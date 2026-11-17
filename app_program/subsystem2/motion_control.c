@@ -69,6 +69,32 @@
    which S3 renews every 10 ms anyway. */
 #define MOTION_LOCK_WAIT_MS       (10)
 
+/*
+ * Duty-mode start kick (added by Buddy 4, 2026-11-17, Buddy 2 to review;
+ * INTEGRATION.md section 6 #19). Duty mode is open loop: a wheel that is
+ * already turning keeps going at 88-104/1000, but from rest it often
+ * does not start at the 69-152 the line follower sends (S4 lift runs 09,
+ * 12, 13: encoder frozen while commanded). If a wheel is commanded
+ * non-zero and its encoder has not moved for MOTION_KICK_STILL_TICKS,
+ * drive it at MOTION_START_PWM (the speed mode's start value) in the
+ * commanded direction until the encoder moves, at most
+ * MOTION_KICK_TICKS, then go back to the commanded duty. A wheel that
+ * still does not move is kicked again only after MOTION_KICK_REST_TICKS,
+ * so a blocked wheel averages well under the driver's 1 A limit.
+ * Tick counts are starting values (derived, not measured): TODO_TUNE.
+ */
+#define MOTION_KICK_STILL_TICKS   (5U)      /* 50 ms without a count */
+#define MOTION_KICK_TICKS         (5U)      /* kick lasts at most 50 ms */
+#define MOTION_KICK_REST_TICKS    (20U)     /* 200 ms between kicks */
+
+typedef struct
+{
+    int32_t last_count;     /* encoder count at the previous tick */
+    uint8_t still_ticks;    /* ticks commanded but not moving */
+    uint8_t kick_ticks;     /* ticks left of the current kick */
+    uint8_t rest_ticks;     /* ticks before the next kick is allowed */
+} motion_kick_t;
+
 typedef enum
 {
     MOTION_MODE_IDLE = 0,
@@ -85,6 +111,8 @@ static int16_t       applied_right = 0;
 static UW            duty_issued_ms = 0U;
 static UW            duty_lease_ms = 0U;
 static UW            last_pi_ms = 0U;       /* motion task only */
+static motion_kick_t kick_left = {0, 0U, 0U, 0U};    /* motion task only */
+static motion_kick_t kick_right = {0, 0U, 0U, 0U};
 
 /* Emergency-stop latch: written under command_mutex; read without the
    lock by motion_is_estopped() (one byte, a whole value either way). */
@@ -133,6 +161,8 @@ static uint16_t motion_pwm_value(float value)
 
 static void motion_stop_locked(void);
 static void motion_duty_tick(UW now_ms);
+static int16_t motion_kick_step(motion_kick_t *p_kick, int16_t duty,
+                                int32_t count);
 
 /*
  * Enter fault state and stop both motors.
@@ -538,6 +568,8 @@ static void motion_duty_tick(UW now_ms)
 {
     int16_t left = duty_left;
     int16_t right = duty_right;
+    int32_t left_count = 0;
+    int32_t right_count = 0;
 
     if ((UW)(now_ms - duty_issued_ms) >= duty_lease_ms)
     {
@@ -548,6 +580,8 @@ static void motion_duty_tick(UW now_ms)
         return;
     }
 
+    encoder_get_counts(&left_count, &right_count);
+
     if (((left > 0) && (applied_left < 0)) ||
         ((left < 0) && (applied_left > 0)) ||
         ((right > 0) && (applied_right < 0)) ||
@@ -557,6 +591,9 @@ static void motion_duty_tick(UW now_ms)
         right = 0;
     }
 
+    left = motion_kick_step(&kick_left, left, left_count);
+    right = motion_kick_step(&kick_right, right, right_count);
+
     if (motor_apply(left, right) != E_OK)
     {
         motion_enter_fault();
@@ -565,6 +602,66 @@ static void motion_duty_tick(UW now_ms)
 
     applied_left = left;
     applied_right = right;
+}
+
+/*
+ * Start kick for one wheel, see MOTION_KICK_STILL_TICKS. Returns the
+ * duty to apply this tick: the commanded duty, or MOTION_START_PWM with
+ * the same sign while a kick runs. A zero command clears the state.
+ */
+static int16_t motion_kick_step(motion_kick_t *p_kick, int16_t duty,
+                                int32_t count)
+{
+    int16_t out = duty;
+    bool    b_moved = (count != p_kick->last_count);
+
+    p_kick->last_count = count;
+
+    if (p_kick->rest_ticks > 0U)
+    {
+        p_kick->rest_ticks--;
+    }
+
+    if ((0 == duty) || b_moved)
+    {
+        if (p_kick->kick_ticks > 0U)
+        {
+            p_kick->rest_ticks = MOTION_KICK_REST_TICKS;
+        }
+
+        p_kick->still_ticks = 0U;
+        p_kick->kick_ticks = 0U;
+    }
+    else if (p_kick->kick_ticks > 0U)
+    {
+        p_kick->kick_ticks--;
+
+        if (0U == p_kick->kick_ticks)
+        {
+            p_kick->rest_ticks = MOTION_KICK_REST_TICKS;
+            p_kick->still_ticks = 0U;
+        }
+    }
+    else if (p_kick->still_ticks < MOTION_KICK_STILL_TICKS)
+    {
+        p_kick->still_ticks++;
+    }
+    else if (0U == p_kick->rest_ticks)
+    {
+        p_kick->kick_ticks = MOTION_KICK_TICKS;
+    }
+    else
+    {
+        /* still not moving: wait for the rest time */
+    }
+
+    if ((p_kick->kick_ticks > 0U) && (0 != duty))
+    {
+        out = (duty > 0) ? (int16_t)MOTION_START_PWM
+                         : (int16_t)(-(int16_t)MOTION_START_PWM);
+    }
+
+    return out;
 }
 
 /*

@@ -61,6 +61,22 @@
  * 0.3 m radius about 1.7 deg (derived), below the 4 deg start.
  * Smallest side hump that starts: 113 x sin(4 deg) = 7.9 mm (derived).
  *
+ * Straight-travel guard (2026-11-17, car logs lift runs 09, 11, 12). The
+ * model assumes the car rolls straight over the ground. With one wheel
+ * stalled the car pushes round on it, the chassis tilts 4-8 deg for
+ * seconds while the mean distance still grows, and the model built
+ * fake humps of 20, 30 and 106 mm (a fake hump corrupts the "highest
+ * hump" of the whole run). imu_hump_turn_update() compares the two
+ * wheel counts over the last IMU_HUMP_TURN_WIN samples; when they
+ * differ by more than IMU_HUMP_TURN_PCT of their total (one wheel
+ * stalled = 100 %, spin on the spot = 100 %, line-follower correction
+ * 152/88 about 33 %, test drive about 2 %: measured on the car), the
+ * caller uses imu_hump_skip() instead of imu_hump_update(): that
+ * travel builds no profile and starts no event; an event already open
+ * is kept and continues when the car drives straight again.
+ * LIMIT (derived, not yet run on the car): a real hump crossed while a
+ * wheel is stalled or the car is spinning is not measured.
+ *
  * Checked in the PC test against simulated humps (23 mm, 8 mm, 30 mm
  * long, 40 mm smooth, flat with noise and level error, tilted without
  * moving, clamp, left- and right-wheel side ramps): within 1-2 mm
@@ -110,6 +126,15 @@
 #define IMU_HUMP_DRIVEOFF_MM    (60)
 #endif
 
+// Straight-travel guard, see the header comment. Window 32 samples =
+// 320 ms at 10 ms; below IMU_HUMP_TURN_MIN_COUNTS the car is nearly
+// still and the guard stays off (the stand-still logic handles that).
+// One count = 0.163 mm (1271 counts per 207 mm wheel turn).
+#define IMU_HUMP_TURN_WIN       (32U)
+#define IMU_HUMP_TURN_MIN_COUNTS (16)   // about 2.6 mm of wheel travel
+#define IMU_HUMP_TURN_PCT       (60)
+#define IMU_HUMP_TURN_GLITCH    (100)   // counts per sample: not real
+
 // IMU events, 3 bits (CLAUDE.md section 6)
 typedef enum
 {
@@ -148,6 +173,19 @@ typedef struct
     bool     b_from_still;              // next forward travel = drive-off
 } imu_hump_t;
 
+// Wheel-count window for the straight-travel guard (task-private)
+typedef struct
+{
+    int8_t   d_left[IMU_HUMP_TURN_WIN];     // counts per sample
+    int8_t   d_right[IMU_HUMP_TURN_WIN];
+    int32_t  sum_left;                      // sums of the two rings
+    int32_t  sum_right;
+    int32_t  last_left;                     // counts at the last sample
+    int32_t  last_right;
+    uint32_t idx;                           // next ring slot
+    bool     b_synced;                      // last_* valid
+} imu_hump_turn_t;
+
 // IF-11 hump word (TEAM.md section 5), one aligned uint32_t
 #define IMU_HUMP_W_MAX(w)       ((uint32_t)(w) & 0xFFU)
 #define IMU_HUMP_W_LAST(w)      (((uint32_t)(w) >> 8) & 0xFFU)
@@ -160,6 +198,10 @@ void        imu_hump_init(imu_hump_t *p_hump);
 void        imu_hump_resync(imu_hump_t *p_hump);
 imu_event_t imu_hump_update(imu_hump_t *p_hump, int32_t pitch_ddeg,
                             int32_t roll_ddeg, int32_t dist_mm);
+void        imu_hump_skip(imu_hump_t *p_hump, int32_t dist_mm);
+void        imu_hump_turn_init(imu_hump_turn_t *p_turn);
+bool        imu_hump_turn_update(imu_hump_turn_t *p_turn,
+                                 int32_t left_count, int32_t right_count);
 int32_t     imu_hump_now_mm(imu_hump_t const *p_hump);
 uint32_t    imu_hump_pack(imu_hump_t const *p_hump, uint32_t state,
                           uint32_t event, uint32_t seq);

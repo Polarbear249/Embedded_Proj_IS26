@@ -24,11 +24,14 @@ will be used to signal the end of the run."
   level zero; since 2026-11-16 not `|a| - g_ref`, which counted line-follower jolts as
   lifts, runs 10-11), minus a slow baseline
   (about 2.6 s), integrated with a leak (320 ms) = estimated upward speed. LIFTED at
-  **200 mm/s** (derived). **Overturned:** pitch or roll beyond **45 deg for 200 ms**.
+  **200 mm/s** (tuned on car traces, runs 01-13: weakest real lift 226, strongest
+  non-lift 166). **Overturned:** pitch or roll beyond **45 deg for 200 ms**.
 - **Stop:** the IMU only reports. The Vehicle Controller polls `imu_terrain_is_lifted()`
   every 20 ms, **first** in its loop, and latches `motion_estop()` (same latch as GP20).
-  GP20 cannot release it while the car is still lifted. Latency (derived): lift recognised
-  70-160 ms after it starts (sim), then within one VC poll (20-30 ms).
+  GP20 cannot release it while the car is still lifted (S4-U41 PASS). Latency: lift
+  recognised 40-70 ms after the upward acceleration starts (**measured**, runs 12-13; sim
+  said 70-160 ms), then within one VC poll (20-30 ms, derived). Lift-to-wheels-stopped has
+  not been filmed yet (NFR18).
 - **Back down:** level (< 10 deg) and still (averaged |dev| <= 60 mg) for 1 s, then the IMU
   returns to ACTIVE and hump detection resyncs. The motors stay stopped until GP20.
 - **Limits (derived, to measure):** a vertical climb faster than about 200 mm/s on a hump
@@ -95,8 +98,8 @@ second report version
    collision from Sections 5 and 6.4 and FR8. Replace with: the IMU detects lifted or
    overturned and reports it; the Vehicle Controller stops the motors at once (latched,
    `motion_estop()` today, `EVG_stop` later); lifting ends the demo run. State the
-   lift-to-stop latency against NFR18: recognition 70-160 ms (derived, sim) + VC poll
-   20-30 ms + Motion stop. Measure it on the car (S4-U38).
+   lift-to-stop latency against NFR18: recognition 40-70 ms (measured, runs 12-13) + VC
+   poll 20-30 ms (derived) + Motion stop (not yet filmed).
 5. **State names:** 6.4 uses both `ACTIVE` and `MONITORING`; use one.
 6. **Missing input:** the task table lists only accelerometer and magnetometer as IMU
    inputs. Hump height also needs encoder distance or speed from Motion Control; add it.

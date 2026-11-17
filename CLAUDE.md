@@ -687,8 +687,9 @@ owner. Confirm with the instructor how strictly the standard is checked.
 ---
 
 ## 10. Open points to resolve with the team
-1. Record the Week 6 pin table in TEAM.md; `CRASH_REPORT=1` clashes with the right encoder
-   on GP0/GP1; choose a liveness LED pin (GP19 is taken by the centre IR).
+1. Pin table: recorded in TEAM.md section 2 (done). Still open: a liveness LED pin and
+   owner; S1's template LED is still on GP19. `CRASH_REPORT=1` clashes with the right
+   encoder on GP0/GP1 (never use it on the car).
 2. Who owns the persistent fault mask (Vehicle Controller per Version C, or Motion per the
    Buddy 2 row) and who writes `vehicle_controller` (Buddy 4 is doing it; Tribunal 1 says
    Buddy 2 with all).
@@ -702,11 +703,21 @@ owner. Confirm with the instructor how strictly the standard is checked.
 5. WiFi/MQTT code runs inside the kernel's WiFi service context; changing it needs team
    and instructor agreement (TEAM.md).
 6. System clock (125 MHz assumed) and all timing numbers are unmeasured.
-7. The report (task table P5 to P10) and the template (bands 12 to 21) disagree on
-   priorities; update TEAM.md and the `S*_PRI_*` macros to the report's table.
+7. Priorities: Motion and the encoder task are at P5 (2026-11-13, run on the car
+   2026-11-16/17: IMU P9 period 2.6 to 17.5 ms, 1 late period in 47 s, measured, INT-14).
+   Check the remaining `S*_PRI_*` macros against TEAM.md section 4.
 8. IMU sample rate (50 versus 100 Hz) (section 8 item 2). Impact detection is removed
-   (prof, 13 Nov 2026); lift/overturn stop is owned by the VC (IMU reports, VC stops).
-9. Encoder distance interface from Motion to the IMU (section 8) and the Q_events header.
+   (prof, 13 Nov 2026); lift/overturn stop is owned by the VC (IMU reports, VC stops):
+   done and tested on the car (S4-U38 to U41 PASS, 17 Nov 2026, PR #12). Still open: film
+   the lift-to-stop delay (NFR18).
+9. Encoder distance interface from Motion to the IMU: done (IF-10, INT-10 PASS). The
+   Q_events header is still open.
+11. Unmerged teammate work (found 17 Nov 2026): branch `integration-s2-s5-for-buddy5` has
+   Buddy 2's closed-loop `motion_line_drive()`, moves and turns, `Q_motion` / `EVG_stop`;
+   Buddy 3's A to Z decode and `barcode_nav`; Buddy 5's obstacle turn and reverse logic.
+   Its merge is on hold (plan: `testing/integration/INTEGRATION.md` section 2 step 8). Do
+   not delete the branch. Wheels stalling from rest in duty mode (INTEGRATION problem 19)
+   has a stopgap start kick on branch `s2-duty-start-kick`.
 10. Where the AI usage log lives (section 12 proposes `docs/ai_usage_log.md`).
 
 ## 11. Rules for AI assistants working here

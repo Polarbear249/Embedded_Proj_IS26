@@ -136,6 +136,7 @@ static uint32_t             g_bad_reads = 0U;
 static uint32_t             g_wcet_us = 0U;     // whole run, not reset
 static imu_timing_t         g_tim;
 static imu_hump_t           g_hump;
+static imu_hump_turn_t      g_turn;             // straight-travel guard
 static int32_t              g_pitch_ddeg = 0;   // filtered, vs level
 static int32_t              g_roll_ddeg = 0;    // filtered, vs level
 static uint32_t             g_hump_seq = 0U;
@@ -309,6 +310,7 @@ imu_terrain_task (INT stacd, void *p_exinf)
     imu_calib_default(&g_cal);
     imu_calib_mag_default(&g_mag_cal);
     imu_hump_init(&g_hump);
+    imu_hump_turn_init(&g_turn);
     imu_lift_init(&g_lift);
     imu_timing_reset();
     imu_start_device();
@@ -927,10 +929,25 @@ imu_gravity_ok (int32_t mag_mg)
 static void
 imu_hump_cycle (int32_t roll_ddeg)
 {
-    int32_t     dist_mm = motion_get_distance_mm();
-    imu_event_t event = IMU_EVT_NONE;
+    int32_t         dist_mm = motion_get_distance_mm();
+    imu_event_t     event = IMU_EVT_NONE;
+    motion_status_t motion = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
 
-    event = imu_hump_update(&g_hump, g_pitch_ddeg, roll_ddeg, dist_mm);
+    // Wheel counts (lock-free read; they stay 0 if Motion is not ready,
+    // which keeps the guard off). One wheel stalled or a spin: that
+    // travel is not a straight roll over the ground, so no hump profile.
+    (void)motion_get_status(&motion);
+
+    if (imu_hump_turn_update(&g_turn, motion.left_encoder_count,
+                             motion.right_encoder_count))
+    {
+        imu_hump_skip(&g_hump, dist_mm);
+    }
+    else
+    {
+        event = imu_hump_update(&g_hump, g_pitch_ddeg, roll_ddeg,
+                                dist_mm);
+    }
 
     // Constant condition: compiled either way (no unused warnings)
     if (0 != IMU_HUMP_TRACE)

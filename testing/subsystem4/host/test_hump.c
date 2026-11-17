@@ -208,6 +208,79 @@ static int check_pack(void)
     return ok;
 }
 
+/* Straight-travel guard: feed wheel counts per 10 ms sample */
+static int turn_case(const char *name, int dl, int dr, int samples,
+                     int want)
+{
+    imu_hump_turn_t t;
+    int32_t l = 5000, r = 7000;     /* any start values */
+    bool turning = false;
+    int ok;
+
+    imu_hump_turn_init(&t);
+    for (int i = 0; i < samples; i++) {
+        l += dl;
+        r += dr;
+        turning = imu_hump_turn_update(&t, l, r);
+    }
+    ok = ((int)turning == want);
+    printf("%-34s L %+d R %+d /sample -> %s  %s\n", name, dl, dr,
+           turning ? "not straight" : "straight", ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+/* Car logs: one wheel stalled, chassis tilted 8 deg, the mean distance
+   still grows (lift run 12 gave a fake 20 mm hump). With the guard no
+   hump; a real 23 mm hump driven straight afterwards still measures. */
+static int check_guard(void)
+{
+    imu_hump_t h;
+    imu_hump_turn_t t;
+    int32_t l = 0, r = 0, d = 0;
+    int starts = 0, ends = 0, ok;
+    unsigned fake_max;
+
+    imu_hump_init(&h);
+    imu_hump_turn_init(&t);
+    /* 100 mm straight and level: 6 counts per sample per wheel = 1 mm */
+    for (int i = 0; i < 100; i++) {
+        l += 6; r += 6; d += 1;
+        if (imu_hump_turn_update(&t, l, r)) imu_hump_skip(&h, d);
+        else (void)imu_hump_update(&h, 0, 0, d);
+    }
+    /* left wheel stalled, right turning, pitch 8 deg, roll 5 deg:
+       300 samples, the mean distance grows 1 mm every 2 samples */
+    for (int i = 0; i < 300; i++) {
+        imu_event_t ev = IMU_EVT_NONE;
+        r += 6; d += (i & 1);
+        if (imu_hump_turn_update(&t, l, r)) imu_hump_skip(&h, d);
+        else ev = imu_hump_update(&h, 80, 50, d);
+        starts += (ev == IMU_EVT_HUMP_START);
+        ends += (ev == IMU_EVT_HUMP_END);
+    }
+    fake_max = h.max_mm;
+    ok = (0 == starts) && (0 == ends) && (0U == fake_max);
+    printf("%-34s starts %d ends %d max %u mm  %s\n",
+           "guard: stalled wheel, tilt 8 deg", starts, ends, fake_max,
+           ok ? "PASS" : "FAIL");
+    /* straight again: 100 mm level, 23 mm hump as pitch 15.7 deg for
+       60 mm, then 250 mm level */
+    for (int i = 0; i < 410; i++) {
+        int32_t p = ((i >= 100) && (i < 160)) ? 157 : 0;
+        l += 6; r += 6; d += 1;
+        if (imu_hump_turn_update(&t, l, r)) imu_hump_skip(&h, d);
+        else (void)imu_hump_update(&h, p, 0, d);
+    }
+    {
+        int c = (h.max_mm >= 21U) && (h.max_mm <= 25U);
+        printf("%-34s measured %u mm (true 23)  %s\n",
+               "guard: real hump afterwards", (unsigned)h.max_mm,
+               c ? "PASS" : "FAIL");
+        ok &= c;
+    }
+    return ok;
+}
+
 int main(void)
 {
     sim_opts_t clean = {0.0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0};
@@ -336,6 +409,18 @@ int main(void)
         ok &= check("side: 10 mm right + wobble 2.2 deg", (profile_t){300,
                     40, 60, 40, 10, 0}, 900, wobble_r, 1, 1.5);
     }
+    /* Straight-travel guard. Counts per 10 ms sample taken from the car
+       logs: test drive 13564/14001 (about equal), line-follower
+       correction 152/88 -> 347/173 per second, stalled left wheel,
+       search spin 200/-69 */
+    ok &= turn_case("guard: both wheels equal", 6, 6, 100, 0);
+    ok &= turn_case("guard: correction 152/88", 4, 2, 100, 0);
+    ok &= turn_case("guard: left wheel stalled", 0, 6, 100, 1);
+    ok &= turn_case("guard: right wheel stalled", 6, 0, 100, 1);
+    ok &= turn_case("guard: spin on the spot", 6, -3, 100, 1);
+    ok &= turn_case("guard: car still", 0, 0, 100, 0);
+    ok &= turn_case("guard: count baseline jump", 3000, 3000, 1, 0);
+    ok &= check_guard();
     ok &= check_pack();
 
     puts(ok ? "ALL PASS" : "SOME FAILED");

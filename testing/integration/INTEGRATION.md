@@ -1,33 +1,36 @@
 # Integration log: how the subsystems were put together
 
 Maintained by Buddy 4 (integration branch owner, Vehicle Controller writer).
-Last update **2026-11-13**. PR #9 (S5) merged into `integrate/s4-onto-main`,
-then the integration branch merged into **`main`** (PR **#10**). From now on
-`main` is the only trunk (section 2 step 7).
+Last update **2026-11-17**. `main` is the only trunk (section 2 step 7): PR #10
+(all subsystems, 11-13) and PR **#12** (S4 lift / overturn stop, 11-17) are merged.
+**Not on `main` yet:** `integration-s2-s5-for-buddy5` (Buddy 2 / 3 / 5 work, section 2
+step 8), PR #11 (`vc-mission`), `s2-duty-start-kick` (stopgap for problem 19).
 Test results: `testing/integration/TEST_LOG.md`, `testing/subsystem4/TEST_LOG.md`.
 
 **Read section 0 first if you only have two minutes.**
 
 ---
 
-## 0. Where we are (2026-11-13)
+## 0. Where we are (2026-11-17)
 
 | Subsystem | Owner (GitHub) | On the integration branch | Tested on the car (integrated image) |
 |---|---|---|---|
 | S1 WiFi / telemetry | Buddy 1 (`FitrizDanialy`) | PR #3 + telemetry monitor PR #6 (merged 11-03) | console monitor yes; WiFi/MQTT link not yet in the integrated image |
 | S2 Motion | Buddy 2 (`dinesh379`) | PR #2 + integration fixes + duty mode + e-stop latch | encoders (1 m -> 990 mm), PI speed mode drives straight 1.5 m and climbs a 10 mm ramp; e-stop latches |
-| S3 Line / barcode | Buddy 3 (`zaynulabidyn-coder`) | `line_tracing_only` + barcode on the GPIO dispatcher; **11-13: outputs the character 0-25, no hard-coded mapping** (PC: A-Z both directions PASS) | all 3 IR sensors toggle (S3-U06 PASS); **line following loses the line within ~1 s**; barcode disabled |
-| S4 IMU / terrain | Buddy 4 (`Polarbear249`) | full task, calibration, side + front hump model, smoothing, trace | calibration done on the raised mount (runs 37-39); hump: real-trace replay 1 hump / 9 mm for a 10 mm ramp, **car re-run pending** |
-| S5 Obstacle | Buddy 5 (`TypeAlyce`) | PR #9 merged 2026-11-13 (built, PC-checked, **not run on the car**) | no |
-| Vehicle Controller | Buddy 4 | GP20 e-stop, VC test drive; IF-09 obstacle stop in PR #9 | e-stop yes; mission logic (barcode -> junction -> turn) **not written** |
+| S3 Line / barcode | Buddy 3 (`zaynulabidyn-coder`) | `line_tracing_only` + barcode on the GPIO dispatcher; **11-13: outputs the character 0-25, no hard-coded mapping** (PC: A-Z both directions PASS) | all 3 IR sensors toggle (S3-U06 PASS); **line following works on `main`** (follows and recovers, S4 lift runs 10-13, up to 3 m); the stop after about 1 s seen on 11-16 was the S4 lift detector (problem 18, fixed). Open: wheels stall from rest (problem 19). Barcode disabled on `main`; Buddy 3's A-Z decode on the car is on the unmerged branch |
+| S4 IMU / terrain | Buddy 4 (`Polarbear249`) | full task, calibration, side + front hump model, smoothing, trace | calibration done on the raised mount (runs 37-39); **hump on the car: 23 mm ramp under one wheel -> mean 24.6 mm (n = 8, 21-27, test drive)**; **lift / overturn stop S4-U38..U41 PASS** (PR #12, runs 01-13). Open: hump while line following is unreliable until problem 19 is fixed (a stalled wheel rocks the car -> fake humps); ramp run with the new lift input |
+| S5 Obstacle | Buddy 5 (`TypeAlyce`) | PR #9 merged 2026-11-13; turn / reverse / bypass logic is on the unmerged branch | alert -> VC stop and profile word seen once on a stationary car (INT-09 PARTIAL); moving-car test owed |
+| Vehicle Controller | Buddy 4 | GP20 e-stop, VC test drive, IF-09 obstacle stop, **IF-12 lift / overturn stop** | e-stop yes (INT-13), lift stop yes (INT-12); mission logic (barcode -> junction -> turn): PR #11 logs the decision only; Buddy 3's branch does it inside S3 as a temporary stand-in |
 
-Build state (2026-11-13, after PR #9 + review fixes): `make -j8` and `make TEST=1 -j8`
-0 errors, 0 warnings; PC tests S1, S2, S3 (72 checks), S4 all pass. `main` builds again.
+Build state (2026-11-17, `main` = `c9a478d` + the uncommitted start kick): `make -j8` and
+`make TEST=1 -j8` 0 errors, 0 warnings; PC tests S2, S3 (72 checks), S4 (hump, lift
+simulation, replay of car runs 03-13) all pass.
 
 Review fixes made by Buddy 4 before the merge (Buddy 2 / 3 / 1 please read the commits):
 - `099012b` S3 outputs the barcode **character** (IF-06 `bc_char` 5 bits), telemetry
   frame **v2** (14 bytes, `bc_char` 5 bits). Buddy 1: your PC decoder must use v2.
-- `0e1f617` Motion and encoder-publish tasks on **P5** (were 14/12). **Re-check on the car.**
+- `0e1f617` Motion and encoder-publish tasks on **P5** (were 14/12). Run on the car
+  11-16/17: the car drives; IMU task period 2.6-17.5 ms, 1 late period in 47 s (INT-14).
 - `eef3961` `testing/subsystem5/.vscode` untracked.
 Still open from the review: tabs in S1/`app_main.c` (Barr-C layout), `MOTOR_TEST_HIGH_POWER 1`
 (B2 to decide), S1 LED on GP19, drive API (problem 16).
@@ -108,10 +111,10 @@ Buddy 2's and Buddy 3's folders made during integration.
 | 2 | **Barcode A-Z, both directions, sensor on the left** (CLAUDE.md 1b): code table with source, decoder outputs a 5-bit character, not a command; pin change approved first | B3 | pin approval |
 | 3 | **Cross-junction event** distinct from "both sensors black" | B3 | 1 |
 | 4 | **Mapping over MQTT** (4 distinct characters -> forward / U-turn / left / right, binary frame, `Q_cmd`), PC script to send it, decoder script for telemetry | B1 | VC frame agreed |
-| 5 | **VC mission logic**: pending character slot, applies the MQTT mapping at the cross-junction, sends the movement to Motion (`Q_motion`) | B4 | 2, 3, 4 |
+| 5 | **VC mission logic**: pending character slot, applies the MQTT mapping at the cross-junction, sends the movement to Motion (`Q_motion`). PR #11 has it logged-only; Buddy 3's unmerged `barcode_nav` does map + turn inside S3 (temporary): **decide which one stays** | B4 + B3 | 2, 3, 4 |
 | 6 | **`EVG_stop`, `Q_events` + `EVG_sys`, `g_fault_mask`** (one shared header with every packed layout, round-trip tests) | B4 with all | - |
 | 7 | **Obstacle bypass + line reacquisition** (Week 10 metrics: detection, width, direction, reacquisition, < 3 s) | B5 + B4 (VC) + B2 | PR #9, 1 |
-| 8 | Hump on the car: right-wheel ramp, full-width ramp, flat run (FR7 evidence) | B4 | - |
+| 8 | Hump on the car: one-wheel 23 mm ramp done (24.6 mm mean, n = 8, test drive). Still: full-width ramp, and a run under the line follower after problem 19 is fixed | B4 | problem 19 |
 | 9 | Priorities: everything on the TEAM.md §4 table (P5..P10), one agreed change | all | - |
 | 10 | WiFi + MQTT in the integrated image on the power bank: A1 (WiFi does not disturb motion/sensing) and NFR12 (WiFi loss does not stop the car) | B1 + B4 | 4 |
 | 11 | Week 13 evidence: data representation table, RAM / message sizes before-after, P-task timing (measured / estimate / derived) | all | - |
@@ -217,6 +220,11 @@ Buddy 2's and Buddy 3's folders made during integration.
 | 11-03 | PR #9 (`a7c2b38`, `e07f370`) | **Buddy 5 merged into a review branch** and reworked (not yet in the integration branch) |
 | 11-04 | `d611806` | S4 side-hump model (W 113 mm), thresholds 4.0 / 2.5 deg, impact 800 mg, 16 mm smoothing, drive-off guard, trace switch |
 | 11-04 | `3b57c29`, `c1899cc`, `880204c` | S3 tick-loss diagnosis + logs; Buddy 5 note; real-trace replay test |
+| 11-04..11-11 | `e185696`..`f6639ab` | **Buddy 2 / 3 / 5 on `integration-s2-s5-for-buddy5`** (closed-loop line drive, moves and turns, `Q_motion` / `EVG_stop`; barcode A-Z on the car, `barcode_nav`; obstacle turn / reverse): **not merged** |
+| 11-13 | `d4de6ad`, `099012b`, `0e1f617`, `b08435c` | PR #9 (S5) merged; review fixes (S3 character output, telemetry frame v2, S2 at P5); **PR #10 -> `main`** |
+| 11-13 | `ff187b8` | prof's change: IMU impact detection removed, **lift / overturn stop** (`imu_lift.c`, VC latch, IF-12) |
+| 11-16 | `9b437ee` | lift tuned on the car (clamp 300 mg, impact veto 1 g); line-follower false stops found; **lift input = acceleration along gravity** |
+| 11-17 | `31e3628`, `a0ebff9`, `c9a478d` | S4-U38..U41 PASS (runs 12-13); **PR #12 -> `main`** |
 
 ---
 
@@ -242,7 +250,7 @@ Buddy 2's and Buddy 3's folders made during integration.
 | 16 | Car stalled half-way up a 10 mm ramp | duty mode open loop, climbing wheel at 8.8 % (cap 20 %) | PI speed mode climbs it (to decide: B2/B3) | runs 40-45 |
 | 17 | Hump never ended / false starts / 30 mm on flat | driving vibration (pitch sd 1.9 deg, uncorrelated beyond 6 mm) and drive-off kick (+14 / -20 deg) | 16 mm distance smoothing + 60 mm drive-off guard; real-trace replay test | run 45 trace, `replay_trace.c` |
 | 18 | Line follower stopped by itself ~1 s after starting (power bank, after the 11-13 lift/overturn change) | S4 lift detector integrated \|a\| - g: the S3 duty steps shake the car (forward / sideways / rocking), which adds to \|a\| as much as a hand lift (282 vs 233 mm/s); no clamp/leak setting separated them | lift input = acceleration **along gravity** (`imu_vert_mg()`): jolts cancel, lifts stay positive. Line following 0 false stops, lifts caught, GP20 kept while lifted | S4 lift runs 10-13, `replay_lift.c ... vz`, S4 TEST_LOG U38-U41 |
-| 19 | Wheel(s) stop and stay stopped while line following | duty mode is open loop with no start kick: from rest the wheels need more than the 69-152 duty S3 sends (static > kinetic friction) | **open**: Buddy 2 start kick + minimum duty, Buddy 3 stopgap (section 4) | S4 lift runs 09, 12, 13 (`enc L` frozen) |
+| 19 | Wheel(s) stop and stay stopped while line following | duty mode is open loop with no start kick: from rest the wheels need more than the 69-152 duty S3 sends (static > kinetic friction) | **start kick added 2026-11-17** by Buddy 4 in `subsystem2/motion_control.c` (branch `s2-duty-start-kick`, Buddy 2 to review): a commanded wheel whose encoder has not moved for 50 ms is driven at `MOTION_START_PWM` until it moves (max 50 ms, 200 ms rest). Builds + PC tests pass; **not yet run on the car**. Note: the unmerged `integration-s2-s5-for-buddy5` has Buddy 2's closed-loop `motion_line_drive()`, which replaces this when that branch is merged | S4 lift runs 09, 12, 13 (`enc L` frozen) |
 
 ---
 
@@ -252,11 +260,12 @@ Buddy 2's and Buddy 3's folders made during integration.
 |---|---|---|---|
 | IF-06 | S3 -> S2 | `line_state` word | published; S2 does not read it yet (S3 drives through `motion_set_duty`) |
 | IF-07 / IF-08 | VC <-> S1 | message buffers (telemetry, commands) | S1 side done; VC producer not yet (PR #6's monitor gathers the snapshot meanwhile) |
-| IF-09 | S5 -> VC | message buffer `vc_mbf_profile`, packed `uint32_t` (3 x 9-bit cm, kind, best) | **in PR #9**, round-trip tests S5-U08/U09 |
+| IF-09 | S5 -> VC | message buffer `vc_mbf_profile`, packed `uint32_t` (3 x 9-bit cm, kind, best) | on `main`; round-trip tests S5-U08/U09; on the car INT-09 **PARTIAL** (stationary car) |
 | **IF-10** | S2 -> S4 | aligned `int32_t` distance mm | **tested on the car (INT-10 PASS)** |
-| **IF-11** | S4 -> VC, S1 | aligned `uint32_t` hump word | done, round-trip test; height width (8 bits) open |
-| GPIO interrupts | S2, S3, S5 | shared dispatcher `gpio_irq.c`, core 0 | S2 on the car; S3 built (barcode disabled); S5 in PR #9 |
-| Motion API | VC, S3 -> S2 | `motion_set_speed()` (PI), `motion_set_duty()` (lease), `motion_estop()` | **B2 to choose the final API** (problem 16) |
+| **IF-11** | S4 -> VC, S1 | aligned `uint32_t` hump word | done, round-trip test; S1 monitor shows it (INT-11); height width (8 bits) open |
+| **IF-12** | S4 -> VC | `imu_terrain_is_lifted()` (aligned state word), VC polls every 20 ms and latches `motion_estop()` | **tested on the car (INT-12, S4-U38..U41 PASS)** |
+| GPIO interrupts | S2, S3, S5 | shared dispatcher `gpio_irq.c`, core 0 | S2 and S5 (ECHO) on the car; S3 built (barcode disabled on `main`) |
+| Motion API | VC, S3 -> S2 | `motion_set_speed()` (PI), `motion_set_duty()` (lease), `motion_estop()` | e-stop tested on the car (INT-13). Buddy 2 chose `motion_line_drive()` (PI, with lease) on the unmerged branch; `main` still uses duty mode (problems 16, 19) |
 | Q_motion, EVG_stop, Q_events, EVG_sys, g_fault_mask, Q_cmd mapping | VC | kernel objects | **not built yet** (section 3 items 4-6) |
 
 ---
@@ -280,7 +289,7 @@ make -j8                 # grep the output for "error" / "warning"
 make TEST=1 -j8
 sh testing/subsystem2/host/run_tests.sh    # encoder counting + IF-10
 sh testing/subsystem3/pc/run_tests.sh      # line logic, barcode, drive
-sh testing/subsystem4/host/run_tests.sh    # hump model: 19 simulated + run 45 replay
+sh testing/subsystem4/host/run_tests.sh    # hump model + run 45 replay; lift simulation + replay of car runs 03-13
 ```
 Images for single-subsystem tests: set `APP_TEST_ONLY` (1..5) in `app_main.c` for a
 `TEST=1` build that runs only that subsystem's tests (keep 0 in commits).

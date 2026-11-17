@@ -135,6 +135,109 @@ imu_hump_update (imu_hump_t *p_hump, int32_t pitch_ddeg, int32_t roll_ddeg,
 }
 
 /*!
+ * Travel that is not straight (imu_hump_turn_update() returned true):
+ * move the distance reference on without building a profile, so no
+ * event starts and nothing is added to one already open.
+ */
+void
+imu_hump_skip (imu_hump_t *p_hump, int32_t dist_mm)
+{
+    if (NULL == p_hump)
+    {
+        // nothing to do
+    }
+    else if (false == p_hump->b_synced)
+    {
+        p_hump->s_last_mm = dist_mm;
+        p_hump->b_synced = true;
+    }
+    else if (dist_mm > p_hump->s_last_mm)
+    {
+        p_hump->s_last_mm = dist_mm;
+        p_hump->still_calls = 0U;
+    }
+    else
+    {
+        // no forward travel: keep the reference
+    }
+}
+
+void
+imu_hump_turn_init (imu_hump_turn_t *p_turn)
+{
+    uint32_t idx;
+
+    if (NULL != p_turn)
+    {
+        for (idx = 0U; idx < IMU_HUMP_TURN_WIN; idx++)
+        {
+            p_turn->d_left[idx] = 0;
+            p_turn->d_right[idx] = 0;
+        }
+
+        p_turn->sum_left = 0;
+        p_turn->sum_right = 0;
+        p_turn->last_left = 0;
+        p_turn->last_right = 0;
+        p_turn->idx = 0U;
+        p_turn->b_synced = false;
+    }
+}
+
+/*!
+ * One sample of the two wheel encoder counts. Returns true while the
+ * wheels have moved too differently over the last IMU_HUMP_TURN_WIN
+ * samples for the hump model (one stalled, or a spin). A step larger
+ * than IMU_HUMP_TURN_GLITCH counts is not wheel travel (Motion moved
+ * its count baseline) and is taken as no movement.
+ */
+bool
+imu_hump_turn_update (imu_hump_turn_t *p_turn, int32_t left_count,
+                      int32_t right_count)
+{
+    bool    b_turning = false;
+    int32_t d_left = 0;
+    int32_t d_right = 0;
+    int32_t total;
+    int32_t diff;
+
+    if (NULL != p_turn)
+    {
+        if (p_turn->b_synced)
+        {
+            d_left = left_count - p_turn->last_left;
+            d_right = right_count - p_turn->last_right;
+        }
+
+        if ((imu_hump_abs(d_left) > IMU_HUMP_TURN_GLITCH)
+            || (imu_hump_abs(d_right) > IMU_HUMP_TURN_GLITCH))
+        {
+            d_left = 0;
+            d_right = 0;
+        }
+
+        p_turn->last_left = left_count;
+        p_turn->last_right = right_count;
+        p_turn->b_synced = true;
+
+        p_turn->sum_left += d_left - (int32_t)p_turn->d_left[p_turn->idx];
+        p_turn->sum_right += d_right
+                             - (int32_t)p_turn->d_right[p_turn->idx];
+        p_turn->d_left[p_turn->idx] = (int8_t)d_left;   // |d| <= 100
+        p_turn->d_right[p_turn->idx] = (int8_t)d_right;
+        p_turn->idx = (p_turn->idx + 1U) % IMU_HUMP_TURN_WIN;
+
+        total = imu_hump_abs(p_turn->sum_left)
+                + imu_hump_abs(p_turn->sum_right);
+        diff = imu_hump_abs(p_turn->sum_left - p_turn->sum_right);
+        b_turning = (total >= IMU_HUMP_TURN_MIN_COUNTS)
+                    && ((diff * 100) > (IMU_HUMP_TURN_PCT * total));
+    }
+
+    return (b_turning);
+}
+
+/*!
  * Current hump profile, mm (0 off a hump): the larger of the ground
  * height under the front contact and the side (one-wheel) height.
  */
