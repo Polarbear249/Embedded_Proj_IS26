@@ -8,9 +8,9 @@
  * after the IMU is ACTIVE, each press of the Robo Pico button GP20 makes
  * the car drive straight at VC_TEST_RPM for VC_TEST_DIST_MM, then stop.
  * It also stops on: a second button press, a time limit (twice the
- * expected time + 3 s), an IMU fault, or a Motion fault (S2's encoder
- * watchdog: a wheel stalled for 1 s). S2 has no command timeout, so this
- * task must always send the stop itself.
+ * expected time + 3 s), an IMU fault, a lifted / overturned car (IMU),
+ * or a Motion fault (S2's encoder watchdog: a wheel stalled for 1 s). S2
+ * has no command timeout, so this task must always send the stop itself.
  *
  * Not started in TEST=1 builds (the IMU task, and so hump detection,
  * does not run there).
@@ -22,6 +22,15 @@
  * it is still armed on the line. Worst-case reaction about 70 ms
  * (derived: 2 polls of 20-30 ms at the 10 ms tick + lock wait).
  * In test-drive builds GP20 starts and stops the test run instead.
+ *
+ * LIFT STOP (prof's change 2026-11-13; lifting the car ends the demo
+ * run): every poll, before the button, the task checks
+ * imu_terrain_is_lifted() (S4: lifted or overturned). If so it latches
+ * motion_estop(), the same latch as GP20. GP20 does not release it while
+ * the IMU still reports the car lifted; once the car is back on its
+ * wheels, level and still for 1 s, GP20 releases as usual. The IMU only
+ * reports; the VC decides and stops (Tribunal 1: IMU never drives
+ * motors).
  */
 
 #ifndef VEHICLE_CONTROLLER_H

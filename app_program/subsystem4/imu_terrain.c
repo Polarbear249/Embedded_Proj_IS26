@@ -19,6 +19,7 @@
 #include "drv_imu.h"
 #include "imu_calib.h"
 #include "imu_hump.h"
+#include "imu_lift.h"
 #include "../subsystem2/motion_control.h"     // IF-10 distance (reader)
 
 #define IMU_TICK_BIT            (0x1U)
@@ -52,13 +53,10 @@
 // a long disturbance cannot freeze tilt for ever.
 #define IMU_GRAVITY_TOL_MG      (150)
 #define IMU_GRAVITY_HOLD_MAX    (20U)       // 200 ms
-// Impact (FR8, report only; the Vehicle Controller decides any stop): a
-// disturbance at least IMU_IMPACT_MG from 1 g that is over within
-// IMU_IMPACT_MAX_SAMPLES samples. 400 mg fired 6 times in one normal
-// test drive over a 10 mm ramp (421-1215 mg, run 40, 2026-11-03): ramp
-// edges and drive-off are not impacts. 800 mg: to confirm on the car.
-#define IMU_IMPACT_MG           (800)       // was 400
-#define IMU_IMPACT_MAX_SAMPLES  (5U)        // 50 ms
+// Impact (collision) detection was REMOVED on 2026-11-13 (prof's
+// change): the IMU now detects a lifted or overturned car instead
+// (imu_lift.c), which ends the run. Run 40 had shown that 400-800 mg
+// "impacts" also fire on ramp edges, so nothing was lost.
 
 // Hump trace (diagnostic, off by default): while the car moves, print
 // "[TR] d p r z" every IMU_TRACE_EVERY samples (40 ms, ~3 mm at 20 RPM),
@@ -66,6 +64,34 @@
 // 43-44: is it vibration or a once-per-wheel-turn wobble?).
 #define IMU_HUMP_TRACE          (0)
 #define IMU_TRACE_EVERY         (4U)
+
+// Lift trace (diagnostic, off by default; added 2026-11-16 after U39
+// run 1 stopped falsely 3 times: twice ~31 mm after drive-off, once
+// coming off the 23 mm ramp). The last IMU_LT_LEN samples are kept in a
+// ring; IMU_LT_POST samples after a LIFTED / OVERTURNED event the ring is
+// printed once, one "[LT] k d dev v p r c" line per 10 ms sample:
+//   k   sample index, 0 = the sample that triggered
+//   d   IF-10 distance, mm        dev  |a| - g_ref, mg
+//   v   estimated upward speed, mm/s (imu_lift.c)
+//   p r filtered pitch / roll vs level, 0.1 deg
+//   c   1 = an axis was near the +-2 g limit (clipping)
+// The dump blocks this task for about 100 prints, only after a stop.
+// RAM: IMU_LT_LEN x 16 B = 1.6 KB, only when IMU_LIFT_TRACE is 1.
+#ifndef IMU_LIFT_TRACE
+#define IMU_LIFT_TRACE          (0)
+#endif
+#define IMU_LT_LEN              (100U)      // 1 s of samples
+#define IMU_LT_POST             (30U)       // 300 ms kept after the event
+#define IMU_LT_CLIP_MG          (1900)      // near the +-2 g range
+#define IMU_LT_I16_MAX          (32767)
+// Near-miss dump (added 2026-11-16: the line follower stopped falsely
+// after about 1 s on the power bank; with the stop disabled it drove
+// well). Also dump when the estimated upward speed reaches
+// IMU_LT_NEAR_MM_S without a LIFTED event, at most once per ring
+// length, to measure how close normal driving gets to the threshold.
+#ifndef IMU_LT_NEAR_MM_S
+#define IMU_LT_NEAR_MM_S        (120)
+#endif
 
 #define IMU_LATE_US             (15000U)    // period > 1.5 x 10 ms
 #define IMU_LINE_LEN            (256U)
@@ -111,16 +137,37 @@ static uint32_t             g_wcet_us = 0U;     // whole run, not reset
 static imu_timing_t         g_tim;
 static imu_hump_t           g_hump;
 static int32_t              g_pitch_ddeg = 0;   // filtered, vs level
+static int32_t              g_roll_ddeg = 0;    // filtered, vs level
 static uint32_t             g_hump_seq = 0U;
 static uint32_t             g_last_event = (uint32_t)IMU_EVT_NONE;
 static uint32_t             g_rep_state = (uint32_t)IMU_TERRAIN_INIT;
 static uint32_t             g_dist_run = 0U;    // disturbed samples in a row
-static int32_t              g_dist_peak = 0;    // largest |a| - 1 g in it
-static uint32_t             g_impacts = 0U;     // since power-up
+static imu_lift_t           g_lift;             // lift / overturn detector
+static int32_t              g_ref_mg = IMU_CALIB_1G_MG; // |a| at level zero
+
+#if IMU_LIFT_TRACE
+typedef struct
+{
+    int32_t dist_mm;
+    int16_t dev_mg;
+    int16_t vel_mm_s;
+    int16_t pitch_ddeg;
+    int16_t roll_ddeg;
+    int16_t vert_mg;    // a along the gravity estimate, minus g_ref
+    uint8_t clip;
+} imu_lt_sample_t;
+
+static imu_lt_sample_t      g_lt_ring[IMU_LT_LEN];
+static uint32_t             g_lt_head = 0U;     // next slot to write
+static uint32_t             g_lt_count = 0U;    // slots filled
+static uint32_t             g_lt_post = 0U;     // samples to dump, 0 idle
+static uint32_t             g_lt_quiet = 0U;    // near-miss hold-off
+#endif
 
 static char const * const   g_state_name[] =
 {
-    "INIT", "CALIBRATING", "ACTIVE", "FAULT", "HUMP_UP", "HUMP_DOWN"
+    "INIT", "CALIBRATING", "ACTIVE", "FAULT", "HUMP_UP", "HUMP_DOWN",
+    "LIFTED", "OVERTURNED"
 };
 
 static void     imu_terrain_cyc_handler(void *p_exinf);
@@ -134,10 +181,22 @@ static bool     imu_sample(uint32_t cycle, int32_t p_acc[],
                            uint32_t *p_acc_us, uint32_t *p_mag_us);
 static void     imu_level_add(int32_t const p_acc[]);
 static void     imu_filter(int32_t const p_acc[]);
-static void     imu_hump_cycle(void);
+static void     imu_motion_cycle(int32_t const p_acc[]);
+static void     imu_lift_event(imu_lift_result_t result);
+static void     imu_hump_cycle(int32_t roll_ddeg);
 static void     imu_trace(int32_t dist_mm, int32_t roll_ddeg);
-static bool     imu_gravity_ok(int32_t const p_acc[]);
-static void     imu_impact_check(void);
+static int32_t  imu_acc_mag(int32_t const p_acc[]);
+static int32_t  imu_vert_mg(int32_t const p_acc[],
+                            int32_t const p_filt_mg[], int32_t dev_mg);
+static bool     imu_gravity_ok(int32_t mag_mg);
+static bool     imu_is_lift_state(uint32_t state);
+#if IMU_LIFT_TRACE
+static void     imu_lt_record(int32_t const p_acc[], int32_t dev_mg,
+                              int32_t vert_mg,
+                              int32_t roll_ddeg, imu_lift_result_t result);
+static void     imu_lt_dump(void);
+static int16_t  imu_lt_i16(int32_t value);
+#endif
 static uint32_t imu_reported_state(void);
 static void     imu_publish(void);
 static void     imu_read_failed(i2c1_result_t result);
@@ -205,6 +264,16 @@ imu_terrain_get_state (void)
 }
 
 /*!
+ * True while the car is lifted or overturned (one atomic load of the
+ * single-writer state word, any task, no lock).
+ */
+bool
+imu_terrain_is_lifted (void)
+{
+    return (imu_is_lift_state(g_state));
+}
+
+/*!
  * IF-11 hump word; unpack with the IMU_HUMP_W_* macros (imu_hump.h).
  */
 uint32_t
@@ -240,6 +309,7 @@ imu_terrain_task (INT stacd, void *p_exinf)
     imu_calib_default(&g_cal);
     imu_calib_mag_default(&g_mag_cal);
     imu_hump_init(&g_hump);
+    imu_lift_init(&g_lift);
     imu_timing_reset();
     imu_start_device();
     last_wake_us = imu_now_us();
@@ -301,10 +371,12 @@ imu_set_state (imu_terrain_state_t state)
 {
     if ((uint32_t)state != g_state)
     {
-        if ((uint32_t)IMU_TERRAIN_FAULT == g_state)
+        if (((uint32_t)IMU_TERRAIN_FAULT == g_state)
+            || imu_is_lift_state(g_state))
         {
-            // Pitch was unknown during the fault: drop any hump in
-            // progress, keep the results
+            // Pitch was unknown during the fault, or the wheels may have
+            // turned in the air while lifted: drop any hump in progress,
+            // keep the results
             imu_hump_resync(&g_hump);
         }
 
@@ -421,14 +493,11 @@ imu_cycle (uint32_t cycle, uint32_t *p_acc_us, uint32_t *p_mag_us)
             break;
 
         case IMU_TERRAIN_ACTIVE:
+        case IMU_TERRAIN_LIFTED:
+        case IMU_TERRAIN_OVERTURNED:
             if (imu_sample(cycle, acc, p_acc_us, p_mag_us))
             {
-                if (imu_gravity_ok(acc))
-                {
-                    imu_filter(acc);    // else tilt holds its last value
-                }
-
-                imu_hump_cycle();
+                imu_motion_cycle(acc);
             }
             break;
 
@@ -534,6 +603,8 @@ imu_level_add (int32_t const p_acc[])
         }
 
         imu_calib_level_set(&g_level, avg);
+        g_ref_mg = imu_acc_mag(avg);    // lift detection reference
+        imu_lift_init(&g_lift);
         g_b_level_valid = true;
         tm_printf((UB*)"[IMU] level zero: pitch %d roll %d (0.1 deg)\n",
                   (INT)g_level.pitch_ddeg, (INT)g_level.roll_ddeg);
@@ -558,74 +629,25 @@ imu_filter (int32_t const p_acc[])
 }
 
 /*
- * True if this sample may be used for tilt (|a| within
- * IMU_GRAVITY_TOL_MG of 1 g, or held for too long already). Tracks each
- * run of disturbed samples and checks it for an impact when it ends.
- */
-static bool
-imu_gravity_ok (int32_t const p_acc[])
-{
-    int64_t  acc_x = p_acc[0];
-    int64_t  acc_y = p_acc[1];
-    int64_t  acc_z = p_acc[2];
-    int32_t  mag = (int32_t)imu_calib_isqrt((uint64_t)((acc_x * acc_x)
-                                                        + (acc_y * acc_y)
-                                                        + (acc_z * acc_z)));
-    int32_t  dev = mag - IMU_CALIB_1G_MG;
-    bool     b_ok = false;
-
-    dev = (dev < 0) ? -dev : dev;
-
-    if (dev > IMU_GRAVITY_TOL_MG)
-    {
-        g_dist_run++;
-        g_dist_peak = (dev > g_dist_peak) ? dev : g_dist_peak;
-        b_ok = (g_dist_run > IMU_GRAVITY_HOLD_MAX);
-    }
-    else
-    {
-        if (0U != g_dist_run)
-        {
-            imu_impact_check();
-        }
-
-        g_dist_run = 0U;
-        g_dist_peak = 0;
-        b_ok = true;
-    }
-
-    return (b_ok);
-}
-
-// A disturbance just ended: short and strong = impact (report only)
-static void
-imu_impact_check (void)
-{
-    if ((g_dist_run <= IMU_IMPACT_MAX_SAMPLES)
-        && (g_dist_peak >= IMU_IMPACT_MG))
-    {
-        g_impacts++;
-        tm_printf((UB*)"[IMU] impact: %d mg from 1 g over %u samples"
-                  " (#%u)\n", (INT)g_dist_peak, (UINT)g_dist_run,
-                  (UINT)g_impacts);
-        g_last_event = (uint32_t)IMU_EVT_IMPACT;
-        imu_publish();
-    }
-}
-
-/*
- * Hump detection, every good sample while ACTIVE: pitch and roll of the
- * filtered gravity vector against level (roll for a one-wheel hump),
- * plus the IF-10 wheel distance.
+ * One good sample in ACTIVE, LIFTED or OVERTURNED: gravity gate and
+ * filter, tilt against level, lift / overturn detection, then hump
+ * detection (ACTIVE only: a lifted car's wheels may turn in the air).
  */
 static void
-imu_hump_cycle (void)
+imu_motion_cycle (int32_t const p_acc[])
 {
-    int32_t     filt_mg[IMU_CALIB_AXES] = {0, 0, 0};
-    int32_t     roll = 0;
-    int32_t     dist_mm = motion_get_distance_mm();
-    imu_event_t event = IMU_EVT_NONE;
-    uint32_t    axis;
+    int32_t           filt_mg[IMU_CALIB_AXES] = {0, 0, 0};
+    int32_t           mag_mg = imu_acc_mag(p_acc);
+    int32_t           dev_mg = mag_mg - g_ref_mg;
+    int32_t           vert_mg = 0;
+    int32_t           roll = 0;
+    imu_lift_result_t lift = IMU_LIFT_NONE;
+    uint32_t          axis;
+
+    if (imu_gravity_ok(mag_mg))
+    {
+        imu_filter(p_acc);          // else tilt holds its last value
+    }
 
     for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
     {
@@ -633,12 +655,287 @@ imu_hump_cycle (void)
     }
 
     imu_calib_level_tilt(&g_level, filt_mg, &g_pitch_ddeg, &roll);
-    event = imu_hump_update(&g_hump, g_pitch_ddeg, roll, dist_mm);
+    g_roll_ddeg = roll;
+    vert_mg = imu_vert_mg(p_acc, filt_mg, dev_mg);
+    lift = imu_lift_update(&g_lift, vert_mg, g_pitch_ddeg, roll);
+#if IMU_LIFT_TRACE
+    imu_lt_record(p_acc, dev_mg, vert_mg, roll, lift);
+#endif
+    imu_lift_event(lift);
+
+    if ((uint32_t)IMU_TERRAIN_ACTIVE == g_state)
+    {
+        imu_hump_cycle(roll);
+    }
+}
+
+/*
+ * Lifted / overturned / put down. The IMU never drives the motors: the
+ * Vehicle Controller sees the LIFTED / OVERTURNED state (polled every
+ * 20 ms) and latches motion_estop(). Worst-case detect-to-stop after the
+ * condition is recognised: 10 ms (this task) + 20-30 ms (VC poll) +
+ * motion_estop() (derived).
+ */
+static void
+imu_lift_event (imu_lift_result_t result)
+{
+    switch (result)
+    {
+        case IMU_LIFT_LIFTED:
+            tm_printf((UB*)"[IMU] LIFTED (upward %d mm/s est.): stop\n",
+                      (INT)imu_lift_vel_mm_s(g_lift.vel_sum));
+            g_last_event = (uint32_t)IMU_EVT_LIFTED;
+            imu_set_state(IMU_TERRAIN_LIFTED);
+            break;
+
+        case IMU_LIFT_OVERTURNED:
+            tm_printf((UB*)"[IMU] OVERTURNED (pitch %d roll %d, 0.1 deg):"
+                      " stop\n", (INT)g_pitch_ddeg, (INT)g_roll_ddeg);
+            g_last_event = (uint32_t)IMU_EVT_OVERTURNED;
+            imu_set_state(IMU_TERRAIN_OVERTURNED);
+            break;
+
+        case IMU_LIFT_PUT_DOWN:
+            tm_printf((UB*)"[IMU] put down, level and still: ACTIVE"
+                      " (motors stay stopped until GP20)\n");
+            imu_set_state(IMU_TERRAIN_ACTIVE);
+            break;
+
+        case IMU_LIFT_NONE:
+        default:
+            break;
+    }
+}
+
+#if IMU_LIFT_TRACE
+/*
+ * Lift trace: store this sample in the ring. On a LIFTED / OVERTURNED
+ * event start the post-trigger count; when it runs out, print the ring.
+ */
+static void
+imu_lt_record (int32_t const p_acc[], int32_t dev_mg, int32_t vert_mg,
+               int32_t roll_ddeg, imu_lift_result_t result)
+{
+    imu_lt_sample_t *p_slot = &g_lt_ring[g_lt_head];
+    uint8_t          clip = 0U;
+    uint32_t         axis;
+
+    for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
+    {
+        if ((p_acc[axis] >= IMU_LT_CLIP_MG)
+            || (p_acc[axis] <= -IMU_LT_CLIP_MG))
+        {
+            clip = 1U;
+        }
+        else
+        {
+            // in range
+        }
+    }
+
+    p_slot->dist_mm    = motion_get_distance_mm();
+    p_slot->dev_mg     = imu_lt_i16(dev_mg);
+    p_slot->vel_mm_s   = imu_lt_i16(imu_lift_vel_mm_s(g_lift.vel_sum));
+    p_slot->pitch_ddeg = imu_lt_i16(g_pitch_ddeg);
+    p_slot->roll_ddeg  = imu_lt_i16(roll_ddeg);
+    p_slot->vert_mg    = imu_lt_i16(vert_mg);
+    p_slot->clip       = clip;
+    g_lt_head = (g_lt_head + 1U) % IMU_LT_LEN;
+    g_lt_count = (g_lt_count < IMU_LT_LEN) ? (g_lt_count + 1U) : IMU_LT_LEN;
+
+    if (0U != g_lt_quiet)
+    {
+        g_lt_quiet--;
+    }
+    else
+    {
+        // ready for another near-miss dump
+    }
+
+    if (((IMU_LIFT_LIFTED == result) || (IMU_LIFT_OVERTURNED == result))
+        && (0U == g_lt_post))
+    {
+        g_lt_post = IMU_LT_POST + 1U;   // this sample + IMU_LT_POST more
+    }
+    else if ((0U == g_lt_post) && (0U == g_lt_quiet) && !g_lift.b_latched
+             && (imu_lift_vel_mm_s(g_lift.vel_sum) >= IMU_LT_NEAR_MM_S))
+    {
+        tm_printf((UB *)"[LT] near miss (v >= %d mm/s), no event\n",
+                  (INT)IMU_LT_NEAR_MM_S);
+        g_lt_post = IMU_LT_POST + 1U;
+        g_lt_quiet = IMU_LT_LEN + IMU_LT_POST;  // max one dump per 1.3 s
+    }
+    else
+    {
+        // nothing to start
+    }
+
+    if (0U != g_lt_post)
+    {
+        g_lt_post--;
+
+        if (0U == g_lt_post)
+        {
+            imu_lt_dump();
+        }
+    }
+}
+
+// Print the ring, oldest first; k = 0 is the trigger sample
+static void
+imu_lt_dump (void)
+{
+    imu_lt_sample_t const *p_slot = NULL;
+    uint32_t               start = (g_lt_head + IMU_LT_LEN - g_lt_count)
+                                   % IMU_LT_LEN;
+    int32_t                first_k = (int32_t)IMU_LT_POST
+                                     - ((int32_t)g_lt_count - 1);
+    uint32_t               idx;
+
+    tm_printf((UB*)"[LT] begin: k d dev v p r c vz (k 0 = trigger, 10 ms"
+                   " each, %u samples)\n", (UINT)g_lt_count);
+
+    for (idx = 0U; idx < g_lt_count; idx++)
+    {
+        p_slot = &g_lt_ring[(start + idx) % IMU_LT_LEN];
+        tm_printf((UB*)"[LT] %d %d %d %d %d %d %u %d\n",
+                  (INT)(first_k + (int32_t)idx), (INT)p_slot->dist_mm,
+                  (INT)p_slot->dev_mg, (INT)p_slot->vel_mm_s,
+                  (INT)p_slot->pitch_ddeg, (INT)p_slot->roll_ddeg,
+                  (UINT)p_slot->clip, (INT)p_slot->vert_mg);
+    }
+
+    tm_printf((UB*)"[LT] end\n");
+}
+
+// Clamp to int16_t for the trace ring
+static int16_t
+imu_lt_i16 (int32_t value)
+{
+    int32_t clamped = value;
+
+    if (clamped > IMU_LT_I16_MAX)
+    {
+        clamped = IMU_LT_I16_MAX;
+    }
+    else if (clamped < -IMU_LT_I16_MAX)
+    {
+        clamped = -IMU_LT_I16_MAX;
+    }
+    else
+    {
+        // in range
+    }
+
+    return ((int16_t)clamped);
+}
+#endif
+
+static bool
+imu_is_lift_state (uint32_t state)
+{
+    return (((uint32_t)IMU_TERRAIN_LIFTED == state)
+            || ((uint32_t)IMU_TERRAIN_OVERTURNED == state));
+}
+
+// |a| of a corrected sample, mg
+static int32_t
+imu_acc_mag (int32_t const p_acc[])
+{
+    int64_t acc_x = p_acc[0];
+    int64_t acc_y = p_acc[1];
+    int64_t acc_z = p_acc[2];
+
+    return ((int32_t)imu_calib_isqrt((uint64_t)((acc_x * acc_x)
+                                                 + (acc_y * acc_y)
+                                                 + (acc_z * acc_z))));
+}
+
+/*
+ * Lift detector input (2026-11-16, measured, logs run10/run11): the
+ * acceleration along the filtered gravity estimate f, minus g_ref:
+ *     vert = (a . f) / |f| - g_ref     (mg)
+ * |a| - g_ref also grows with forward / sideways jolts and rocking (any
+ * direction adds to a magnitude), and the line follower's duty steps
+ * scored as high as hand lifts (run 10: 282 vs 233 mm/s). Along gravity
+ * a jolt swings + and - within 20-40 ms and cancels, while a lift stays
+ * positive for 150-300 ms (run 11 replay: false peaks <= 156 mm/s,
+ * lifts >= 226 mm/s). f is held while |a| is disturbed, so it is the
+ * direction just before the event. Before the first estimate (|f| = 0)
+ * the old |a| - g_ref is returned.
+ */
+static int32_t
+imu_vert_mg (int32_t const p_acc[], int32_t const p_filt_mg[],
+             int32_t dev_mg)
+{
+    int64_t  dot = 0;       // a . f, mg^2
+    int64_t  norm_sq = 0;   // |f|^2, mg^2
+    int32_t  vert_mg = dev_mg;
+    uint32_t axis;
+
+    for (axis = 0U; axis < IMU_CALIB_AXES; axis++)
+    {
+        dot += (int64_t)p_acc[axis] * (int64_t)p_filt_mg[axis];
+        norm_sq += (int64_t)p_filt_mg[axis] * (int64_t)p_filt_mg[axis];
+    }
+
+    if (norm_sq > 0)
+    {
+        vert_mg = (int32_t)(dot / (int64_t)imu_calib_isqrt(
+                                       (uint64_t)norm_sq))
+                  - g_ref_mg;
+    }
+    else
+    {
+        // no gravity estimate yet: keep |a| - g_ref
+    }
+
+    return (vert_mg);
+}
+
+/*
+ * True if this sample may be used for tilt (|a| within
+ * IMU_GRAVITY_TOL_MG of 1 g, or held for too long already).
+ */
+static bool
+imu_gravity_ok (int32_t mag_mg)
+{
+    int32_t dev = mag_mg - IMU_CALIB_1G_MG;
+    bool    b_ok = false;
+
+    dev = (dev < 0) ? -dev : dev;
+
+    if (dev > IMU_GRAVITY_TOL_MG)
+    {
+        g_dist_run++;
+        b_ok = (g_dist_run > IMU_GRAVITY_HOLD_MAX);
+    }
+    else
+    {
+        g_dist_run = 0U;
+        b_ok = true;
+    }
+
+    return (b_ok);
+}
+
+/*
+ * Hump detection, every good sample while ACTIVE: pitch (g_pitch_ddeg)
+ * and roll of the filtered gravity vector against level (roll for a
+ * one-wheel hump), plus the IF-10 wheel distance.
+ */
+static void
+imu_hump_cycle (int32_t roll_ddeg)
+{
+    int32_t     dist_mm = motion_get_distance_mm();
+    imu_event_t event = IMU_EVT_NONE;
+
+    event = imu_hump_update(&g_hump, g_pitch_ddeg, roll_ddeg, dist_mm);
 
     // Constant condition: compiled either way (no unused warnings)
     if (0 != IMU_HUMP_TRACE)
     {
-        imu_trace(dist_mm, roll);
+        imu_trace(dist_mm, roll_ddeg);
     }
 
     if (IMU_EVT_HUMP_START == event)
@@ -768,6 +1065,8 @@ imu_timing_reset (void)
  * turn is about 1270 counts; forward should count up).
  * z = ground height under the front contact during a hump, mm;
  * H = last / highest hump height, mm (IF-11).
+ * lv = highest estimated upward speed in the last second, mm/s (lift
+ * detection, LIFTED at IMU_LIFT_VEL_MM_S): use it to tune the threshold.
  */
 static void
 imu_report (void)
@@ -795,7 +1094,7 @@ imu_report (void)
 
     (void)tm_sprintf(line, (UB*)"[IMU] t %s acc %u-%u mag %u loop %u-%u"
                      " wcet %u per %u-%u late %u err %u | p %d r %d"
-                     " hdg %d d %d L %d R %d | z %d H %u/%u\n",
+                     " hdg %d d %d L %d R %d | z %d H %u/%u | lv %d\n",
                      g_state_name[imu_reported_state()],
                      (UINT)g_tim.acc_min_us, (UINT)g_tim.acc_max_us,
                      (UINT)g_tim.mag_max_us,
@@ -808,7 +1107,8 @@ imu_report (void)
                      (INT)motion.left_encoder_count,
                      (INT)motion.right_encoder_count,
                      (INT)imu_hump_now_mm(&g_hump),
-                     (UINT)g_hump.last_mm, (UINT)g_hump.max_mm);
+                     (UINT)g_hump.last_mm, (UINT)g_hump.max_mm,
+                     (INT)imu_lift_vel_mm_s(imu_lift_take_peak(&g_lift)));
     tm_printf(line);
 }
 

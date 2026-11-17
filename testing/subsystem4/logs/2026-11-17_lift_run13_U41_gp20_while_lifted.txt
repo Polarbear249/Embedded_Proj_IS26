@@ -1,0 +1,137 @@
+# Lift run 13, 2026-11-17: U41 (GP20 while still lifted), vz lift input
+# Image: build_make/lift_trace_line.uf2 (vz input, threshold 200, trace on,
+#   real stop), S3 line drive, laptop USB.
+# Tester also reported (no console): a full POWER-BANK run with the normal
+#   image followed the line without stopping by itself (S4-U39, power bank).
+# Result:
+#   - Lift at d 59 mm, 0.4 s after drive-off: vz 420-555 mg, LIFTED
+#     (204 mm/s) at k 3, about 40-70 ms after vz rose; [VC] STOP. The 1 s
+#     line shows wheels at 65/64 cm/s for a moment (unloaded wheels spin up
+#     before the latch reaches Motion; dist only +7 mm).
+#   - GP20 pressed 6 times while held up: every time "[VC] GP20: still
+#     lifted / overturned, stop kept". S4-U41 part 1 PASS.
+#   - Put down -> "[IMU] put down, level and still: ACTIVE"; GP20 ->
+#     "stop released", the line drive resumed. S4-U41 part 2 PASS.
+#   - After the restart the car stalled at d 113 with wheels=152/88
+#     (both encoders frozen): low open-loop duty (Buddy 2/3), not the IMU.
+# Key lines and the [LT] block below; TELEM blocks omitted.
+
+S3: drive armed, following the line
+[LT] near miss (v >= 120 mm/s), no event
+[IMU] LIFTED (upward 204 mm/s est.): stop
+[IMU] state LIFTED
+[VC] car lifted / overturned: STOP (0), end of run; put it down, then GP20 releases
+  motion   speed L 65  R 64 cm/s   distance 6 cm
+[LT] begin: k d dev v p r c vz (k 0 = trigger, 10 ms each, 100 samples)
+[LT] -69 43 -7 7 -12 -2 0 -8
+[LT] -68 43 11 8 -8 2 0 11
+[LT] -67 44 11 9 -5 5 0 11
+[LT] -66 44 72 15 19 3 0 64
+[LT] -65 44 72 21 38 2 0 68
+[LT] -64 44 -22 17 15 -5 0 -31
+[LT] -63 45 -22 14 -2 -12 0 -27
+[LT] -62 45 -29 10 -16 -1 0 -34
+[LT] -61 45 -29 6 -26 7 0 -32
+[LT] -60 45 28 8 -9 -3 0 22
+[LT] -59 46 28 10 4 -10 0 25
+[LT] -58 46 1 10 8 -8 0 1
+[LT] -57 46 1 10 12 -7 0 1
+[LT] -56 46 -3 9 2 -2 0 -5
+[LT] -55 47 -3 8 -4 1 0 -4
+[LT] -54 47 7 8 -23 -2 0 2
+[LT] -53 47 7 8 -38 -4 0 4
+[LT] -52 47 53 11 1 -4 0 32
+[LT] -51 48 53 15 30 -4 0 42
+[LT] -50 48 17 16 26 -4 0 17
+[LT] -49 48 17 17 24 -4 0 18
+[LT] -48 48 -8 15 10 -3 0 -10
+[LT] -47 49 -8 14 0 -3 0 -10
+[LT] -46 49 27 15 15 0 0 24
+[LT] -45 49 27 17 27 2 0 25
+[LT] -44 49 16 18 19 2 0 15
+[LT] -43 49 16 19 13 2 0 15
+[LT] -42 49 39 19 -28 7 0 16
+[LT] -41 50 39 21 -58 10 0 26
+[LT] -40 50 -17 17 -29 3 0 -30
+[LT] -39 50 -17 14 -6 -1 0 -25
+[LT] -38 50 -31 10 -30 -10 0 -40
+[LT] -37 51 -31 6 -48 -18 0 -36
+[LT] -36 51 255 -3 -48 -18 0 -100
+[LT] -35 51 255 -13 -48 -18 0 -100
+[LT] -34 51 48 -13 2 -53 0 -2
+[LT] -33 51 48 -11 39 -80 0 21
+[LT] -32 51 147 -3 39 -80 0 76
+[LT] -31 51 147 3 39 -80 0 76
+[LT] -30 51 37 2 88 -48 0 -10
+[LT] -29 51 -37 -4 47 -24 0 -70
+[LT] -28 51 -16 -7 15 -5 0 -34
+[LT] -27 51 -25 -10 19 -15 0 -26
+[LT] -26 51 -25 -12 22 -21 0 -26
+[LT] -25 51 52 -7 45 -29 0 45
+[LT] -24 51 52 -2 61 -34 0 49
+[LT] -23 52 60 0 46 3 0 37
+[LT] -22 52 60 5 34 32 0 48
+[LT] -21 52 16 6 14 31 0 11
+[LT] -20 52 16 7 0 30 0 14
+[LT] -19 52 42 11 0 34 0 42
+[LT] -18 52 42 14 1 36 0 42
+[LT] -17 52 -12 13 2 27 0 -14
+[LT] -16 52 -12 11 3 19 0 -13
+[LT] -15 52 5 11 10 19 0 5
+[LT] -14 52 5 11 16 19 0 5
+[LT] -13 52 9 11 37 24 0 3
+[LT] -12 52 9 11 53 27 0 6
+[LT] -11 53 -24 8 41 19 0 -27
+[LT] -10 53 -24 5 32 12 0 -25
+[LT] -9 54 -1 5 16 18 0 -6
+[LT] -8 54 -1 4 3 23 0 -3
+[LT] -7 55 82 9 -4 65 0 57
+[LT] -6 55 82 16 -9 97 0 69
+[LT] -5 56 760 44 -9 97 0 420
+[LT] -4 56 760 72 -9 97 0 420
+[LT] -3 57 115 76 44 64 0 62
+[LT] -2 57 115 81 83 40 0 86
+[LT] -1 59 521 108 83 40 0 505
+[LT] 0 59 521 133 83 40 0 505
+[LT] 1 60 624 158 83 40 0 555
+[LT] 2 60 624 182 83 40 0 555
+[LT] 3 62 772 204 83 40 0 512
+[LT] 4 62 772 227 83 40 0 512
+[LT] 5 63 558 248 83 40 0 495
+[LT] 6 63 558 268 83 40 0 495
+[LT] 7 65 397 288 83 40 0 392
+[LT] 8 65 397 307 83 40 0 392
+[LT] 9 65 266 320 83 40 0 244
+[LT] 10 65 266 332 83 40 0 244
+[LT] 11 66 157 334 83 40 0 142
+[LT] 12 66 157 336 83 40 0 142
+[LT] 13 66 10 324 90 18 0 2
+[LT] 14 66 10 312 95 1 0 5
+[LT] 15 66 468 330 95 1 0 446
+[LT] 16 66 468 348 95 1 0 446
+[LT] 17 66 67 339 137 -18 0 38
+[LT] 18 66 67 331 168 -32 0 52
+[LT] 19 66 -42 314 188 -29 0 -47
+[LT] 20 66 -42 298 203 -27 0 -45
+[LT] 21 66 -182 269 218 -37 0 -186
+[LT] 22 66 -182 240 230 -45 0 -184
+[LT] 23 66 -253 206 230 -45 0 -260
+[LT] 24 66 -253 172 230 -45 0 -260
+[LT] 25 66 -304 136 230 -45 0 -306
+[LT] 26 66 -304 101 230 -45 0 -306
+[LT] 27 66 -439 67 230 -45 0 -460
+[LT] 28 66 -439 34 230 -45 0 -460
+[LT] 29 66 -486 2 230 -45 0 -523
+[LT] 30 66 -486 -27 230 -45 0 -523
+[LT] end
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[VC] GP20: still lifted / overturned, stop kept; put the car down level first
+[IMU] put down, level and still: ACTIVE (motors stay stopped until GP20)
+[VC] GP20: stop released (0); the line drive resumes if it is still on the line
+S3 drive: C=0 R=1 mode=1 err=96 arm=0/200 armed=1 wheels=152/88 motion=-50
+  raw s2   enc L 668 R 719  dist 113 mm  state 1
+  raw s2   enc L 673 R 720  dist 113 mm  state 1

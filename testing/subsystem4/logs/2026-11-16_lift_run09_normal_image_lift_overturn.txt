@@ -1,0 +1,58 @@
+# Lift run 09, 2026-11-16: NORMAL image (line drive + GP20 e-stop latch)
+# Image: build_make/mtk3pico_smp1_usb_cdc_wifi.uf2 = ff187b8 + clamp 300 +
+#   impact veto 1 g (IMU_LIFT_TRACE 0, VC_TEST_DRIVE 0, S3 drive on).
+# Setup: car on black tape (wider than the sensor spacing: C=1 R=1, S3 saw
+#   a "junction" and drove straight); then lifted straight up by hand;
+#   then put down and flipped onto its left side by hand.
+# Result:
+#   - Line drive armed and drove. LEFT WHEEL DID NOT TURN at first: enc L
+#     stayed 1 while R went 0 -> 3188 with wheels=120/120 commanded; later
+#     L counts again (391 -> 1374). Hardware issue for Buddy 2 (motor,
+#     wiring or left encoder), not the IMU.
+#   - 14 mm "hump" at d 255-299 while pivoting on one wheel (roll ~10 deg):
+#     most likely rocking, not a real hump.
+#   - GP20 during the drive: EMERGENCY STOP, then released: correct.
+#   - Straight hand lift while the drive was searching: LIFTED (203 mm/s
+#     est.) -> "[VC] car lifted / overturned: STOP (0), end of run" -> S3
+#     drive stopped. CORRECT (S4-U38, normal image).
+#   - Put down level -> "[IMU] put down ... ACTIVE"; motion stayed in
+#     estop until the end (motors did not restart). CORRECT (U41 part 1).
+#   - Flipped onto its left side: OVERTURNED (roll -58.4 deg) -> stop
+#     stays latched; put down -> ACTIVE, still stopped. CORRECT (S4-U40).
+#   - NOT tested: GP20 pressed while still lifted (expect "stop kept").
+# Key lines below; TELEM blocks omitted.
+
+[VC] GP20 = emergency stop (press again to release)
+S3: drive ON: place the car on the line, it starts after 2 s
+[IMU] level zero: pitch 1 roll 1 (0.1 deg)
+[IMU] state ACTIVE
+S3 drive: C=1 R=1 mode=2 err=64 arm=163/200 armed=0 wheels=0/0 motion=0
+S3: drive armed, following the line
+S3 drive: C=1 R=1 mode=2 err=64 arm=0/200 armed=1 wheels=120/120 motion=0
+  raw s2   enc L 1 R 254  dist 20 mm  state 1
+  raw s2   enc L 1 R 1234  dist 100 mm  state 1
+  raw s2   enc L 1 R 2699  dist 221 mm  state 1
+[IMU] hump start at d 255 mm
+[IMU] t HUMP_UP acc 920-949 mag 914 loop 1036-2059 wcet 2327 per 6760-13297 late 0 err 0 | p 36 r 97 hdg 1788 d 261 L 1 R 3193 | z 11 H 0/0 | lv 36
+[VC] GP20: EMERGENCY STOP, motors off, drive commands refused
+[IMU] hump end at d 299 mm: height 14 mm (highest 14 mm)
+[VC] GP20: stop released (0); the line drive resumes if it is still on the line
+S3 drive: C=0 R=0 mode=4 err=127 arm=0/200 armed=1 wheels=200/-69 motion=0
+  raw s2   enc L 391 R 4467  dist 397 mm  state 1
+  raw s2   enc L 929 R 4454  dist 440 mm  state 1
+[IMU] t ACTIVE acc 920-968 mag 914 loop 1033-2066 wcet 2327 per 7896-11964 late 0 err 0 | p -24 r 17 hdg 1755 d 475 L 1356 R 4454 | z 0 H 14/14 | lv 182
+[IMU] LIFTED (upward 203 mm/s est.): stop
+[IMU] state LIFTED
+[VC] car lifted / overturned: STOP (0), end of run; put it down, then GP20 releases
+S3: drive stopped (mode 5), put the car back on the line
+S3 drive: C=0 R=0 mode=5 err=64 arm=0/200 armed=0 wheels=0/0 motion=-50
+[IMU] t LIFTED acc 922-951 mag 921 loop 1017-2265 wcet 2327 per 8022-12185 late 0 err 0 | p 0 r 0 hdg 1775 d 476 L 1374 R 4455 | z 0 H 14/14 | lv 285
+[IMU] put down, level and still: ACTIVE (motors stay stopped until GP20)
+[IMU] state ACTIVE
+[TELEM] ... motion 6 (estop/fault)
+[IMU] OVERTURNED (pitch 5 roll -584, 0.1 deg): stop
+[IMU] state OVERTURNED
+[IMU] t OVERTURNED acc 924-971 mag 913 loop 1032-2051 wcet 2327 per 7733-12182 late 0 err 0 | p 6 r -586 hdg 1656 d 476 L 1374 R 4455 | z 0 H 14/14 | lv -33
+[IMU] put down, level and still: ACTIVE (motors stay stopped until GP20)
+[IMU] state ACTIVE
+[TELEM] ... motion 6 (estop/fault)   (still latched at the end of the capture)

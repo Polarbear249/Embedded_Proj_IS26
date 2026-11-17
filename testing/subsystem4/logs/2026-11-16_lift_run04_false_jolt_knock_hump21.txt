@@ -1,0 +1,271 @@
+# Lift trace run 04, 2026-11-16: two FALSE lifts captured (S4-U39 FAIL)
+# Image: lift_trace_drive.uf2 = ff187b8 + uncommitted lift trace
+#   (IMU_LIFT_TRACE 1, VC_TEST_DRIVE 1, S3_DRIVE_SWITCH 0).
+# Setup: GP20 straight drive at 20 RPM over the 23 mm ramp under one wheel.
+#   The tester did NOT lift or touch the car.
+# Result:
+#   1. Drive-off jolt: at GP20 the car jerked, LIFTED at d 4 mm, stopped
+#      ("drove 6 mm"); tester had to press GP20 again. [LT] block 1: one
+#      jolt of 1383 / 1028 mg (2 accelerometer readings, each seen twice
+#      because the accel runs at 50 Hz and the task at 100 Hz), clipping
+#      (c = 1) at +-2 g. Earlier blip 407 mg at k -65 (GP20 press?).
+#   2. Second start: drove on, hump start d 474, end d 721, height 21 mm
+#      (true 23 mm). Then on the flat at d 927: one knock of 1504 mg (one
+#      reading, seen twice, clipping) -> LIFTED, stopped ("drove 920 mm").
+#   Compare run 03 (real hand lift): 443-885 mg sustained ~100 ms, no clip.
+#   Conclusion: false lifts = short huge spikes; real lift = sustained
+#   moderate acceleration. Fix: clamp each sample before integrating.
+#   [LT] dumps took 10.5 ms of the IMU task (wcet 10470): after stop only.
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+s1: telemetry monitor every 1000 ms
+all subsystems started
+
+[IMU] state CALIBRATING
+[IMU] level zero: car moved, restarting (x9)
+[IMU] level zero: pitch 1 roll -1 (0.1 deg)
+[IMU] state ACTIVE
+[VC] test drive ready: press GP20 to drive 1500 mm at 20 RPM (press again to stop)
+# (TELEM blocks omitted in this file; the full paste had one per second)
+[IMU] t ACTIVE acc 907-1071 mag 918 loop 915-2143 wcet 2143 per 1069-137763 late 1 err 0 | p -1 r 0 hdg 1392 d 0 L 0 R 0 | z 0 H 0/0 | lv 7
+[IMU] t ACTIVE acc 911-1128 mag 935 loop 989-2091 wcet 2143 per 1326-19270 late 1 err 0 | p -1 r 1 hdg 1419 d 0 L 0 R 0 | z 0 H 0/0 | lv 15
+[IMU] t ACTIVE acc 911-934 mag 919 loop 1001-2011 wcet 2143 per 7928-12057 late 0 err 0 | p 0 r 0 hdg 1403 d 0 L 0 R 0 | z 0 H 0/0 | lv 15
+[IMU] t ACTIVE acc 911-935 mag 918 loop 993-2010 wcet 2143 per 7905-11977 late 0 err 0 | p -1 r 1 hdg 1419 d 0 L 0 R 0 | z 0 H 0/0 | lv 13
+[IMU] t ACTIVE acc 908-1108 mag 919 loop 1008-1981 wcet 2143 per 7431-12576 late 0 err 0 | p 0 r -4 hdg 1405 d 0 L 0 R 0 | z 0 H 0/0 | lv 87
+[IMU] LIFTED (upward 241 mm/s est.): stop
+[IMU] state LIFTED
+[VC] stopped: car lifted or overturned (IMU), drove 6 mm | humps: last 0 mm, highest 0 mm, valid 0
+[LT] begin: k d dev v p r c (k 0 = trigger, 10 ms each, 100 samples)
+[LT] -69 0 -5 8 -2 0 0
+[LT] -68 0 6 8 -1 0 0
+[LT] -67 0 6 8 -1 -1 0
+[LT] -66 0 6 9 -1 -2 0
+[LT] -65 0 407 48 -1 -2 0
+[LT] -64 0 407 87 -1 -2 0
+[LT] -63 0 1 84 -4 -17 0
+[LT] -62 0 1 81 -6 -28 0
+[LT] -61 0 6 79 3 -18 0
+[LT] -60 0 6 77 10 -11 0
+[LT] -59 0 -1 74 6 -13 0
+[LT] -58 0 -1 71 3 -14 0
+[LT] -57 0 1 69 0 -12 0
+[LT] -56 0 1 67 -3 -10 0
+[LT] -55 0 -3 64 -1 -10 0
+[LT] -54 0 -3 61 1 -9 0
+[LT] -53 0 -4 59 1 -9 0
+[LT] -52 0 -4 56 1 -9 0
+[LT] -51 0 12 56 -1 -8 0
+[LT] -50 0 12 55 -2 -7 0
+[LT] -49 0 5 53 -2 -3 0
+[LT] -48 0 5 52 -2 -1 0
+[LT] -47 0 -7 49 -3 -1 0
+[LT] -46 0 -7 47 -4 -1 0
+[LT] -45 0 14 46 -2 -1 0
+[LT] -44 0 14 46 0 -1 0
+[LT] -43 0 6 45 1 -1 0
+[LT] -42 0 6 44 1 0 0
+[LT] -41 0 -7 42 0 -1 0
+[LT] -40 0 -7 39 -1 -1 0
+[LT] -39 0 4 38 1 -1 0
+[LT] -38 0 4 37 2 0 0
+[LT] -37 0 -2 36 1 -1 0
+[LT] -36 0 -2 34 -1 -2 0
+[LT] -35 0 12 34 -2 -2 0
+[LT] -34 0 12 34 -4 -1 0
+[LT] -33 0 -3 32 -2 -2 0
+[LT] -32 0 -3 31 -1 -2 0
+[LT] -31 0 1 30 -2 -3 0
+[LT] -30 0 1 28 -2 -3 0
+[LT] -29 0 9 28 -2 -3 0
+[LT] -28 0 9 28 -2 -2 0
+[LT] -27 0 -4 26 -1 -1 0
+[LT] -26 0 -4 25 0 -1 0
+[LT] -25 0 8 25 -2 -1 0
+[LT] -24 0 8 24 -4 -1 0
+[LT] -23 0 -12 22 -3 -4 0
+[LT] -22 0 -12 20 -2 -6 0
+[LT] -21 0 1 19 0 -4 0
+[LT] -20 0 1 18 2 -3 0
+[LT] -19 0 12 19 -1 -1 0
+[LT] -18 0 12 19 -3 0 0
+[LT] -17 0 -68 11 -12 -74 0
+[LT] -16 0 -68 4 -20 -135 0
+[LT] -15 0 -23 2 -4 -88 0
+[LT] -14 0 -23 0 7 -52 0
+[LT] -13 0 3 0 8 -37 0
+[LT] -12 0 3 0 8 -26 0
+[LT] -11 0 36 3 3 -25 0
+[LT] -10 0 36 6 -1 -25 0
+[LT] -9 0 6 6 -2 -19 0
+[LT] -8 0 6 6 -4 -15 0
+[LT] -7 0 -2 6 -2 -10 0
+[LT] -6 0 -2 5 -2 -6 0
+[LT] -5 0 12 6 4 -3 0
+[LT] -4 0 12 7 8 -1 0
+[LT] -3 2 -173 -9 -15 -30 0
+[LT] -2 2 -173 -26 -35 -53 0
+[LT] -1 4 1383 109 -35 -53 0
+[LT] 0 4 1383 241 -35 -53 0
+[LT] 1 6 1028 333 -35 -53 1
+[LT] 2 6 1028 422 -35 -53 1
+[LT] 3 9 145 421 -35 -53 0
+[LT] 4 9 145 420 -35 -53 0
+[LT] 5 10 69 412 -54 -62 0
+[LT] 6 10 69 404 -68 -68 0
+[LT] 7 11 83 397 -111 -42 0
+[LT] 8 11 83 391 -142 -23 0
+[LT] 9 12 41 381 -143 -9 0
+[LT] 10 12 41 371 -144 1 0
+[LT] 11 12 -5 357 -137 5 0
+[LT] 12 12 -5 343 -131 9 0
+[LT] 13 12 -47 326 -115 11 0
+[LT] 14 12 -47 309 -103 12 0
+[LT] 15 12 -8 296 -80 14 0
+[LT] 16 12 -8 284 -62 16 0
+[LT] 17 12 0 273 -47 10 0
+[LT] 18 12 0 263 -36 7 0
+[LT] 19 12 10 254 -25 5 0
+[LT] 20 12 10 245 -18 3 0
+[LT] 21 12 5 236 -17 -6 0
+[LT] 22 12 5 227 -16 -14 0
+[LT] 23 12 10 219 -11 -8 0
+[LT] 24 12 10 211 -7 -4 0
+[LT] 25 12 6 203 -6 -3 0
+[LT] 26 12 6 196 -6 -3 0
+[LT] 27 12 -3 187 -5 0 0
+[LT] 28 12 -3 179 -5 3 0
+[LT] 29 12 -5 171 -3 2 0
+[LT] 30 12 -5 163 -2 1 0
+[LT] end
+[IMU] t LIFTED acc 908-940 mag 920 loop 962-10470 wcet 10470 per 1144-20775 late 1 err 0 | p -1 r 2 hdg 1378 d 12 L 70 R 84 | z 0 H 0/0 | lv 422
+[IMU] put down, level and still: ACTIVE (motors stay stopped until GP20)
+[IMU] state ACTIVE
+[VC] test drive ready: press GP20 to drive 1500 mm at 20 RPM (press again to stop)
+[IMU] t ACTIVE acc 908-937 mag 924 loop 985-2076 wcet 10470 per 7365-12246 late 0 err 0 | p 2 r 2 hdg 1382 d 12 L 70 R 84 | z 0 H 0/0 | lv -1
+[IMU] t ACTIVE acc 908-951 mag 922 loop 1002-2035 wcet 10470 per 7036-12947 late 0 err 0 | p 17 r 2 hdg 1352 d 56 L 313 R 383 | z 0 H 0/0 | lv 32
+[IMU] t ACTIVE acc 910-952 mag 919 loop 1008-2033 wcet 10470 per 6958-12918 late 0 err 0 | p 1 r -6 hdg 1278 d 96 L 550 R 634 | z 0 H 0/0 | lv -22
+[IMU] t ACTIVE acc 911-958 mag 923 loop 1011-2091 wcet 10470 per 7171-12787 late 0 err 0 | p 23 r 10 hdg 1236 d 147 L 843 R 965 | z 0 H 0/0 | lv -23
+[IMU] t ACTIVE acc 910-949 mag 920 loop 1013-2116 wcet 10470 per 7303-12613 late 0 err 0 | p -7 r -1 hdg 1225 d 200 L 1160 R 1291 | z 0 H 0/0 | lv -10
+[IMU] t ACTIVE acc 910-942 mag 931 loop 1005-2152 wcet 10470 per 7195-12769 late 0 err 0 | p 18 r -2 hdg 1235 d 257 L 1509 R 1641 | z 0 H 0/0 | lv -5
+[IMU] t ACTIVE acc 909-956 mag 921 loop 994-2041 wcet 10470 per 7188-12644 late 0 err 0 | p -23 r 2 hdg 1278 d 318 L 1887 R 2007 | z 1 H 0/0 | lv 27
+[IMU] t ACTIVE acc 910-937 mag 924 loop 1001-2029 wcet 10470 per 8944-12747 late 0 err 0 | p -54 r 18 hdg 1363 d 382 L 2303 R 2376 | z 0 H 0/0 | lv 30
+[IMU] t ACTIVE acc 911-963 mag 919 loop 1004-2029 wcet 10470 per 7237-12665 late 0 err 0 | p -25 r -51 hdg 1395 d 434 L 2618 R 2701 | z 0 H 0/0 | lv 154
+[IMU] hump start at d 474 mm
+[IMU] t HUMP_DOWN acc 913-945 mag 921 loop 1013-2035 wcet 10470 per 7199-11110 late 0 err 0 | p -14 r -92 hdg 1497 d 486 L 2981 R 2978 | z 13 H 0/0 | lv 61
+[IMU] t HUMP_DOWN acc 913-937 mag 922 loop 1018-2056 wcet 10470 per 6602-13199 late 0 err 0 | p -31 r -54 hdg 1578 d 564 L 3453 R 3452 | z 14 H 0/0 | lv -28
+[IMU] t HUMP_UP acc 912-950 mag 927 loop 1006-2126 wcet 10470 per 6533-13271 late 0 err 0 | p 4 r -5 hdg 1532 d 645 L 3901 R 3998 | z 0 H 0/0 | lv 186
+[IMU] t HUMP_DOWN acc 911-950 mag 924 loop 1006-2049 wcet 10470 per 5898-14134 late 0 err 0 | p -3 r 0 hdg 1557 d 717 L 4318 R 4460 | z 1 H 0/0 | lv 22
+[IMU] hump end at d 721 mm: height 21 mm (highest 21 mm)
+[IMU] t ACTIVE acc 911-949 mag 927 loop 1010-2298 wcet 10470 per 6952-12873 late 0 err 0 | p -16 r 35 hdg 1570 d 788 L 4720 R 4925 | z 0 H 21/21 | lv 5
+[IMU] t ACTIVE acc 911-950 mag 924 loop 1006-2106 wcet 10470 per 7250-12777 late 0 err 0 | p 4 r 15 hdg 1557 d 858 L 5115 R 5385 | z 0 H 21/21 | lv -3
+[IMU] LIFTED (upward 282 mm/s est.): stop
+[IMU] state LIFTED
+[IMU] t LIFTED acc 911-932 mag 920 loop 1005-2237 wcet 10470 per 7311-12327 late 0 err 0 | p 54 r -11 hdg 1560 d 928 L 5516 R 5845 | z 0 H 21/21 | lv 285
+[VC] stopped: car lifted or overturned (IMU), drove 920 mm | humps: last 21 mm, highest 21 mm, valid 1
+[LT] begin: k d dev v p r c (k 0 = trigger, 10 ms each, 100 samples)
+[LT] -69 879 -8 -15 -8 -10 0
+[LT] -68 879 -8 -16 -5 -14 0
+[LT] -67 880 7 -16 -9 -7 0
+[LT] -66 880 7 -16 -12 -2 0
+[LT] -65 882 -34 -20 -5 -7 0
+[LT] -64 882 -34 -25 -1 -10 0
+[LT] -63 883 5 -25 -5 -3 0
+[LT] -62 883 5 -25 -9 1 0
+[LT] -61 885 16 -24 -5 -3 0
+[LT] -60 885 16 -23 -3 -7 0
+[LT] -59 886 18 -21 -4 -1 0
+[LT] -58 886 18 -20 -5 3 0
+[LT] -57 888 44 -17 7 -4 0
+[LT] -56 888 44 -13 16 -9 0
+[LT] -55 889 18 -12 11 -9 0
+[LT] -54 889 18 -11 7 -10 0
+[LT] -53 891 14 -11 24 -6 0
+[LT] -52 891 14 -11 36 -3 0
+[LT] -51 892 16 -10 35 -4 0
+[LT] -50 892 16 -9 34 -5 0
+[LT] -49 893 60 -5 40 -4 0
+[LT] -48 893 60 0 45 -3 0
+[LT] -47 895 14 0 39 -6 0
+[LT] -46 895 14 0 34 -8 0
+[LT] -45 896 -13 -2 11 -7 0
+[LT] -44 896 -13 -5 -6 -6 0
+[LT] -43 897 41 -2 3 0 0
+[LT] -42 897 41 0 10 4 0
+[LT] -41 899 16 0 4 4 0
+[LT] -40 899 16 0 -1 4 0
+[LT] -39 900 9 0 -11 5 0
+[LT] -38 900 9 0 -19 5 0
+[LT] -37 901 -23 -3 -19 5 0
+[LT] -36 901 -23 -6 -19 6 0
+[LT] -35 903 12 -6 -15 2 0
+[LT] -34 903 12 -6 -13 -1 0
+[LT] -33 904 -18 -9 -8 -4 0
+[LT] -32 904 -18 -12 -5 -8 0
+[LT] -31 905 -5 -13 -5 -2 0
+[LT] -30 905 -5 -15 -5 2 0
+[LT] -29 907 43 -11 1 4 0
+[LT] -28 907 43 -8 6 6 0
+[LT] -27 908 6 -8 3 1 0
+[LT] -26 908 6 -9 0 -3 0
+[LT] -25 910 -15 -11 -11 2 0
+[LT] -24 910 -15 -14 -20 6 0
+[LT] -23 911 6 -14 -19 7 0
+[LT] -22 911 6 -14 -17 8 0
+[LT] -21 913 -24 -18 -25 6 0
+[LT] -20 913 -24 -21 -31 4 0
+[LT] -19 914 -7 -22 -19 -2 0
+[LT] -18 914 -7 -23 -10 -6 0
+[LT] -17 915 17 -22 -10 -3 0
+[LT] -16 915 17 -21 -11 -1 0
+[LT] -15 917 17 -20 -9 -1 0
+[LT] -14 917 17 -19 -7 -1 0
+[LT] -13 918 7 -19 -1 -5 0
+[LT] -12 918 7 -19 3 -8 0
+[LT] -11 920 11 -18 -9 0 0
+[LT] -10 920 11 -18 -18 6 0
+[LT] -9 921 7 -18 -16 2 0
+[LT] -8 921 7 -18 -14 -2 0
+[LT] -7 922 16 -17 2 -1 0
+[LT] -6 922 16 -16 14 -1 0
+[LT] -5 924 6 -16 6 -3 0
+[LT] -4 924 6 -16 -1 -4 0
+[LT] -3 925 65 -11 31 -8 0
+[LT] -2 925 65 -5 54 -11 0
+[LT] -1 927 1504 140 54 -11 1
+[LT] 0 927 1504 282 54 -11 1
+[LT] 1 928 149 285 54 -11 0
+[LT] 2 928 149 288 54 -11 0
+[LT] 3 929 -78 269 39 3 0
+[LT] 4 929 -78 251 27 14 0
+[LT] 5 931 -42 236 24 21 0
+[LT] 6 931 -42 223 23 27 0
+[LT] 7 932 44 218 26 14 0
+[LT] 8 932 44 213 29 6 0
+[LT] 9 933 -5 203 13 3 0
+[LT] 10 933 -5 194 1 1 0
+[LT] 11 934 1 186 -16 1 0
+[LT] 12 934 1 178 -30 2 0
+[LT] 13 934 17 172 -27 4 0
+[LT] 14 934 17 166 -25 6 0
+[LT] 15 934 -1 158 -27 4 0
+[LT] 16 934 -1 151 -28 3 0
+[LT] 17 934 9 145 -19 1 0
+[LT] 18 934 9 139 -12 0 0
+[LT] 19 934 -3 132 -14 2 0
+[LT] 20 934 -3 125 -14 4 0
+[LT] 21 934 -3 118 -10 3 0
+[LT] 22 934 -3 112 -8 2 0
+[LT] 23 934 0 106 -5 1 0
+[LT] 24 934 0 101 -3 1 0
+[LT] 25 934 -3 95 -4 1 0
+[LT] 26 934 -3 90 -6 1 0
+[LT] 27 934 4 85 -5 2 0
+[LT] 28 934 4 80 -4 3 0
+[LT] 29 934 -3 75 -2 3 0
+[LT] 30 934 -3 71 -1 3 0
+[LT] end
+[IMU] t LIFTED acc 908-945 mag 944 loop 996-9526 wcet 10470 per 1144-22100 late 1 err 0 | p -3 r 3 hdg 1537 d 934 L 5548 R 5882 | z 0 H 21/21 | lv 288
+[IMU] put down, level and still: ACTIVE (motors stay stopped until GP20)
+[IMU] state ACTIVE
+[VC] test drive ready: press GP20 to drive 1500 mm at 20 RPM (press again to stop)

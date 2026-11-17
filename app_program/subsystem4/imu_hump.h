@@ -116,8 +116,10 @@ typedef enum
     IMU_EVT_NONE = 0,
     IMU_EVT_HUMP_START,
     IMU_EVT_HUMP_END,
-    IMU_EVT_IMPACT,                     // reserved: impact detection
-    IMU_EVT_FAULT
+    IMU_EVT_LIFTED,                     // car lifted (was IMPACT, removed
+                                        // 2026-11-13: prof's change)
+    IMU_EVT_FAULT,
+    IMU_EVT_OVERTURNED                  // car tipped over
 } imu_event_t;
 
 typedef struct
