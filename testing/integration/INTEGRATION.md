@@ -48,7 +48,8 @@ main  (the only trunk: PRs #3, #4, #5, then #9 via the integration branch, then 
 | `s5-rework-onto-integration` | PR #9, merged into the integration branch 2026-11-13 (`d4de6ad`) | delete |
 | `ultra-implementation1` | PR #8 (and closed #7): Buddy 5's original, included via #9 | close #8, delete |
 | `feature/buddy2-motion-control` | PR #2: Buddy 2's original, included in #10 | close #2, delete |
-| `buddy1-telem-monitor`, `line_tracing_only`, `integration-s2-s5-for-buddy5` | merged / superseded | delete |
+| `buddy1-telem-monitor`, `line_tracing_only` | merged / superseded | delete |
+| **`integration-s2-s5-for-buddy5`** | **NOT merged: DO NOT DELETE** (corrected 2026-11-17; this table wrongly said "merged / superseded"). 12 commits, 11-04 to 11-11, that are not on `main`: Buddy 2 (`e185696`, `a461608`, `2ed56b2`: S2 motion work, IF-06 / IF-10 sign-off, straight-move tuning + ruler logs), Buddy 3 (`35ea83d`: barcode A-Z decode on the car, `barcode_nav.c`), Buddy 5 (`ec4cf41`..`f6639ab`: obstacle stop, turn and reverse logic, `s5_get_obstacle()`, `s3_drive_set_enabled()`) | merge into `main` as its own PR after PR #12 (section 2 step 8) |
 | ~~`master`~~ | **deleted 2026-11-04**; GitHub default branch switched to `main` the same day. Its two unique commits (`5368c35`, `6db49e1`, early S4 work, superseded) are kept in the tag `archive/master-2026-10-26` | nothing |
 | `IMU_Branch` | obsolete standalone S4 (`6745fa8` deletes other subsystems: never merge) | delete |
 | `Buddy-2`, `Buddy-3`, `buddy1-wifi`, `ultrasonic-isolate2` | 0 commits ahead of `main` (fully merged) | delete |
@@ -78,6 +79,20 @@ and `master` is gone. **Everyone: `git fetch --prune` and branch off `main`.**
    (both builds, 0 warnings), passes the PC tests and has a car test logged. Changes
    to shared files (`app.h`, `app_main.c`, `TEAM.md`, `gpio_irq.*`, `vehicle_controller.*`)
    get a reviewer from the affected buddy.
+
+8. **Merge `integration-s2-s5-for-buddy5` (found unmerged 2026-11-17).** It split
+   from `425640b` (11-04), so it has none of the 11-13 review fixes or the lift stop.
+   Trial merge into `s4-lift-stop` (`git merge-tree`, nothing changed on disk):
+   **10 files conflict**: `TEAM.md`; `subsystem2/subsystem2.c`, `subsystem2.h` (P5
+   priorities vs Buddy 2's changes); `subsystem3/line_if.c`, `line_if.h`,
+   `subsystem3.h`, `subsystem3_test.c`, `task_line.c`, `testing/subsystem3/pc/test_s3.c`
+   (the 11-13 `bc_char` review fix vs Buddy 3's own A-Z work and `barcode_nav`);
+   `vehicle_controller.c` (lift check and GP20 rule vs Buddy 5's avoidance logic).
+   To decide with the owners while resolving: Buddy 3's `barcode_nav` keeps the
+   letter -> movement map and performs the turn inside S3 as a stated TEMPORARY
+   stand-in (CLAUDE.md 1b gives both to the VC, PR #11); keep `vc_check_lifted()`
+   first in `vc_estop_task` and the "stop kept while lifted" GP20 rule; keep the S4
+   lift input (`imu_vert_mg()`). Then both builds, all PC tests, one car run.
 
 Why this order: S5 must go in before `main` (otherwise #10 carries `main`'s broken
 S5 build), and reviews before the merge to `main` because PR #10 contains edits in
