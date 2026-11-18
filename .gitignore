@@ -8,6 +8,7 @@ Release
 *.o
 *.d
 build_make/tools/elf2uf2
+build_make/tools/elf2uf2.exe
 tools/elf2uf2/elf2uf2
 build_make/.build_profile
 
