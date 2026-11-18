@@ -286,27 +286,54 @@ obstacle_width_cm (uint32_t const *p_dist, uint32_t centre_cm)
     return ((centre_cm * (tan_l[extent_l] + tan_r[extent_r])) / 1000U);
 }
 
+/* [Hotfix 1] One stray ping reads about 20cm and makes an open side look
+   blocked. Take 3 pings, ignore anything under 12cm (that is the burst
+   ringing), and only believe a distance two of the three agree on. */
+#define S5_ECHO_FLOOR_CM        (12U)
+
 static uint32_t
-min_valid3 (uint32_t a, uint32_t b, uint32_t c)
+s5_stable_echo (uint32_t a, uint32_t b, uint32_t c)
 {
-    uint32_t best = ULTRA_NO_ECHO;
+    uint32_t v[3];
+    uint32_t lo = ULTRA_MAX_CM + 1U;
+    uint32_t agree = 0U;
+    uint32_t i;
 
-    if (ULTRA_NO_ECHO != a)
+    v[0] = (a < S5_ECHO_FLOOR_CM) ? ULTRA_NO_ECHO : a;
+    v[1] = (b < S5_ECHO_FLOOR_CM) ? ULTRA_NO_ECHO : b;
+    v[2] = (c < S5_ECHO_FLOOR_CM) ? ULTRA_NO_ECHO : c;
+
+    for (i = 0U; i < 3U; i++)
     {
-        best = a;
+        if ((ULTRA_NO_ECHO != v[i]) && (v[i] < lo))
+        {
+            lo = v[i];
+        }
     }
 
-    if ((ULTRA_NO_ECHO != b) && ((ULTRA_NO_ECHO == best) || (b < best)))
+    if (lo > ULTRA_MAX_CM)
     {
-        best = b;
+        return (ULTRA_NO_ECHO);
     }
 
-    if ((ULTRA_NO_ECHO != c) && ((ULTRA_NO_ECHO == best) || (c < best)))
+    for (i = 0U; i < 3U; i++)
     {
-        best = c;
+        if ((ULTRA_NO_ECHO != v[i]) && (v[i] <= (lo + 4U)))
+        {
+            agree++;
+        }
     }
 
-    return (best);
+    if (agree >= 2U)
+    {
+        return (lo);
+    }
+
+    // nothing agrees, take the middle of the three
+    if (v[0] > v[1]) { lo = v[0]; v[0] = v[1]; v[1] = lo; }
+    if (v[1] > v[2]) { v[1] = v[2]; }
+
+    return ((v[0] > v[1]) ? v[0] : v[1]);
 }
 
 /*
@@ -343,7 +370,7 @@ obstacle_scan (void)
         b = ultrasonic_measure_cm();
         c = ultrasonic_measure_cm();
 
-        dist_cm[idx] = min_valid3(a, b, c);
+        dist_cm[idx] = s5_stable_echo(a, b, c);
 
         if (ULTRA_NO_ECHO != dist_cm[idx])
         {

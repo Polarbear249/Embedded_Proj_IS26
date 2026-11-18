@@ -78,7 +78,11 @@ IMPORT ID vc_mbf_profile;
 #define VC_BYPASS_PRI           (7)         // TEAM.md 4: VC band
 #define VC_BYPASS_POLL_MS       (20)
 #define VC_BYPASS_TIMEOUT_MS    (8000U)     // per move
-#define VC_BYPASS_FWD_CM        (30.0f)     // TUNE
+/* [Hotfix 2] The 30cm leg was fixed, so after a reverse the car turned
+   back while still short of the object and drove at it. Cap the longer
+   computed leg so it still fits the 8s move timeout. */
+#define VC_BYPASS_FWD_CM        (30.0f)     // minimum leg
+#define VC_BYPASS_FWD_MAX_CM    (80.0f)     // cap on the computed leg
 #define VC_BYPASS_SEEK_CM       (40.0f)     // It will drive looking for the line
 #define VC_BYPASS_SEEK_MS       (10000U)    // timeout
 #define VC_BYPASS_BACK_CM       (12.0f)     // if the line is not found, back up and try again

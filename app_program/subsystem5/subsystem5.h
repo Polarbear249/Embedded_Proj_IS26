@@ -39,6 +39,9 @@
 #define S5_PRC_MAIN             (TP_PRC1)   // core 0: ECHO callback core
 
 #define S5_SENSOR_TO_FRONT_CM   (8U)       // sensor to front bumper, B5's value
+/* [Hotfix 4] Left at 25. The bypass passes the object about 27cm away, so
+   raising this would abort 2/5 on every pass. The sides read wrong because
+   of the stray pings, not because we stop too close. */
 #define S5_ALERT_CM             (25U)       // B5's choice, TODO_TUNE
 #define S5_MIN_CLEAR_CM         (40U)       // Below this, no direction is passable
 #define S5_CENTRE_CLEAR_CM      (50U)       // Centre counts as "clear" only this far out
