@@ -48,7 +48,7 @@ ultrasonic_init (void)
 
 /*!
  * One measurement: TRIG pulse, then sleep one cycle (60-70 ms at the
- * 10 ms tick) while the callback timestamps ECHO. Task context only..
+ * 10 ms tick) while the callback timestamps ECHO. Task context only...
  */
 uint32_t
 ultrasonic_measure_cm (void)
