@@ -100,10 +100,45 @@ IMPORT ID vc_mbf_profile;
    which is what makes the hand-back reliable. */
 #define VC_BYPASS_ARM_MS        (2600U)
 #define VC_BYPASS_ARM_WAIT_MS   (5000U)     // give up if the line is not held
-#define VC_BYPASS_RESUME_CM     (60.0f)     // seek cap when re-joining
+#define VC_BYPASS_ARMED_CHECK_MS (300U)     // line must hold this long when S3 is armed
+#define VC_BYPASS_RESUME_CM     (60.0f)     // seek cap when re-joining after a re-plan
 #define VC_BYPASS_RESUME_MS     (1500U)     // S3 should be driving by then
-#define VC_BYPASS_SWEEP_DEG     (36.0f)     // pivot search range, each way
-#define VC_BYPASS_MIN_STOP_CM   (30U)       // closer: back off before pivoting
+/* After the turn back, the straight return to the lane is about the leg
+   length again (the outbound and return angles are the same), but a
+   turn that under-rotates makes the return longer. Give the seek 60 %
+   more plus 20 cm so it crosses the line instead of running out short
+   and leaving the search a few cm of pivot to work with. */
+#define VC_BYPASS_SEEK_FACTOR   (1.6f)
+#define VC_BYPASS_SEEK_MARGIN_CM (20.0f)
+/* Fraction of the return leg driven with the line sensor ignored. The
+   turn back swings the sensor across the floor and a black caught there
+   stops the seek on the spot, before the car has driven back. */
+#define VC_BYPASS_SEEK_GRACE    (0.5f)
+/* Centre sensor is this far ahead of the axle. After the seek stops on
+   the line, the AXLE is still 7 cm x sin(turn) short of it: drive this
+   much more so the axle reaches the lane, then the straighten pivot
+   puts the sensor back on the line. Without it the counter-back looks
+   shorter than the way out, which is exactly what it is. */
+#define VC_SENSOR_AHEAD_CM      (7.0f)
+#define VC_BYPASS_SWEEP_DEG     (60.0f)     // pivot search range, each way:
+                                            // 7 cm nose x sin60 is 6 cm of
+                                            // lateral reach, enough to find
+                                            // the line after an overshoot
+#define VC_BYPASS_MIN_STOP_CM   (18U)       // closer: back off before the 60 deg pivot
+#define VC_BYPASS_SAME_CM       (3U)        // a rescan within this is the same view
+/* Half-hexagon bypass: two short slants at 60 deg off the lane either
+   side of a long parallel pass, then the turn at the line. Most of the
+   travel is parallel to the object; only the slants are at an angle. */
+#define VC_BYPASS_TURN_DEG      (60.0f)
+#define VC_BYPASS_SIN_TURN      (0.866f)    // sin 60
+#define VC_BYPASS_COS_TURN      (0.500f)    // cos 60
+#define VC_BYPASS_SIDE_CM       (16.5f)     // sideways shift: 7.5 object half,
+                                            // 5 car half, 4 clear. The barcode
+                                            // sensor sits proud of the flank,
+                                            // so this is 5 cm more than 2/3
+#define VC_BYPASS_OBJ_DEPTH_CM  (10.0f)     // object front to back
+#define VC_CAR_LEN_CM           (15.0f)     // front sensor to tail
+#define VC_BYPASS_PASS_MARGIN_CM (5.0f)
 
 ER vc_init(void);
 ER vc_start(void);

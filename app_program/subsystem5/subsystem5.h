@@ -43,7 +43,10 @@
    raising this would abort 2/5 on every pass. The sides read wrong because
    of the stray pings, not because we stop too close. */
 #define S5_ALERT_CM             (25U)       // B5's choice, TODO_TUNE
-#define S5_MIN_CLEAR_CM         (40U)       // Below this, no direction is passable
+#define S5_MIN_CLEAR_CM         (20U)       // Below this, no direction is passable
+                                            // 40 was too strict: a flat floor
+                                            // returns 22-33 cm on the outer
+                                            // beams and vetoed every bypass
 #define S5_CENTRE_CLEAR_CM      (50U)       // Centre counts as "clear" only this far out
 #define S5_CONFIRM_PINGS        (3U)        // in a row
 #define S5_NO_ECHO_PINGS        (5U)        // in a row = sensor fault

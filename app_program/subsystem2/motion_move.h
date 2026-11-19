@@ -37,6 +37,8 @@
 #define MOVE_KICK_MS            (200U)  /* start kick, as speed mode */
 #define MOVE_BAL_MAX            (40)    /* most duty taken off the leader */
 #define MOVE_STALL_MS           (1000U) /* as the speed-mode watchdog */
+#define MOVE_CREEP_ESCALATE_MS  (250U)  /* creep with no counts this long:
+                                           use cruise until it moves again */
 #define MOVE_WRONG_COUNTS       (200)   /* ~33 mm the wrong way = fault */
 
 typedef enum

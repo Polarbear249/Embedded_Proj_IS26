@@ -25,8 +25,10 @@ static bool move_wheel_done(int32_t goal, int32_t now)
     return (move_abs(goal) - move_progress(goal, now)) <= MOVE_COAST_COUNTS;
 }
 
-/* Duty size for one wheel that has not reached its goal. */
-static int32_t move_wheel_duty(move_t const *p_move, int32_t goal, int32_t now)
+/* Duty size for one wheel that has not reached its goal. idle_ms is how
+   long that wheel has gone without an encoder count inside this move. */
+static int32_t move_wheel_duty(move_t const *p_move, int32_t goal, int32_t now,
+                               uint32_t idle_ms)
 {
     int32_t remaining = move_abs(goal) - move_progress(goal, now);
     int32_t slow = MOVE_SLOW_COUNTS;
@@ -45,6 +47,19 @@ static int32_t move_wheel_duty(move_t const *p_move, int32_t goal, int32_t now)
 
     if (remaining <= slow)
     {
+        /*
+         * Creep that is not moving the wheel is a stall in slow motion:
+         * 140 duty is below what that wheel needs at this spot (a
+         * scrubbing inner wheel, a draggy side, a bit of debris). Use
+         * cruise until the encoder moves again, then drop back to creep
+         * to land. Without this the 1 s watchdog fires and the whole
+         * move is thrown away.
+         */
+        if (idle_ms >= MOVE_CREEP_ESCALATE_MS)
+        {
+            return p_move->duty.cruise;
+        }
+
         return p_move->duty.creep;
     }
 
@@ -142,12 +157,14 @@ move_result_t move_step(move_t *p_move, int32_t left, int32_t right,
 
     if (!b_left_done)
     {
-        left_duty = move_wheel_duty(p_move, p_move->goal_left, left);
+        left_duty = move_wheel_duty(p_move, p_move->goal_left, left,
+                                    p_move->idle_left_ms);
     }
 
     if (!b_right_done)
     {
-        right_duty = move_wheel_duty(p_move, p_move->goal_right, right);
+        right_duty = move_wheel_duty(p_move, p_move->goal_right, right,
+                                     p_move->idle_right_ms);
     }
 
     /* Keep the wheels level once both are running at their own pace. Neither
