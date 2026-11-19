@@ -231,8 +231,10 @@
     <button id="c-stop"  class="danger" disabled>Stop</button>
     <button id="c-start" disabled>Start</button>
     <button id="c-ping"  disabled>Ping</button>
-    <input type="number" id="c-speed-val" value="30" min="0" max="100" disabled>
-    <button id="c-speed" disabled>Set speed</button>
+    <span class="label">Speed</span>
+    <button id="c-slow" disabled>Slow</button>
+    <button id="c-med"  disabled>Medium</button>
+    <button id="c-fast" disabled>Fast</button>
     <span id="cmdlog"></span>
   </div>
 
@@ -574,7 +576,7 @@ setInterval(function () {
 }, 250);
 
 function enableCmds(on) {
-  ["c-stop", "c-start", "c-ping", "c-speed", "c-speed-val"].forEach(function (id) {
+  ["c-stop", "c-start", "c-ping", "c-slow", "c-med", "c-fast"].forEach(function (id) {
     $(id).disabled = !on;
   });
 }
@@ -589,13 +591,20 @@ function sendCmd(cmd, arg, name) {
 $("c-stop").onclick  = function () { sendCmd(CMD_STOP, 0, "STOP"); };
 $("c-start").onclick = function () { sendCmd(CMD_START, 0, "START"); };
 $("c-ping").onclick  = function () { sendCmd(CMD_PING, 0, "PING"); };
-$("c-speed").onclick = function () {
-  var v = parseInt($("c-speed-val").value, 10);
-  if (isNaN(v) || v < 0 || v > 100) {
-    $("cmdlog").textContent = "speed must be 0-100";
-    return;
-  }
-  sendCmd(CMD_SET_SPEED, v, "SET_SPEED " + v);
+/* Fixed presets. Below 4 cm/s the motors stall on static friction; above
+   11 cm/s the duty clamps at DRIVE_DUTY_MAX, so a larger number does
+   nothing. Three buttons keep a marker from typing a value that does
+   either. */
+var SPEED_SLOW = 4, SPEED_MED = 7, SPEED_FAST = 11;
+
+$("c-slow").onclick = function () {
+  sendCmd(CMD_SET_SPEED, SPEED_SLOW, "SPEED slow (" + SPEED_SLOW + " cm/s)");
+};
+$("c-med").onclick = function () {
+  sendCmd(CMD_SET_SPEED, SPEED_MED, "SPEED medium (" + SPEED_MED + " cm/s)");
+};
+$("c-fast").onclick = function () {
+  sendCmd(CMD_SET_SPEED, SPEED_FAST, "SPEED fast (" + SPEED_FAST + " cm/s)");
 };
 
 $("connect").onclick = function () {
