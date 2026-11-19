@@ -323,19 +323,37 @@ EXPORT void telem_task(INT stacd, void *exinf)
 	motion_status_t		ms;
 	uint32_t		word;
 	ER			er;
+	UW			tick = 0U;
+	BOOL			b_print;
 
 	(void)stacd;
 	(void)exinf;
 
-	tm_printf((UB*)"s1: telemetry monitor every %u ms\n",
-		  (unsigned int)S1_TELEM_MS);
+	tm_printf((UB*)"s1: telemetry every %u ms, printed every %u ms\n",
+		  (unsigned int)S1_TELEM_MS,
+		  (unsigned int)(S1_TELEM_MS * S1_PRINT_EVERY));
 
 	for (;;) {
+		/* A snapshot every S1_TELEM_MS, so MQTT always has a fresh
+		   one to publish: a slower collector here would silently make
+		   the published rate slower than MQTT_UTK_TELEM_MS, whatever
+		   that is set to. Printing every frame at 5 Hz is unreadable
+		   on the serial monitor, so only every S1_PRINT_EVERY-th
+		   snapshot is printed. Both show the same data; the serial
+		   monitor just shows fewer of them. */
+		b_print = ((tick % S1_PRINT_EVERY) == 0U);
+		tick = tick + 1U;
+
 		collect_snapshot(&snap);
 
 		/* Both paths carry the same snapshot: MQTT in binary, the
 		   serial monitor in words. */
 		er = s1_telem_send(&snap);
+		if (!b_print) {
+			(void)tk_dly_tsk(S1_TELEM_MS);
+			continue;
+		}
+
 		s1_telem_print(&snap);
 		if (er != E_OK) {
 			tm_printf((UB*)"  (telem not queued: %d)\n", (int)er);

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IS26 PicoCar Telemetry</title>
+<style>
+  :root {
+    --bg:        #0e1116;
+    --panel:     #161b22;
+    --panel-2:   #1c222b;
+    --line:      #2a313c;
+    --text:      #e6edf3;
+    --dim:       #8b949e;
+    --dimmer:    #5c6672;
+    --accent:    #4493f8;
+    --ok:        #3fb950;
+    --warn:      #d29922;
+    --bad:       #f85149;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 16px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  /* ---- top bar ---------------------------------------------------- */
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    padding-bottom: 14px; margin-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  h1 span { color: var(--dim); font-weight: 400; }
+  .spacer { flex: 1 1 auto; }
+  input[type=text] {
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); padding: 7px 10px; border-radius: 6px;
+    font-family: var(--mono); font-size: 13px; width: 170px;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); padding: 7px 14px; border-radius: 6px;
+    font-size: 13px; cursor: pointer; font-weight: 500;
+  }
+  button:hover:not(:disabled) { background: #262d38; border-color: #3a434f; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #3182e0; }
+  button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  button.danger:hover:not(:disabled) { background: #e03c33; }
+
+  .status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dimmer); flex: none; }
+  .dot.on   { background: var(--ok);   box-shadow: 0 0 0 3px rgba(63,185,80,.18); }
+  .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px rgba(210,153,34,.18); }
+  .dot.off  { background: var(--bad);  box-shadow: 0 0 0 3px rgba(248,81,73,.18); }
+
+  /* ---- hero numbers ----------------------------------------------- */
+  .hero {
+    display: grid; gap: 12px; margin-bottom: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .hero .box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .hero .label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--dim); margin-bottom: 5px;
+  }
+  .hero .value { font-family: var(--mono); font-size: 27px; line-height: 1.15; }
+  .hero .unit { font-size: 14px; color: var(--dim); }
+
+  /* ---- cards ------------------------------------------------------ */
+  .grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 13px 15px;
+  }
+  .card h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--dim); margin: 0 0 10px; font-weight: 600;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .card h2 em { font-style: normal; color: var(--dimmer); font-size: 10px; letter-spacing: .04em; }
+  .row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 4px 0; gap: 10px;
+  }
+  .row + .row { border-top: 1px solid rgba(42,49,60,.55); }
+  .row .k { color: var(--dim); font-size: 13px; }
+  .row .v { font-family: var(--mono); font-size: 14px; text-align: right; }
+  .v.good { color: var(--ok); }
+  .v.warn { color: var(--warn); }
+  .v.bad  { color: var(--bad); }
+  .v.none { color: var(--dimmer); }
+
+  /* ---- commands --------------------------------------------------- */
+  .cmdbar {
+    display: flex; flex-wrap: wrap; gap: 9px; align-items: center;
+    margin-top: 14px; padding: 13px 15px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .cmdbar .label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--dim); font-weight: 600; margin-right: 4px;
+  }
+  .cmdbar input[type=number] {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    padding: 7px 9px; border-radius: 6px; width: 72px;
+    font-family: var(--mono); font-size: 13px;
+  }
+  #cmdlog { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-left: auto; }
+
+  /* ---- footer ----------------------------------------------------- */
+  footer {
+    margin-top: 14px; padding: 11px 15px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+  }
+  #hex { color: var(--dimmer); letter-spacing: .4px; word-break: break-all; }
+
+  .stale { opacity: .42; }
+  .hint {
+    margin-top: 14px; font-size: 13px; color: var(--dim);
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    border-radius: 8px; padding: 12px 15px;
+  }
+  .hint code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--panel-2); padding: 1px 5px; border-radius: 4px;
+  }
+  .hint b { color: var(--text); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>IS26 PicoCar <span>&middot; telemetry</span></h1>
+    <div class="spacer"></div>
+    <input type="text" id="host" value="localhost" title="Broker IP (the laptop running Mosquitto)">
+    <button id="connect" class="primary">Connect</button>
+    <div class="status"><span class="dot off" id="dot"></span><span id="state">offline</span></div>
+  </header>
+
+  <div class="hero">
+    <div class="box">
+      <div class="label">Vehicle</div>
+      <div class="value" id="h-state">&mdash;</div>
+    </div>
+    <div class="box">
+      <div class="label">Distance</div>
+      <div class="value"><span id="h-dist">&mdash;</span> <span class="unit">cm</span></div>
+    </div>
+    <div class="box">
+      <div class="label">Wheel speed L / R</div>
+      <div class="value"><span id="h-speed">&mdash;</span> <span class="unit">cm/s</span></div>
+    </div>
+    <div class="box">
+      <div class="label">Link</div>
+      <div class="value" id="h-rate">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <div class="card">
+      <h2>Motion <em>S2</em></h2>
+      <div class="row"><span class="k">Motion state</span><span class="v" id="mstate">&mdash;</span></div>
+      <div class="row"><span class="k">Speed left</span><span class="v" id="spl">&mdash;</span></div>
+      <div class="row"><span class="k">Speed right</span><span class="v" id="spr">&mdash;</span></div>
+      <div class="row"><span class="k">Distance</span><span class="v" id="dist">&mdash;</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Line &amp; barcode <em>S3</em></h2>
+      <div class="row"><span class="k">Line error</span><span class="v" id="lerr">&mdash;</span></div>
+      <div class="row"><span class="k">On line</span><span class="v" id="lok">&mdash;</span></div>
+      <div class="row"><span class="k">Junction</span><span class="v" id="junc">&mdash;</span></div>
+      <div class="row"><span class="k">Barcode</span><span class="v" id="bc">&mdash;</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Terrain <em>S4</em></h2>
+      <div class="row"><span class="k">Hump height</span><span class="v" id="hump">&mdash;</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Obstacle <em>S5</em></h2>
+      <div class="row"><span class="k">Detected</span><span class="v" id="obs">&mdash;</span></div>
+      <div class="row"><span class="k">Clearance left</span><span class="v" id="obsl">&mdash;</span></div>
+      <div class="row"><span class="k">Clearance right</span><span class="v" id="obsr">&mdash;</span></div>
+      <div class="row"><span class="k">Width</span><span class="v" id="obsw">&mdash;</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Faults <em>all</em></h2>
+      <div class="row"><span class="k">Motor stall</span><span class="v" id="f1">&mdash;</span></div>
+      <div class="row"><span class="k">Encoder</span><span class="v" id="f2">&mdash;</span></div>
+      <div class="row"><span class="k">IMU</span><span class="v" id="f4">&mdash;</span></div>
+      <div class="row"><span class="k">No echo</span><span class="v" id="f8">&mdash;</span></div>
+      <div class="row"><span class="k">WiFi loss</span><span class="v" id="f16">&mdash;</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Link <em>S1</em></h2>
+      <div class="row"><span class="k">Frames received</span><span class="v" id="nrx">0</span></div>
+      <div class="row"><span class="k">Frames dropped</span><span class="v" id="ndrop">0</span></div>
+      <div class="row"><span class="k">Rejected frames</span><span class="v" id="nbad">0</span></div>
+      <div class="row"><span class="k">Heartbeat</span><span class="v" id="hb">&mdash;</span></div>
+    </div>
+
+  </div>
+
+  <div class="cmdbar">
+    <span class="label">Command</span>
+    <button id="c-stop"  class="danger" disabled>Stop</button>
+    <button id="c-start" disabled>Start</button>
+    <button id="c-ping"  disabled>Ping</button>
+    <input type="number" id="c-speed-val" value="30" min="0" max="100" disabled>
+    <button id="c-speed" disabled>Set speed</button>
+    <span id="cmdlog"></span>
+  </div>
+
+  <footer>
+    <span>seq <span id="seq">&mdash;</span></span>
+    <span>last frame <span id="age">&mdash;</span></span>
+    <span id="hex"></span>
+  </footer>
+
+  <div class="hint" id="hint">
+    <b>Not connected yet.</b> The broker needs a WebSocket listener, which is separate
+    from the one the car uses. Add these two lines to your Mosquitto config
+    (<code>pico.conf</code>), then restart it:
+    <br><br>
+    <code>listener 9001</code><br>
+    <code>protocol websockets</code>
+    <br><br>
+    Put the broker laptop's IP in the box above (<code>localhost</code> if this page is on
+    that laptop) and press Connect. The car publishes on
+    <code>mtk3smp-pico/telem</code> at 5&nbsp;Hz.
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ===================================================================
+ * Telemetry frame v1 -- must match app_program/subsystem1/telemetry_frame.h
+ *
+ *   version 8 | seq 5 | vstate 3 | mstate 3 | faults 5 | speed_l 8 |
+ *   speed_r 8 | dist_cm 16 | line_err 7 | line_ok 1 | junction 1 |
+ *   bc_ok 1 | bc_cmd 2 | hump_mm 8 | obs_ok 1 | obs_left 9 |
+ *   obs_right 9 | obs_width 9                            = 104 bits
+ *
+ * Plain MSB-first bitstream: bit 0 is the top bit of byte 0, exactly as
+ * put_bits()/get_bits() do it on the car.
+ * =================================================================== */
+
+var TELEM_VERSION = 1, TELEM_LEN = 13;
+var CMD_VERSION = 1;
+var CMD_STOP = 1, CMD_START = 2, CMD_SET_SPEED = 3, CMD_PING = 4;
+
+var TOPIC_TELEM = "mtk3smp-pico/telem";
+var TOPIC_CMD   = "mtk3smp-pico/cmd";
+var TOPIC_HB    = "mtk3smp-pico/heartbeat";
+
+function BitReader(bytes) { this.b = bytes; this.pos = 0; }
+BitReader.prototype.read = function (width) {
+  var v = 0;
+  for (var i = 0; i < width; i++) {
+    var bit = (this.b[this.pos >> 3] >> (7 - (this.pos & 7))) & 1;
+    v = (v * 2) + bit;          /* not <<: keeps 16-bit fields exact */
+    this.pos++;
+  }
+  return v;
+};
+
+/* Returns null when the frame is the wrong length or an unknown version.
+   The car rejects such frames too -- we must not display a guess. */
+function telemDecode(bytes) {
+  if (!bytes || bytes.length !== TELEM_LEN) { return null; }
+  var r = new BitReader(bytes);
+  if (r.read(8) !== TELEM_VERSION) { return null; }
+  return {
+    seq:       r.read(5),
+    vstate:    r.read(3),
+    mstate:    r.read(3),
+    faults:    r.read(5),
+    speed_l:   r.read(8),
+    speed_r:   r.read(8),
+    dist_cm:   r.read(16),
+    line_err:  r.read(7),
+    line_ok:   r.read(1),
+    junction:  r.read(1),
+    bc_ok:     r.read(1),
+    bc_cmd:    r.read(2),
+    hump_mm:   r.read(8),
+    obs_ok:    r.read(1),
+    obs_left:  r.read(9),
+    obs_right: r.read(9),
+    obs_width: r.read(9)
+  };
+}
+
+/* Command frame v1: version 8 | cmd 4 | arg 8 | seq 4 = 24 bits. */
+function cmdEncode(cmd, arg, seq) {
+  var out = new Uint8Array(3), pos = 0;
+  function put(width, value) {
+    for (var i = 0; i < width; i++) {
+      var bit = (value >> ((width - 1) - i)) & 1;
+      out[pos >> 3] |= bit << (7 - (pos & 7));
+      pos++;
+    }
+  }
+  put(8, CMD_VERSION); put(4, cmd); put(8, arg); put(4, seq);
+  return out;
+}
+
+/* ===================================================================
+ * Minimal MQTT 3.1.1 client over WebSockets.
+ * Written out rather than pulled from a CDN so the page works at the
+ * demo whether or not there is internet.
+ * =================================================================== */
+
+function Mqtt(url, clientId, handlers) {
+  this.url = url; this.clientId = clientId; this.h = handlers;
+  this.ws = null; this.buf = new Uint8Array(0);
+  this.pid = 1; this.ping = null; this.connected = false;
+}
+
+Mqtt.prototype.connect = function () {
+  var self = this;
+  this.ws = new WebSocket(this.url, "mqtt");
+  this.ws.binaryType = "arraybuffer";
+
+  this.ws.onopen = function () {
+    var id = self.utf8(self.clientId);
+    var vh = [0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, /* "MQTT" */
+              0x04,                                /* level 3.1.1 */
+              0x02,                                /* clean session */
+              0x00, 0x3c];                         /* keepalive 60 s */
+    self.send(0x10, vh.concat(Array.prototype.slice.call(id)));
+  };
+
+  this.ws.onmessage = function (ev) { self.feed(new Uint8Array(ev.data)); };
+
+  this.ws.onclose = function () {
+    self.connected = false;
+    if (self.ping) { clearInterval(self.ping); self.ping = null; }
+    self.h.onClose();
+  };
+
+  /* onerror carries no useful detail in browsers; onclose always follows. */
+  this.ws.onerror = function () { self.h.onError(); };
+};
+
+Mqtt.prototype.close = function () {
+  if (this.ws) { try { this.ws.close(); } catch (e) { /* already gone */ } }
+};
+
+Mqtt.prototype.utf8 = function (s) {
+  var b = new TextEncoder().encode(s);
+  var out = new Uint8Array(b.length + 2);
+  out[0] = (b.length >> 8) & 0xff; out[1] = b.length & 0xff;
+  out.set(b, 2);
+  return out;
+};
+
+/* Remaining Length: 7 bits per byte, top bit continues. */
+Mqtt.prototype.send = function (type, payload) {
+  var len = payload.length, lenBytes = [];
+  do {
+    var d = len % 128;
+    len = Math.floor(len / 128);
+    if (len > 0) { d = d | 0x80; }
+    lenBytes.push(d);
+  } while (len > 0);
+  var pkt = new Uint8Array(1 + lenBytes.length + payload.length);
+  pkt[0] = type;
+  pkt.set(lenBytes, 1);
+  pkt.set(payload, 1 + lenBytes.length);
+  this.ws.send(pkt);
+};
+
+Mqtt.prototype.subscribe = function (topic) {
+  var t = this.utf8(topic);
+  var p = [ (this.pid >> 8) & 0xff, this.pid & 0xff ];
+  this.pid++;
+  this.send(0x82, p.concat(Array.prototype.slice.call(t), [0x00]));
+};
+
+Mqtt.prototype.publish = function (topic, bytes) {
+  var t = this.utf8(topic);
+  var p = new Uint8Array(t.length + bytes.length);
+  p.set(t, 0); p.set(bytes, t.length);
+  this.send(0x30, p);                        /* QoS 0 */
+};
+
+/* WebSocket frames do not line up with MQTT packets, so accumulate. */
+Mqtt.prototype.feed = function (chunk) {
+  var merged = new Uint8Array(this.buf.length + chunk.length);
+  merged.set(this.buf, 0); merged.set(chunk, this.buf.length);
+  this.buf = merged;
+
+  for (;;) {
+    if (this.buf.length < 2) { return; }
+    var mult = 1, len = 0, i = 1, byte;
+    do {
+      if (i >= this.buf.length) { return; }   /* length not all here yet */
+      byte = this.buf[i];
+      len += (byte & 0x7f) * mult;
+      mult *= 128;
+      i++;
+    } while ((byte & 0x80) !== 0);
+
+    if (this.buf.length < i + len) { return; } /* body not all here yet */
+
+    this.handle(this.buf[0], this.buf.subarray(i, i + len));
+    this.buf = this.buf.subarray(i + len);
+  }
+};
+
+Mqtt.prototype.handle = function (header, body) {
+  var type = header >> 4, self = this;
+
+  if (type === 2) {                            /* CONNACK */
+    if (body.length >= 2 && body[1] !== 0) {
+      this.h.onRefused(body[1]);
+      this.close();
+      return;
+    }
+    this.connected = true;
+    this.ping = setInterval(function () {
+      if (self.connected) { self.send(0xc0, []); }
+    }, 30000);
+    this.h.onConnect();
+
+  } else if (type === 3) {                     /* PUBLISH */
+    var tlen = (body[0] << 8) | body[1];
+    var topic = new TextDecoder().decode(body.subarray(2, 2 + tlen));
+    var off = 2 + tlen;
+    if ((header & 0x06) !== 0) { off += 2; }   /* QoS > 0 carries a packet id */
+    this.h.onMessage(topic, body.subarray(off));
+  }
+  /* SUBACK and PINGRESP need no action. */
+};
+
+/* ===================================================================
+ * Page
+ * =================================================================== */
+
+var $ = function (id) { return document.getElementById(id); };
+
+var MSTATE = ["stopped", "moving", "turning", "reversing",
+              "scanning", "bypassing", "estop / fault"];
+var BC_CMD = ["LEFT", "RIGHT", "STRAIGHT", "U-TURN"];
+
+var client = null;
+var nrx = 0, ndrop = 0, nbad = 0;
+var lastSeq = null, lastFrameAt = 0, cmdSeq = 0;
+var recent = [];                 /* arrival times, for the rate readout */
+
+function setStatus(cls, text) {
+  $("dot").className = "dot " + cls;
+  $("state").textContent = text;
+}
+
+function set(id, text, cls) {
+  var el = $(id);
+  el.textContent = text;
+  el.className = "v" + (cls ? " " + cls : "");
+}
+
+function flag(id, on) {
+  set(id, on ? "FAULT" : "ok", on ? "bad" : "good");
+}
+
+function onFrame(bytes) {
+  var t = telemDecode(bytes);
+
+  if (t === null) {
+    /* Wrong length or unknown version. Count it; never show a guess. */
+    nbad++;
+    set("nbad", String(nbad), nbad ? "warn" : "");
+    return;
+  }
+
+  nrx++;
+  lastFrameAt = Date.now();
+
+  /* seq is 5 bits and wraps at 32, so a gap means frames went missing. */
+  if (lastSeq !== null) {
+    var gap = (t.seq - lastSeq + 32) % 32;
+    if (gap > 1) { ndrop += gap - 1; }
+  }
+  lastSeq = t.seq;
+
+  recent.push(lastFrameAt);
+  while (recent.length && recent[0] < lastFrameAt - 3000) { recent.shift(); }
+
+  /* hero */
+  $("h-state").textContent = MSTATE[t.mstate] || "?";
+  $("h-dist").textContent  = t.dist_cm;
+  $("h-speed").textContent = t.speed_l + " / " + t.speed_r;
+
+  /* motion */
+  set("mstate", MSTATE[t.mstate] || "?", t.mstate === 6 ? "bad" : "");
+  set("spl", t.speed_l + " cm/s");
+  set("spr", t.speed_r + " cm/s");
+  set("dist", t.dist_cm + " cm");
+
+  /* line: offset binary, 64 is centred */
+  var err = t.line_err - 64;
+  set("lerr", (err > 0 ? "+" : "") + err);
+  set("lok",  t.line_ok ? "yes" : "no", t.line_ok ? "good" : "warn");
+  set("junc", t.junction ? "yes" : "no", t.junction ? "warn" : "none");
+  if (t.bc_ok) { set("bc", BC_CMD[t.bc_cmd] || "?", "good"); }
+  else         { set("bc", "none yet", "none"); }
+
+  /* terrain */
+  set("hump", t.hump_mm + " mm", t.hump_mm > 0 ? "good" : "none");
+
+  /* obstacle */
+  set("obs", t.obs_ok ? "yes" : "no", t.obs_ok ? "warn" : "none");
+  set("obsl", t.obs_left + " cm");
+  set("obsr", t.obs_right + " cm");
+  set("obsw", t.obs_width + " cm");
+
+  /* faults */
+  flag("f1",  t.faults & 0x01);
+  flag("f2",  t.faults & 0x02);
+  flag("f4",  t.faults & 0x04);
+  flag("f8",  t.faults & 0x08);
+  flag("f16", t.faults & 0x10);
+
+  /* link */
+  set("nrx", String(nrx));
+  set("ndrop", String(ndrop), ndrop ? "warn" : "");
+  set("seq", String(t.seq));
+
+  var hex = "";
+  for (var i = 0; i < bytes.length; i++) {
+    hex += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16) + " ";
+  }
+  $("hex").textContent = hex.trim().toUpperCase();
+}
+
+/* Grey the page out when frames stop, so a frozen screen is never read
+   as live data. */
+setInterval(function () {
+  if (!lastFrameAt) { return; }
+  var age = Date.now() - lastFrameAt;
+  $("age").textContent = age < 1500 ? "just now" : (age / 1000).toFixed(1) + " s ago";
+  document.querySelector(".grid").classList.toggle("stale", age > 2500);
+  document.querySelector(".hero").classList.toggle("stale", age > 2500);
+  $("h-rate").textContent =
+    age > 2500 ? "stalled" : (recent.length / 3).toFixed(1) + " Hz";
+}, 250);
+
+function enableCmds(on) {
+  ["c-stop", "c-start", "c-ping", "c-speed", "c-speed-val"].forEach(function (id) {
+    $(id).disabled = !on;
+  });
+}
+
+function sendCmd(cmd, arg, name) {
+  if (!client || !client.connected) { return; }
+  cmdSeq = (cmdSeq + 1) % 16;
+  client.publish(TOPIC_CMD, cmdEncode(cmd, arg, cmdSeq));
+  $("cmdlog").textContent = "sent " + name + " (seq " + cmdSeq + ")";
+}
+
+$("c-stop").onclick  = function () { sendCmd(CMD_STOP, 0, "STOP"); };
+$("c-start").onclick = function () { sendCmd(CMD_START, 0, "START"); };
+$("c-ping").onclick  = function () { sendCmd(CMD_PING, 0, "PING"); };
+$("c-speed").onclick = function () {
+  var v = parseInt($("c-speed-val").value, 10);
+  if (isNaN(v) || v < 0 || v > 100) {
+    $("cmdlog").textContent = "speed must be 0-100";
+    return;
+  }
+  sendCmd(CMD_SET_SPEED, v, "SET_SPEED " + v);
+};
+
+$("connect").onclick = function () {
+  if (client && client.connected) { client.close(); return; }
+
+  var host = $("host").value.trim() || "localhost";
+  setStatus("wait", "connecting…");
+  $("connect").disabled = true;
+
+  client = new Mqtt("ws://" + host + ":9001", "is26-dash-" + Date.now(), {
+    onConnect: function () {
+      setStatus("on", "connected to " + host);
+      $("connect").textContent = "Disconnect";
+      $("connect").classList.remove("primary");
+      $("connect").disabled = false;
+      $("hint").hidden = true;
+      enableCmds(true);
+      client.subscribe(TOPIC_TELEM);
+      client.subscribe(TOPIC_HB);
+    },
+    onMessage: function (topic, payload) {
+      if (topic === TOPIC_TELEM) {
+        onFrame(payload);
+      } else if (topic === TOPIC_HB) {
+        set("hb", new TextDecoder().decode(payload), "good");
+      }
+    },
+    onRefused: function (code) {
+      setStatus("off", "broker refused the connection (code " + code + ")");
+    },
+    onError: function () { /* onclose reports it */ },
+    onClose: function () {
+      setStatus("off", "offline");
+      $("connect").textContent = "Connect";
+      $("connect").classList.add("primary");
+      $("connect").disabled = false;
+      $("hint").hidden = false;
+      enableCmds(false);
+    }
+  });
+
+  client.connect();
+};
+</script>
+</body>
+</html>

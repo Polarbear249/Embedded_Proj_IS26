@@ -62,7 +62,8 @@ IMPORT void	mqtt_app_rx(const char *topic, const uint8_t *data, uint32_t len);
    gathers the snapshot and belongs in vehicle_controller.c once the VC
    takes IF-07 over. */
 #define S1_PRI_TELEM	11		/* below the WiFi task, above the stub */
-#define S1_TELEM_MS	1000U		/* one printed snapshot per second */
+#define S1_TELEM_MS	200U		/* 5 Hz, to match MQTT_UTK_TELEM_MS */
+#define S1_PRINT_EVERY	5U		/* print every 5th: 1 Hz on serial */
 IMPORT ID	tid_telem;
 IMPORT void	telem_task(INT stacd, void *exinf);
 IMPORT void	s1_telem_print(const T_TELEM *snap);
