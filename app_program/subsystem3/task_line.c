@@ -92,6 +92,7 @@ static line_drive_t g_drive;
 static bool         g_b_was_driving = false;    // last cycle drove
 
 static volatile bool g_b_drive_enabled = true;   // VC stands S3 down in a bypass
+static volatile bool g_b_armed_pub = false;      // g_drive.b_armed, published
 
 static void    s3_drive(uint8_t error, uint8_t mode);
 
@@ -168,6 +169,16 @@ s3_drive_set_enabled (bool b_on)
     }
 #else
         (void)b_on;
+#endif
+}
+
+bool
+s3_drive_is_armed (void)
+{
+#if S3_DRIVE_ENABLE
+    return (g_b_armed_pub);
+#else
+    return (false);
 #endif
 }
 
@@ -255,6 +266,20 @@ line_task (INT stacd, void *exinf)
         line_logic_step(&g_line, drv_ir_centre_black(),
                         drv_ir_right_black(), drv_ir_barcode_black(),
                         &error, &mode);
+#endif
+#if S3_DRIVE_ENABLE
+        /*
+         * VC stand-down: do not let the lost-line budget run down while
+         * the VC owns the car. Without this a 10 to 20 s manoeuvre puts
+         * S3 in FAILED, which disarms it, and there is nothing left to
+         * hand back to. Contact still updates the mode and the arm
+         * counter, so the VC's hold can arm a follower that was not
+         * driving when the obstacle appeared.
+         */
+        if (false == g_b_drive_enabled)
+        {
+            g_line.timer = 0U;
+        }
 #endif
         s3_publish(error, mode);
 #if S3_DRIVE_ENABLE
@@ -349,6 +374,7 @@ s3_drive (uint8_t error, uint8_t mode)
     (void)err;
 #endif
     g_b_was_driving = (b_drive && g_b_drive_enabled); //d
+    g_b_armed_pub = (0U != g_drive.b_armed);
 }
 
 #if S3_DRIVE_DEBUG

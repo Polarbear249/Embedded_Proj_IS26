@@ -47,10 +47,21 @@ static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
 static void      vc_obstacle(uint32_t word);
 static void      vc_bypass_task(INT stacd, void *p_exinf);
-static bool      vc_wait_move_done(void);
-static bool      vc_line_black_now(void);
+static bool      vc_wait_move_done(UINT timeout_ms);
+static bool      vc_line_centre_black(void);
 static bool      vc_seek_line(float distance_cm);
-static bool      vc_bypass_manoeuvre(uint32_t best, uint32_t centre_cm);
+static bool      vc_sweep_line(bool b_right_first);
+static bool      vc_pivot_to_line(float max_deg, bool b_left);
+static bool      vc_hold_arm(void);
+static bool      vc_resume_line(float cap_cm);
+static bool      vc_restore_heading(float applied_deg);
+static bool      vc_clear_estop(void);
+static void      vc_release_to_line(void);
+static bool      vc_wait_s3_driving(void);
+static void      vc_hand_back(void);
+static bool      vc_bypass_manoeuvre(uint32_t best, uint32_t centre_cm,
+                                     float *p_applied_deg);
+static UINT      vc_move_timeout_ms(float distance_cm);
 static bool      vc_wait_profile(UINT timeout_ms);
 #endif
 
@@ -67,6 +78,7 @@ EXPORT ID vc_mbf_profile = 0;
 static volatile bool     g_b_obstacle_stop = false;   // the last stop was ours
 static volatile bool     g_b_bypass_pending = false;
 static volatile uint32_t g_bypass_profile = 0U;
+static volatile uint32_t g_alert_cm = 0U;            // centre distance of the ALERT that stopped us
 
 // Bypass bookkeeping, touched only by vc_bypass_task and its helpers.
 static char const       *g_bypass_why = "ok";        // Manouvres on this obstacle
@@ -326,6 +338,8 @@ vc_obstacle (uint32_t word)
 
     if (S5_KIND_ALERT == kind)
     {
+        g_alert_cm = S5_P_CENTRE(word);
+
         if (motion_is_estopped())
         {
             tm_printf((UB*)"[VC] obstacle at %u cm (already stopped)\n",
@@ -395,17 +409,28 @@ vc_toggle_estop (void)
 }
 
 /*
+ * How long a move may take before it counts as a stall. Generous: the
+ * encoder goal ends the move, this only catches a move that never ends.
+ */
+static UINT
+vc_move_timeout_ms (float distance_cm)
+{
+    return (VC_BYPASS_MOVE_EXTRA_MS
+            + ((UINT)(distance_cm * 1000.0f) / VC_BYPASS_SPEED_CMS));
+}
+
+/*
  * Wait for the move in progress to end. Aborts on a GP20 press or a
  * fault, and treats a move that never ends as a stall. On failure
  * g_bypass_why says which of those it was.
  */
 static bool
-vc_wait_move_done (void)
+vc_wait_move_done (UINT timeout_ms)
 {
     motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
     uint32_t        waited_ms = 0U;
 
-    while (waited_ms < VC_BYPASS_TIMEOUT_MS)
+    while (waited_ms < timeout_ms)
     {
         (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
         waited_ms += VC_BYPASS_POLL_MS;
@@ -467,29 +492,31 @@ vc_wait_profile (UINT timeout_ms)
 }
 
 /*
- * The line is under the car now. S3 keeps publishing IF-06 while it is
- * stood down (only the drive call is gated), so the raw sensor bits are
- * still live and can be read from here.
+ * The centre line sensor only. S3's arming rule looks at this one, so it
+ * is the only bit a re-join can trust. S3 keeps publishing IF-06 while
+ * it is stood down (only the drive call is gated), so the raw bits are
+ * live throughout a manoeuvre.
  */
 static bool
-vc_line_black_now (void)
+vc_line_centre_black (void)
 {
     uint32_t word = s3_line_state_read();
 
-    return (0U != ((word >> LINE_IF_RAW_C_SHIFT) & LINE_IF_RAW_MASK))
-           || (0U != ((word >> LINE_IF_RAW_R_SHIFT) & LINE_IF_RAW_MASK));
+    return (0U != ((word >> LINE_IF_RAW_C_SHIFT) & LINE_IF_RAW_MASK));
 }
 
 /*
- * Drive at the line and stop the moment a sensor sees it.
- * False = the distance ran out, the operator aborted, or the move
- * failed; g_bypass_why says which.
+ * Drive at the line and stop the moment the CENTRE sensor sees it.
+ * Centre only: the right sensor is one spot to the side, so stopping on
+ * it leaves the car un-armable. False = distance ran out, operator
+ * aborted, or the move failed; g_bypass_why says which.
  */
 static bool
 vc_seek_line (float distance_cm)
 {
     motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
     uint32_t        waited_ms = 0U;
+    UINT            timeout_ms = vc_move_timeout_ms(distance_cm);
 
     if (MOTION_OK != motion_move_forward(distance_cm))
     {
@@ -497,12 +524,12 @@ vc_seek_line (float distance_cm)
         return (false);
     }
 
-    while (waited_ms < VC_BYPASS_SEEK_MS)
+    while (waited_ms < timeout_ms)
     {
         (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
         waited_ms += VC_BYPASS_POLL_MS;
 
-        if (vc_line_black_now())
+        if (vc_line_centre_black())
         {
             (void)motion_stop();        // cancel the rest of the approach
             (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
@@ -534,21 +561,358 @@ vc_seek_line (float distance_cm)
     return (false);
 }
 
+/*
+ * Pivot up to max_deg and stop the moment the centre sensor sees the
+ * line. Polling during the turn matters: a stepped sweep can jump over
+ * a 6 mm line between steps, and the stop then coasts a little further.
+ */
+static bool
+vc_pivot_to_line (float max_deg, bool b_left)
+{
+    motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
+    uint32_t        waited_ms = 0U;
+
+    if (MOTION_OK != (b_left ? motion_turn_left(max_deg)
+                             : motion_turn_right(max_deg)))
+    {
+        g_bypass_why = "sweep turn refused";
+        return (false);
+    }
+
+    while (waited_ms < 5000U)
+    {
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited_ms += VC_BYPASS_POLL_MS;
+
+        if (vc_line_centre_black())
+        {
+            (void)motion_stop();
+            (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+            return (true);
+        }
+
+        if ((MOTION_OK != motion_get_status(&status))
+            || (MOTION_STATE_RUNNING != status.state))
+        {
+            return (false);         // the whole angle went by
+        }
+    }
+
+    (void)motion_stop();
+    return (false);
+}
+
+/*
+ * Search for the line within one pivot of the current heading.
+ * b_right_first: which way to look first. Pivot that way up to
+ * VC_BYPASS_SWEEP_DEG, then twice as far the other way, then back to
+ * the starting heading. The heading is left where the line was found;
+ * S3 corrects the rest as soon as it drives.
+ */
+static bool
+vc_sweep_line (bool b_right_first)
+{
+    if (vc_pivot_to_line(VC_BYPASS_SWEEP_DEG, false == b_right_first))
+    {
+        return (true);
+    }
+
+    if (vc_pivot_to_line(2.0f * VC_BYPASS_SWEEP_DEG, b_right_first))
+    {
+        return (true);
+    }
+
+    return (vc_pivot_to_line(VC_BYPASS_SWEEP_DEG, false == b_right_first));
+}
+
+/*
+ * Hold still on the line until S3 has armed itself: 200 cycles of 10 ms
+ * with the debounced centre sensor black. S3's arm counter runs even
+ * while the VC has it stood down, so this is all the hand-back needs.
+ */
+static bool
+vc_hold_arm (void)
+{
+    uint32_t held_ms = 0U;
+    uint32_t waited_ms = 0U;
+
+    /*
+     * S3 keeps its arm through the stand-down (the line task freezes its
+     * lost-line timer while the VC owns the car), so there is nothing to
+     * wait for once it was driving before the obstacle. Skip the 2.6 s
+     * pause in that case; it is what looks like a stop at 90 %.
+     */
+    if (s3_drive_is_armed())
+    {
+        tm_printf((UB*)"[VC] S3 already armed\n");
+        return (true);
+    }
+
+    while (waited_ms < VC_BYPASS_ARM_WAIT_MS)
+    {
+        if (vc_line_centre_black())
+        {
+            held_ms += VC_BYPASS_POLL_MS;
+
+            if (held_ms >= VC_BYPASS_ARM_MS)
+            {
+                tm_printf((UB*)"[VC] line held, handing back\n");
+                return (true);
+            }
+        }
+        else
+        {
+            held_ms = 0U;
+        }
+
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited_ms += VC_BYPASS_POLL_MS;
+    }
+
+    g_bypass_why = "line lost before S3 armed";
+    return (false);
+}
+
+/*
+ * Re-join: seek the line, sweep for it if the seek ran out, then hold
+ * until S3 is armed. S5 alerts run only while the car is moving (seek);
+ * they are off for the sweep and the hold, so a nearby object cannot
+ * latch a fresh stop while the car is not going anywhere.
+ */
+static bool
+vc_resume_line (float cap_cm)
+{
+    if (vc_line_centre_black())
+    {
+        s5_alert_set_enabled(false);
+        return (vc_hold_arm());
+    }
+
+    s5_alert_set_enabled(true);
+    (void)vc_seek_line(cap_cm);
+    s5_alert_set_enabled(false);
+
+    /*
+     * The seek stops the instant black appears and then coasts: on a
+     * 6 mm line the sensor can end up just past it. Pivot-search now
+     * instead of holding on a line that is already behind the car.
+     */
+    if (false == vc_line_centre_black())
+    {
+        tm_printf((UB*)"[VC] re-join: pivot search\n");
+
+        if (false == vc_sweep_line(false))
+        {
+            return (false);
+        }
+
+        tm_printf((UB*)"[VC] re-join: line found\n");
+    }
+
+    return (vc_hold_arm());
+}
+
+/*
+ * Undo the pivots a failed manoeuvre already made, so the car is back on
+ * the lane heading before it reverses and re-plans. Positive angle =
+ * left, the same sense as the manoeuvre.
+ */
+static bool
+vc_restore_heading (float applied_deg)
+{
+    if (applied_deg > 0.0f)
+    {
+        if (MOTION_OK != motion_turn_right(applied_deg))
+        {
+            g_bypass_why = "heading restore refused";
+            return (false);
+        }
+    }
+    else if (applied_deg < 0.0f)
+    {
+        if (MOTION_OK != motion_turn_left(-applied_deg))
+        {
+            g_bypass_why = "heading restore refused";
+            return (false);
+        }
+    }
+    else
+    {
+        return (true);
+    }
+
+    return (vc_wait_move_done(3000U));
+}
+
+/*
+ * Clear the latched stop, retrying the instant the motion lock is busy.
+ * motion_clear_estop() returns MOTION_BUSY without clearing when the
+ * motion task holds its command mutex; ignoring that used to look like
+ * "the reverse did nothing".
+ */
+static bool
+vc_clear_estop (void)
+{
+    uint32_t tries;
+
+    for (tries = 0U; tries < 3U; tries++)
+    {
+        if ((MOTION_OK == motion_clear_estop()) && (false == motion_is_estopped()))
+        {
+            return (true);
+        }
+
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+    }
+
+    return (false);
+}
+
+/* Hand the car back: clear the stop, start S3, reset this obstacle. */
+static void
+vc_release_to_line (void)
+{
+    (void)vc_clear_estop();
+    (void)s3_drive_set_enabled(true);
+    s5_alert_set_enabled(true);
+    g_b_obstacle_stop = false;
+    g_bypass_retries = 0U;
+    g_bypass_attempts = 0U;
+    g_alert_cm = 0U;
+}
+
+/*
+ * S3 should start driving by itself within a moment of being enabled.
+ * If it does not, it is not armed or not on the line: one re-join
+ * attempt, then a clear stop rather than a silent park.
+ */
+static bool
+vc_wait_s3_driving (void)
+{
+    motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
+    uint32_t        waited_ms = 0U;
+
+    while (waited_ms < VC_BYPASS_RESUME_MS)
+    {
+        (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+        waited_ms += VC_BYPASS_POLL_MS;
+
+        if ((MOTION_OK == motion_get_status(&status))
+            && (MOTION_STATE_RUNNING == status.state))
+        {
+            return (true);
+        }
+    }
+
+    return (false);
+}
+
+static void
+vc_hand_back (void)
+{
+    uint32_t try_no;
+
+    for (try_no = 0U; try_no < 2U; try_no++)
+    {
+        vc_release_to_line();
+
+        if (vc_wait_s3_driving())
+        {
+            tm_printf((UB*)"[VC] line drive resumes\n");
+            return;
+        }
+
+        tm_printf((UB*)"[VC] S3 did not take over, re-joining again\n");
+        (void)s3_drive_set_enabled(false);
+
+        if (false == vc_resume_line(VC_BYPASS_RESUME_CM))
+        {
+            break;
+        }
+    }
+
+    tm_printf((UB*)"[VC] no line drive (%s), stopped; GP20 releases\n",
+              g_bypass_why);
+    s5_alert_set_enabled(true);
+    g_bypass_attempts = 0U;
+    g_bypass_retries = 0U;
+    (void)motion_estop();
+    (void)s3_drive_set_enabled(true);
+}
+
 /* [Hotfix 2] Work out how far to drive before turning back. Without this
    the car turned back while still short of the object, so the return
    heading pointed straight at it. */
 /*
- * Turn out, drive past, swing back across the line, seek it, straighten
- * up. The e-stop must already be released.
+ * Turn out, drive past, swing back across the line, re-join, straighten
+ * up. The e-stop must already be released. *p_applied_deg is the net
+ * heading the pivots have added (positive left) so a failed manoeuvre
+ * can be undone.
+ *
+ * centre_cm is the nearest distance S5 has reported for this obstacle:
+ * the alert or the profile, whichever is smaller. A stop closer than
+ * VC_BYPASS_MIN_STOP_CM is too close to pivot from, so the car backs off
+ * first: a 40 deg pivot from 7 cm sweeps the front into the object.
  */
 static bool
-vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
+vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm, float *p_applied_deg)
 {
     bool  b_left = (S5_BEST_LEFT == best);
     float f_turn = b_left ? S5_BYPASS_TURN_L : S5_BYPASS_TURN_R;
     float f_cos  = b_left ? 0.766f : 0.848f;     // cos 40, cos 32
-    float f_leg  = (((float)centre_cm + 10.0f) / f_cos) + 15.0f;
+    float f_from = (float)centre_cm;
+    float f_leg;
+
     g_bypass_why = "ok";
+    *p_applied_deg = 0.0f;
+
+    if (S5_BEST_CENTRE == best)
+    {
+        g_bypass_why = "centre clear";
+        return (true);
+    }
+
+    if (false == vc_clear_estop())
+    {
+        g_bypass_why = "estop clear refused";
+        return (false);
+    }
+
+    /*
+     * Too close to pivot from. Backing off is blind (no rear sensor),
+     * which is the same risk the re-plan reverse already takes, and it
+     * is far safer than sweeping the front through the obstacle. Back
+     * off just far enough to reach VC_BYPASS_MIN_STOP_CM, not a fixed
+     * 12 cm, so a 20 cm stop and a 29 cm stop both pivot from about the
+     * same clearance.
+     */
+    if (centre_cm < VC_BYPASS_MIN_STOP_CM)
+    {
+        float f_back = (float)(VC_BYPASS_MIN_STOP_CM - centre_cm) + 2.0f;
+
+        if (f_back > VC_BYPASS_BACK_CM)
+        {
+            f_back = VC_BYPASS_BACK_CM;
+        }
+
+        tm_printf((UB*)"[VC] too close (%u cm), back off %d cm first\n",
+                  (UINT)centre_cm, (INT)f_back);
+
+        if (MOTION_OK != motion_move_backward(f_back))
+        {
+            g_bypass_why = "back off refused";
+            return (false);
+        }
+
+        if (false == vc_wait_move_done(vc_move_timeout_ms(f_back)))
+        {
+            return (false);
+        }
+
+        f_from += f_back;
+    }
+
+    f_leg = ((f_from + 10.0f) / f_cos) + 15.0f;
 
     if (f_leg < VC_BYPASS_FWD_CM)
     {
@@ -560,17 +924,6 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
         f_leg = VC_BYPASS_FWD_MAX_CM;
     }
 
-    if (S5_BEST_CENTRE == best)
-    {
-        g_bypass_why = "centre clear";
-        return (true);
-    }
-
-    if (MOTION_OK != motion_clear_estop())
-    {
-        g_bypass_why = "estop clear refused";
-        return (false);
-    }
     // 1. Out of the lane
     tm_printf((UB*)"[VC] 1/5 turn %s %d deg\n",
               b_left ? "left" : "right", (INT)f_turn);
@@ -580,10 +933,12 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
         g_bypass_why = "turn refused";
         return (false);
     }
-    if (false == vc_wait_move_done())
+    if (false == vc_wait_move_done(3000U))
     {
         return (false);
     }
+    *p_applied_deg = b_left ? f_turn : -f_turn;
+
     // 2. Past the obstacle
     tm_printf((UB*)"[VC] 2/5 forward %d cm\n", (INT)f_leg);
 
@@ -601,7 +956,7 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
         return (false);
     }
 
-    if (false == vc_wait_move_done())
+    if (false == vc_wait_move_done(vc_move_timeout_ms(f_leg)))
     {
         return (false);
     }
@@ -616,23 +971,22 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
         g_bypass_why = "return turn refused";
         return (false);
     }
-    if (false == vc_wait_move_done())
+    if (false == vc_wait_move_done(3000U))
     {
         return (false);
     }
+    *p_applied_deg = b_left ? -f_turn : f_turn;
 
-    // 4. Drive until a sensor is on the line
+    // 4. Re-join: drive at the line, then hold until S3 is armed
     tm_printf((UB*)"[VC] 4/5 seek line\n");
-    s5_alert_set_enabled(true);
 
-    if (false == vc_seek_line(f_leg))
+    if (false == vc_resume_line(f_leg))
     {
         return (false);
     }
 
-    s5_alert_set_enabled(false);
-
-    // 5. Straighten up
+    // 5. Straighten. S3 is armed now, so it can take over even if this
+    //    pivot swings the sensor off the line.
     tm_printf((UB*)"[VC] 5/5 straighten\n");
     if (MOTION_OK != (b_left ? motion_turn_left(f_turn)
                              : motion_turn_right(f_turn)))
@@ -640,7 +994,35 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm)
         g_bypass_why = "straighten refused";
         return (false);
     }
-    return (vc_wait_move_done());
+
+    if (false == vc_wait_move_done(3000U))
+    {
+        return (false);
+    }
+
+    *p_applied_deg = 0.0f;
+
+    /*
+     * The straighten pivot swings the front sensor off the line (a spin
+     * about the car's middle moves a sensor 7 cm ahead by about 5 cm).
+     * Put the line back under the centre before handing back, and re-arm
+     * if the sweep took long enough for S3 to reach FAILED.
+     */
+    if (false == vc_line_centre_black())
+    {
+        if (false == vc_sweep_line(b_left))     // straighten was the other way
+        {
+            g_bypass_why = "line lost after straighten";
+            return (false);
+        }
+
+        if (false == vc_hold_arm())
+        {
+            return (false);
+        }
+    }
+
+    return (true);
 }
 
 /*
@@ -657,6 +1039,8 @@ vc_bypass_task (INT stacd, void *p_exinf)
     };
     uint32_t word = 0U;
     uint32_t best = S5_BEST_NONE;
+    uint32_t plan_cm = 0U;
+    float    applied_deg = 0.0f;
     bool     b_ok = true;
 
     (void)stacd;
@@ -680,18 +1064,51 @@ vc_bypass_task (INT stacd, void *p_exinf)
             }
             else if (S5_BEST_CENTRE == best)
             {
+                /*
+                 * Nothing to drive around. Re-join the line instead of
+                 * just clearing the stop: the car may be off the line
+                 * (after a boxed-in reverse) and S3 in FAILED, which
+                 * would leave it parked with no error at all.
+                 */
                 tm_printf((UB*)"[VC] bypass: centre clear at %u cm,"
-                          " carrying on\n", (UINT)S5_P_CENTRE(word));
-                (void)motion_clear_estop();
-                (void)s3_drive_set_enabled(true);
-                g_b_obstacle_stop = false;
-                g_bypass_attempts = 0U;
+                          " re-joining\n", (UINT)S5_P_CENTRE(word));
+                (void)s3_drive_set_enabled(false);
+                (void)vc_clear_estop();
+
+                if (vc_resume_line(VC_BYPASS_RESUME_CM))
+                {
+                    vc_hand_back();
+                }
+                else
+                {
+                    tm_printf((UB*)"[VC] no line to re-join (%s),"
+                              " stopped\n", g_bypass_why);
+                    s5_alert_set_enabled(true);
+                    g_bypass_attempts = 0U;
+                    g_bypass_retries = 0U;
+                    (void)motion_estop();
+                    (void)s3_drive_set_enabled(true);
+                }
             }
             else if (S5_BEST_NONE != best)
             {
-                tm_printf((UB*)"[VC] bypass: best %s, L %u C %u R %u cm\n",
-                          best_name[best], (UINT)S5_P_LEFT(word),
-                          (UINT)S5_P_CENTRE(word), (UINT)S5_P_RIGHT(word));
+                /*
+                 * Plan from the nearest distance S5 has reported: the
+                 * alert that stopped us and the scan can disagree by
+                 * metres (a hand in front at 7 cm, the room at 46 cm),
+                 * and the alert is the one the car actually saw.
+                 */
+                plan_cm = S5_P_CENTRE(word);
+
+                if ((g_alert_cm > 0U) && (g_alert_cm < plan_cm))
+                {
+                    plan_cm = g_alert_cm;
+                }
+
+                tm_printf((UB*)"[VC] bypass: best %s, L %u C %u R %u cm,"
+                          " plan %u cm\n", best_name[best],
+                          (UINT)S5_P_LEFT(word), (UINT)S5_P_CENTRE(word),
+                          (UINT)S5_P_RIGHT(word), (UINT)plan_cm);
 
                 g_bypass_attempts++;
 
@@ -699,43 +1116,56 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 {
                     /* An alert during a forward leg queues a fresh
                        profile and starts another manoeuvre; without this
-                       the car nudges forward for ever. */
+                       the car nudges forward for ever. Do not back off
+                       again here: the attempt counter is reset above, so
+                       backing off would repeat this every profile. */
                     g_bypass_why = "too many attempts";
-                    b_ok = false;
+                    g_bypass_attempts = 0U;
+                    (void)motion_estop();
+                    (void)s3_drive_set_enabled(true);
+                    tm_printf((UB*)"[VC] bypass gave up after %u attempts,"
+                              " stopped; GP20 releases\n",
+                              (UINT)VC_BYPASS_ATTEMPTS);
                 }
                 else
                 {
                     (void)s3_drive_set_enabled(false);
                     s5_alert_set_enabled(false);
-                    b_ok = vc_bypass_manoeuvre(best, S5_P_CENTRE(word));
-                }
-                /* [Hotfix 3] Latching the e-stop here closed both doors:
-                   S5 only alerts while it is clear, and a profile is only
-                   queued while g_b_obstacle_stop, so the car parked for
-                   good. Back off and let the scan plan again. */
-                if (b_ok)
-                {
-                    s5_alert_set_enabled(true);
-                    (void)s3_drive_set_enabled(true);
-                    g_b_obstacle_stop = false;
-                    g_bypass_retries = 0U;  // this obstacle is behind us
-                    g_bypass_attempts = 0U;
-                    tm_printf((UB*)"[VC] bypass done, line drive"
-                              " resumes\n");
-                }
-                else
-                {
-                    tm_printf((UB*)"[VC] bypass failed (%s), backing off"
-                              " to re-plan\n", g_bypass_why);
+                    b_ok = vc_bypass_manoeuvre(best, plan_cm, &applied_deg);
 
-                    (void)motion_clear_estop();
-                    (void)motion_move_backward(VC_BYPASS_BACK_CM);
-                    (void)vc_wait_move_done();
+                    if (b_ok)
+                    {
+                        tm_printf((UB*)"[VC] bypass done\n");
+                        vc_hand_back();
+                    }
+                    else
+                    {
+                        /*
+                         * [Hotfix 3] Latching the e-stop here closed both
+                         * doors: S5 only alerts while it is clear, and a
+                         * profile is only queued while g_b_obstacle_stop,
+                         * so the car parked for good. Undo the pivots,
+                         * back off and let the scan plan again.
+                         */
+                        tm_printf((UB*)"[VC] bypass failed (%s), backing"
+                                  " off to re-plan\n", g_bypass_why);
+                        tm_printf((UB*)"[VC] s2 fault bits 0x%02x\n",
+                                  (UINT)motion_get_fault_bits());
 
-                    s5_alert_set_enabled(true);
-                    s5_scan_request();
-                    (void)vc_wait_profile(VC_BYPASS_TIMEOUT_MS);
-                    g_b_obstacle_stop = true;   // so the next profile is used
+                        (void)vc_clear_estop();
+
+                        /* Back off before turning: a pivot 20 cm from
+                           the object sweeps the front into it. */
+                        (void)motion_move_backward(VC_BYPASS_BACK_CM);
+                        (void)vc_wait_move_done(
+                            vc_move_timeout_ms(VC_BYPASS_BACK_CM));
+                        (void)vc_restore_heading(applied_deg);
+
+                        s5_alert_set_enabled(true);
+                        s5_scan_request();
+                        (void)vc_wait_profile(VC_BYPASS_TIMEOUT_MS);
+                        g_b_obstacle_stop = true;   // so the next profile is used
+                    }
                 }
             }
             else
@@ -751,11 +1181,19 @@ vc_bypass_task (INT stacd, void *p_exinf)
                 {
                     g_bypass_retries++;
                     s5_alert_set_enabled(false);
-                    if (MOTION_OK == motion_clear_estop())
+
+                    if (false == vc_clear_estop())
+                    {
+                        tm_printf((UB*)"[VC] boxed in: stop would not"
+                                  " clear, not reversing\n");
+                    }
+                    else
                     {
                         (void)motion_move_backward(VC_BYPASS_BACK_CM);
-                        (void)vc_wait_move_done();
+                        (void)vc_wait_move_done(
+                            vc_move_timeout_ms(VC_BYPASS_BACK_CM));
                     }
+
                     s5_alert_set_enabled(true);
                     s5_scan_request();
                     tm_printf((UB*)"[VC] boxed in: reversed %d cm,"

@@ -48,6 +48,10 @@
 #define S5_CONFIRM_PINGS        (3U)        // in a row
 #define S5_NO_ECHO_PINGS        (5U)        // in a row = sensor fault
 #define S5_FINE_SAMPLES         (5U)
+/* The off-axis veto needs the mid ray to be clearly nearer than the
+   centre. At 20 cm, the mid beam already covers the object dead ahead,
+   so a 19 vs 20 cm difference is the object, not a grazing surface. */
+#define S5_VETO_MARGIN_CM       (12U)
 
 // Servo angles (deg). 110 = straight ahead. A LARGER angle swings the
 // sensor towards the car's left: confirmed against the car, the 150 deg

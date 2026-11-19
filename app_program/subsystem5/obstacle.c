@@ -45,6 +45,7 @@ static volatile uint32_t g_last_width_cm = 0U;     // last width estimate 0 = re
 static volatile bool g_b_profile_valid = false; // true if the last profile is valid (not FAULT)
 static volatile bool g_b_alert_enabled = true; // VC stand-down
 static volatile bool g_b_scan_requested = false;
+static uint32_t g_alert_cm = 0U;               // centre distance of the last ALERT
 
 static s5_state_t obstacle_forward(void);
 static s5_state_t obstacle_wait_stop(void);
@@ -194,6 +195,7 @@ obstacle_forward (void)
         if ((s_close >= S5_CONFIRM_PINGS) && (false == motion_is_estopped()) && (true == g_b_alert_enabled)) // Only fires when nobody ask S5 to stop
         {
             s_close = 0U;
+            g_alert_cm = dist_cm;
             obstacle_send(s5_profile_pack(0U, dist_cm, 0U, S5_KIND_ALERT,
                                           S5_BEST_NONE));
             next = S5_STATE_WAIT_STOP;
@@ -386,6 +388,19 @@ obstacle_scan (void)
               (UINT)g_scan_angle[4]);
 
     /*
+     * A close alert followed by a centre ping with no echo is not
+     * "clear": a bottle, a soft or angled surface can stop returning an
+     * echo after the ping that stopped us. Treat the centre as unknown
+     * and let the sides decide, instead of declaring the lane clear and
+     * driving into the same object again.
+     */
+    if ((ULTRA_MAX_CM == dist_cm[2]) && (0U != g_alert_cm)
+        && (g_alert_cm <= S5_ALERT_CM))
+    {
+        dist_cm[2] = ULTRA_NO_ECHO;
+    }
+
+    /*
      * The outer sample IS the lane: it is the direction the car drives
      * along after the bypass turn. The mid samples are for the width
      * only. Do not AND them in here - an object dead ahead is always
@@ -440,13 +455,22 @@ obstacle_scan (void)
      * ray reports a short one is a flat surface seen at a grazing angle:
      * the pulse bounced off down the face and returned from the far end.
      * Believe the near one.
+     *
+     * Only when the centre is a real reading, and only when the mid is
+     * clearly nearer: at 20 cm the mid beam already covers the object
+     * dead ahead, so 19 against 20 is that object, not a grazing face.
+     * A centre with no echo cannot be compared at all.
      */
-    if ((S5_BEST_LEFT == best) && (dist_cm[1] < dist_cm[2]))
+    if ((S5_BEST_LEFT == best)
+        && (dist_cm[2] > ULTRA_NO_ECHO) && (dist_cm[2] < ULTRA_MAX_CM)
+        && ((dist_cm[1] + S5_VETO_MARGIN_CM) < dist_cm[2]))
     {
         best = S5_BEST_NONE;
     }
 
-    if ((S5_BEST_RIGHT == best) && (dist_cm[3] < dist_cm[2]))
+    if ((S5_BEST_RIGHT == best)
+        && (dist_cm[2] > ULTRA_NO_ECHO) && (dist_cm[2] < ULTRA_MAX_CM)
+        && ((dist_cm[3] + S5_VETO_MARGIN_CM) < dist_cm[2]))
     {
         best = S5_BEST_NONE;
     }

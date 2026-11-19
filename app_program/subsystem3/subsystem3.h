@@ -113,6 +113,13 @@ IMPORT uint32_t s3_nav_map_read(void);
  */
 IMPORT void s3_drive_set_enabled(bool b_on);
 
+/*!
+ * True while the line follower is armed (200 cycles of centre black seen).
+ * Published once per cycle as one aligned bool, read-only for other tasks.
+ * The VC uses it to skip its arm hold when S3 never lost the arm.
+ */
+IMPORT bool s3_drive_is_armed(void);
+
 /*
  * Diagnostics for tests and NFR11 evidence. Written only by the Line
  * task; each field is one aligned 16-bit store, so a reader never sees

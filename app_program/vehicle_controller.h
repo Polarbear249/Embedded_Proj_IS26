@@ -77,17 +77,33 @@ IMPORT ID vc_mbf_profile;
  */
 #define VC_BYPASS_PRI           (7)         // TEAM.md 4: VC band
 #define VC_BYPASS_POLL_MS       (20)
-#define VC_BYPASS_TIMEOUT_MS    (8000U)     // per move
+#define VC_BYPASS_TIMEOUT_MS    (8000U)     // wait for a fresh PROFILE
 /* [Hotfix 2] The 30cm leg was fixed, so after a reverse the car turned
    back while still short of the object and drove at it. Cap the longer
-   computed leg so it still fits the 8s move timeout. */
+   computed leg. */
 #define VC_BYPASS_FWD_CM        (30.0f)     // minimum leg
 #define VC_BYPASS_FWD_MAX_CM    (80.0f)     // cap on the computed leg
-#define VC_BYPASS_SEEK_CM       (40.0f)     // It will drive looking for the line
-#define VC_BYPASS_SEEK_MS       (10000U)    // timeout
-#define VC_BYPASS_BACK_CM       (12.0f)     // if the line is not found, back up and try again
-#define VC_BYPASS_RETRIES       (3U)        // how many times to try the bypass manoeuvre
-#define VC_BYPASS_ATTEMPTS      (3U)        // full manouevres before giving up
+#define VC_BYPASS_BACK_CM       (12.0f)     // reverse before a pivot, and to re-plan
+#define VC_BYPASS_RETRIES       (3U)        // boxed-in reverses before giving up
+#define VC_BYPASS_ATTEMPTS      (3U)        // full manoeuvres before giving up
+
+/* Per-move wait, derived from the distance. The encoder move is the real
+   limit; this only catches a move that never ends. 5 cm/s is below the
+   measured 8 to 10 cm/s, so it cannot cut a good move short. */
+#define VC_BYPASS_SPEED_CMS     (5U)
+#define VC_BYPASS_MOVE_EXTRA_MS (3000U)
+
+/* Re-joining the line after a manoeuvre or a re-plan. S3 arms itself
+   after 200 cycles of 10 ms with the centre sensor black, and its arm
+   counter keeps running while the VC has it stood down. Holding the car
+   still on the line for 2.6 s therefore hands back an armed follower,
+   which is what makes the hand-back reliable. */
+#define VC_BYPASS_ARM_MS        (2600U)
+#define VC_BYPASS_ARM_WAIT_MS   (5000U)     // give up if the line is not held
+#define VC_BYPASS_RESUME_CM     (60.0f)     // seek cap when re-joining
+#define VC_BYPASS_RESUME_MS     (1500U)     // S3 should be driving by then
+#define VC_BYPASS_SWEEP_DEG     (36.0f)     // pivot search range, each way
+#define VC_BYPASS_MIN_STOP_CM   (30U)       // closer: back off before pivoting
 
 ER vc_init(void);
 ER vc_start(void);
