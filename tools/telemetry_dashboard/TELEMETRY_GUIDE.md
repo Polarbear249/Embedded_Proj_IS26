@@ -13,7 +13,7 @@ Mosquitto is installed.
 Read this once so the steps below make sense.
 
 1. The car joins a WiFi network (your hotspot).
-2. The car publishes a 13-byte telemetry frame 5 times a second to an **MQTT
+2. The car publishes a 27-byte telemetry frame 5 times a second to an **MQTT
    broker** running on your laptop. MQTT is just a small
    publish/subscribe messaging protocol — the broker is the post office in
    the middle.
@@ -22,8 +22,8 @@ Read this once so the steps below make sense.
    - port `9001` — MQTT over WebSockets, this is the door the **browser**
      knocks on. Browsers cannot speak raw MQTT, only WebSockets, which is
      why we need both.
-4. `index.html` is the dashboard. It opens in your browser, connects to
-   port 9001, subscribes to the car's topic, decodes the 13 bytes, and
+4. `picocar_dashboard.html` is the dashboard. It opens in your browser, connects to
+   port 9001, subscribes to the car's topic, decodes the 27 bytes, and
    draws them.
 
 So: **car → hotspot → laptop → Mosquitto → browser.** If any link in that
@@ -285,7 +285,7 @@ When the car connects you'll see a line naming the client `mtk3smp-pico`.
 ## 9. Open the dashboard
 
 1. In File Explorer, go to `tools/telemetry_dashboard/` in the repo.
-2. **Double-click `index.html`.** It opens in your browser. That's it —
+2. **Double-click `picocar_dashboard.html`.** It opens in your browser. That's it —
    there is no web server to run, no `npm install`, no internet needed.
    Everything including the MQTT client is written into that one file.
 3. At the top, in the **Broker** box, type the IP from step 4 (the same
@@ -306,15 +306,37 @@ Cards are grouped by whose subsystem owns the data, so you can tell at a
 glance whose code to go shout at.
 
 - **Motion (S2)** — vehicle state, motor state, wheel speeds left and
-  right, distance travelled in cm.
+  right, distance travelled in cm, and (greyed) the raw **encoder
+  counts** for each wheel. About 61 counts per cm; negative means the
+  wheel went backwards. If L and R drift apart while driving straight,
+  one wheel is slipping.
 - **Line & barcode (S3)** — line error (how far off centre, signed),
-  line OK flag, junction detected, barcode decoded flag and the decoded
-  command.
-- **Terrain (S4)** — hump height in mm from the IMU.
+  line OK flag, junction detected, and three barcode rows:
+  - **Barcode letter** — the last letter scanned, e.g. `A`.
+  - **Barcode** — what that letter means under the mapping the car
+    reports, e.g. `LEFT`. A letter with no mapping shows
+    `not mapped, default STRAIGHT`, which is what the car does with it.
+  - **Last crossroad** (greyed, for debugging) — the turn the car made
+    at the last cross-junction, e.g. `turned LEFT`. It only changes
+    when the car reaches one. The car remembers one letter at a time,
+    so scanning B before reaching a crossroad replaces an earlier C.
+  - **Barcode reads** (greyed) — barcodes decoded OK vs failed since
+    boot. Lots of failures means the scanner is struggling.
+- **Terrain (S4)** —
+  - **Highest hump** — the highest hump since the car booted. This is
+    the figure the brief asks for ("report the highest hump peak
+    experienced during the run"), so read it at the end of a run.
+    Reset or reflash starts it from zero.
+  - **Last hump** — the most recent hump.
+  - **IMU** (greyed) — `starting`, `calibrating - keep still`, `active`
+    or `FAULT`. Hump heights only count once it says `active`, so keep
+    the car still at power-up until it does.
 - **Obstacle (S5)** — obstacle valid flag, left and right clearances,
   and the measured width of the obstacle.
 - **Faults** — five bits: motor stall, encoder, IMU, no echo, WiFi loss.
-- **Link (S1)** — frames received, frames dropped, frames rejected.
+- **Link (S1)** — frames received, frames dropped, frames rejected,
+  heartbeat, and (greyed) **Commands**: how many dashboard commands the
+  car accepted vs rejected. Turns amber if any were rejected.
 
 Three counters worth understanding:
 
@@ -339,8 +361,10 @@ The dashboard can send commands back to the car.
 
 - **Stop** — emergency stop. Cuts the motors and disarms line following.
 - **Start** — clears the stop and re-arms line following.
-- **Ping** — does nothing to the car but prints `[VC] MQTT PING` on the
-  serial console. Use it to prove the command path works end to end.
+- **Reset** — reboots the car, same as the RST button on the Robo Pico.
+  It asks you to confirm first. The car stops, reboots and rejoins WiFi
+  in about 10 seconds; the dashboard greys out meanwhile and recovers
+  by itself. **The barcode mapping is lost on reset — send it again.**
 - **Slow / Medium / Fast** — sets the base driving speed to 4, 7 and
   11 cm/s respectively.
 
@@ -348,6 +372,42 @@ The dashboard can send commands back to the car.
 > to overcome static friction and the motors just buzz. Above about
 > 11 cm/s the duty cycle hits its ceiling and larger numbers do nothing.
 > Fixed buttons mean nobody can type a value that silently does neither.
+
+### The barcode mapping — do this before every demo run
+
+The second bar sets which letter means which movement.
+
+Subsystem 3 boots with a built-in table (A=left, B=right, C=straight,
+D=U-turn), but `subsystem3.h` calls that a **test stand-in** and says the
+real mapping must arrive from the PC over MQTT. That's what this bar
+does. Until you press **Send mapping**, the car is running on the
+stand-in.
+
+To use it:
+
+1. Pick a letter for each of Left, Right, Straight and U-turn.
+2. Press **Send mapping**. That sends four `SET_MAP` commands, one per
+   movement.
+3. Watch the **Car has** line under the dropdowns. It shows the mapping
+   the car itself reports in every frame, so when it changes to what you
+   picked, the car has it. If it doesn't change within a second, press
+   Send again (sending the same mapping twice is harmless).
+
+   The serial console also shows four lines:
+   ```
+   [VC] MQTT SET_MAP 'A' -> LEFT
+   [VC] MQTT SET_MAP 'B' -> RIGHT
+   [VC] MQTT SET_MAP 'C' -> STRAIGHT
+   [VC] MQTT SET_MAP 'D' -> U-TURN
+   ```
+
+The dashboard refuses to send if you give the same letter to two
+movements — the car wouldn't reject that, the second one would just
+silently win, so it's caught here instead of on the track.
+
+The mapping takes effect at the next cross-junction. It is not saved
+across a reboot, so **re-send it after every reflash or RST** — you'll
+see **Car has** go back to `A=LEFT B=RIGHT C=STRAIGHT D=U-TURN`.
 
 To confirm a command actually landed, watch the serial console (step 12).
 You should see lines like:
@@ -425,6 +485,19 @@ The browser side is fine; the car isn't publishing.
 - The **rejected** counter is probably climbing. Firmware and dashboard
   disagree on the frame format. Make sure both are from the same commit.
 
+**"rejected" is climbing and nothing ever displays**
+
+The frame is **v4, 27 bytes** as of this version. A car still running
+older firmware sends 13-, 14- or 17-byte frames, which this dashboard rejects
+on purpose rather than mis-reading. Rebuild and reflash the car from the same
+commit as the dashboard.
+
+**Barcode letter shows "none yet" forever**
+
+That is a real reading, not a missing one — `bc_char` stays 0 until S3
+reports a decoded letter. If it never changes, the barcode sensor isn't
+decoding, which is a Subsystem 3 problem, not a telemetry one.
+
 **Telemetry works but the car never moves**
 
 - It may be in emergency stop. Press **Start** on the dashboard.
@@ -462,9 +535,13 @@ ipconfig
 
 Dashboard:
 ```
-tools/telemetry_dashboard/index.html   (double-click)
+tools/telemetry_dashboard/picocar_dashboard.html   (double-click)
 ```
 
 Ports: **1883** car to broker, **9001** broker to browser.
 
 Topics: `mtk3smp-pico/telem`, `mtk3smp-pico/cmd`, `mtk3smp-pico/heartbeat`.
+
+Telemetry frame: **v4, 27 bytes**. Command frame: v1, 3 bytes.
+
+Before each demo run: **Send mapping**, then Start.

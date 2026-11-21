@@ -27,6 +27,7 @@
 #ifndef VEHICLE_CONTROLLER_H
 #define VEHICLE_CONTROLLER_H
 
+#include <stdbool.h>
 #include "app.h"
 
 // Off by default since S3's line follower (S3_DRIVE_ENABLE) drives the
@@ -111,6 +112,29 @@ IMPORT ID vc_mbf_profile;
 #define VC_CMD_DUTY_PER_CMS     (17)
 #define VC_CMD_DEPTH            (8U)
 #define VC_RESET_FLUSH_MS       (100U)  /* let the RESET line print */
+
+/* Manual mode (dashboard arrow keys, CMD_MODE / CMD_DRIVE).
+   Forward: Buddy 2's motion_set_speed(), PI speed control with the start
+   kick, at the same RPM line following uses for the chosen Speed (duty
+   / S3_DRIVE_DUTY_PER_RPM). Tried first with motion_set_duty(): capped
+   at 20 % with no kick, it could not start the wheels at all. The line
+   drive is not used because it stops whenever S3 reports the line
+   FAILED, which is normal when driving off the line by hand.
+   motion_set_speed() has no lease, so the VC keeps its own "hold": every
+   FORWARD / BACK command that arrives renews it, and while it lasts the
+   estop task re-asserts the drive every VC_ESTOP_POLL_MS, so a MOTION_BUSY
+   (S2's command lock taken for an instant) is retried 20 ms later rather
+   than at the next WiFi packet. No command for VC_MANUAL_LEASE_MS and the
+   motors stop. The dashboard sends an explicit stop on release, so the
+   lease only matters when packets are lost; 600 ms rides out WiFi
+   bursts that made 300 ms stop and restart the car about once a second.
+   Back: motion_set_speed() is forward only, so back is ONE long Buddy 2
+   motion_move_backward() (smooth, at S2's move speed), cancelled by the
+   release stop or the lease. Turns are motion_turn_*() steps. */
+#define VC_MANUAL_LEASE_MS      (600U)
+#define VC_MANUAL_RPM_MAX       (30.0f)     // = MOTION_MAX_TARGET_RPM (S2, private)
+#define VC_MANUAL_TURN_DEG      (15.0f)     // one turn step     TODO_TUNE
+#define VC_MANUAL_BACK_CM       (100.0f)    // longest single reverse
 /* After the turn back, the straight return to the lane is about the leg
    length again (the outbound and return angles are the same), but a
    turn that under-rotates makes the return longer. Give the seek 60 %
@@ -150,5 +174,8 @@ IMPORT ID vc_mbf_profile;
 
 ER vc_init(void);
 ER vc_start(void);
+
+/* true while the dashboard has the car in manual mode (any task). */
+bool vc_is_manual(void);
 
 #endif // VEHICLE_CONTROLLER_H

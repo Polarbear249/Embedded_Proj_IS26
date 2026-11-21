@@ -8,7 +8,7 @@
 #include <string.h>
 #include "telemetry_frame.h"
 
-#define CMD_CMD_MAX	CMD_RESET
+#define CMD_CMD_MAX	CMD_SCAN
 
 static void put_bits(uint8_t *buf, uint32_t *pos, uint32_t width, uint32_t value)
 {
@@ -198,13 +198,19 @@ static int cmd_in_range(const T_CMD *c)
 	if (c->cmd == CMD_SET_SPEED) {
 		return c->arg <= CMD_SPEED_MAX;
 	}
+	if (c->cmd == CMD_MODE) {
+		return c->arg <= CMD_MODE_MANUAL;
+	}
+	if (c->cmd == CMD_DRIVE) {
+		return c->arg <= CMD_DRIVE_RIGHT;
+	}
 	if (c->cmd == CMD_SET_MAP) {
 		/* Both halves are checked: a letter index above 'Z' would
 		   otherwise reach s3_nav_map_set() as a junk character. */
 		return (CMD_MAP_MOVEMENT(c->arg) <= CMD_MAP_MOVEMENT_MAX) &&
 		       (CMD_MAP_LETTER(c->arg) <= CMD_MAP_LETTER_MAX);
 	}
-	return c->arg == 0U;	/* STOP, START, PING, RESET: no argument */
+	return c->arg == 0U;	/* STOP, START, PING, RESET, SCAN: no argument */
 }
 
 T_FRAME_STATUS cmd_encode(const T_CMD *in, uint8_t out[CMD_LEN])

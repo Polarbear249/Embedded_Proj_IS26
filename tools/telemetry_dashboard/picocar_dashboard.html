@@ -126,6 +126,21 @@
     padding: 7px 9px; border-radius: 6px; width: 72px;
     font-family: var(--mono); font-size: 13px;
   }
+  /* Mode badge and the manual drive pad */
+  .modepill { font-family: var(--mono); font-size: 12px; padding: 3px 9px;
+              border-radius: 999px; border: 1px solid var(--line); color: var(--dim); }
+  .modepill.auto   { color: var(--ok);   border-color: var(--ok); }
+  .modepill.manual { color: var(--warn); border-color: var(--warn); font-weight: 600; }
+  .drivebar .pad { display: grid; grid-template-columns: repeat(3, 44px);
+                   grid-template-rows: repeat(2, 36px); gap: 5px; }
+  .drivebar #d-up    { grid-column: 2; grid-row: 1; }
+  .drivebar #d-left  { grid-column: 1; grid-row: 2; }
+  .drivebar #d-down  { grid-column: 2; grid-row: 2; }
+  .drivebar #d-right { grid-column: 3; grid-row: 2; }
+  .drivebar .arrow { padding: 0; font-size: 14px; touch-action: none; user-select: none; }
+  .drivebar .arrow.held { background: var(--warn); border-color: var(--warn); color: #111; }
+  .drivebar .drivehint { font-size: 12px; color: var(--dim); }
+  .drivebar.live .drivehint { color: var(--warn); }
   #cmdlog, #maplog { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-left: auto; }
   .maplbl { font-size: 12px; color: var(--dim); margin-left: 6px; }
   /* Full-width second line of the map bar: the mapping the car reports,
@@ -172,7 +187,7 @@
 
   <div class="hero">
     <div class="box">
-      <div class="label">Vehicle</div>
+      <div class="label">Vehicle &middot; <span id="h-mode">&mdash;</span></div>
       <div class="value" id="h-state">&mdash;</div>
     </div>
     <div class="box">
@@ -251,11 +266,28 @@
     <button id="c-stop"  class="danger" disabled>Stop</button>
     <button id="c-start" disabled>Start</button>
     <button id="c-reset" disabled title="Reboot the car, same as the RST button">Reset</button>
+    <span class="label">Mode</span>
+    <button id="c-auto"   disabled title="Line following and obstacle avoidance">Auto</button>
+    <button id="c-manual" disabled title="Drive with the arrow keys">Manual</button>
+    <span class="modepill" id="modepill">&mdash;</span>
     <span class="label">Speed</span>
     <button id="c-slow" disabled>Slow</button>
     <button id="c-med"  disabled>Medium</button>
     <button id="c-fast" disabled>Fast</button>
     <span id="cmdlog"></span>
+  </div>
+
+  <!-- Manual driving. Only live while the CAR reports manual mode. -->
+  <div class="cmdbar drivebar" id="drivebar">
+    <span class="label">Manual drive</span>
+    <div class="pad">
+      <button class="arrow" id="d-up"    data-dir="1" disabled aria-label="Forward">&#9650;</button>
+      <button class="arrow" id="d-left"  data-dir="3" disabled aria-label="Turn left">&#9664;</button>
+      <button class="arrow" id="d-down"  data-dir="2" disabled aria-label="Back">&#9660;</button>
+      <button class="arrow" id="d-right" data-dir="4" disabled aria-label="Turn right">&#9654;</button>
+    </div>
+    <button id="d-scan" disabled title="One ultrasonic sweep; updates the Obstacle card. Car must be still.">Scan</button>
+    <span class="drivehint" id="drivehint">Press Manual to drive with the arrow keys</span>
   </div>
 
   <!-- subsystem3.h: the built-in A/B/C/D table is a test stand-in and the
@@ -327,7 +359,10 @@
 var TELEM_VERSION = 4, TELEM_LEN = 27;
 var CMD_VERSION = 1;
 var CMD_STOP = 1, CMD_START = 2, CMD_SET_SPEED = 3, CMD_PING = 4,
-    CMD_SET_MAP = 5, CMD_RESET = 6;
+    CMD_SET_MAP = 5, CMD_RESET = 6, CMD_MODE = 7, CMD_DRIVE = 8, CMD_SCAN = 9;
+var MODE_AUTO = 0, MODE_MANUAL = 1;
+var DRIVE_STOP = 0, DRIVE_FWD = 1, DRIVE_BACK = 2, DRIVE_LEFT = 3, DRIVE_RIGHT = 4;
+var DRIVE_NAME = ["stop", "forward", "back", "left", "right"];
 
 var TOPIC_TELEM = "mtk3smp-pico/telem";
 var TOPIC_CMD   = "mtk3smp-pico/cmd";
@@ -617,6 +652,10 @@ function onFrame(bytes) {
   nrx++;
   lastFrameAt = Date.now();
 
+  /* vstate is the car's own report of its mode (telemetry_frame.h). */
+  carManual = (t.vstate === 1);
+  updateDriveUI();
+
   /* seq is 5 bits and wraps at 32, so a gap means frames went missing. */
   if (lastSeq !== null) {
     var gap = (t.seq - lastSeq + 32) % 32;
@@ -706,10 +745,12 @@ setInterval(function () {
   document.querySelector(".hero").classList.toggle("stale", age > 2500);
   $("h-rate").textContent =
     age > 2500 ? "stalled" : (recent.length / 3).toFixed(1) + " Hz";
+  updateDriveUI();
 }, 250);
 
 function enableCmds(on) {
-  ["c-stop", "c-start", "c-reset", "c-slow", "c-med", "c-fast", "c-map",
+  ["c-stop", "c-start", "c-reset", "c-auto", "c-manual",
+   "c-slow", "c-med", "c-fast", "c-map",
    "m-left", "m-right", "m-straight", "m-uturn"].forEach(function (id) {
     $(id).disabled = !on;
   });
@@ -722,8 +763,157 @@ function sendCmd(cmd, arg, name) {
   $("cmdlog").textContent = "sent " + name + " (seq " + cmdSeq + ")";
 }
 
-$("c-stop").onclick  = function () { sendCmd(CMD_STOP, 0, "STOP"); };
+$("c-stop").onclick  = function () { releaseAll(); sendCmd(CMD_STOP, 0, "STOP"); };
 $("c-start").onclick = function () { sendCmd(CMD_START, 0, "START"); };
+/* ---- Manual mode -------------------------------------------------------
+   The car, not this page, decides the mode: carManual comes from vstate
+   in each frame, and driving is only allowed while that says MANUAL and
+   frames are fresh. Up/Down are repeated every 100 ms while held and the
+   car's 300 ms motor lease stops it soon after they stop -- on release,
+   on a lost connection, or if this tab dies. Releasing Up/Down also
+   sends an explicit stop. Left/Right are 15 degree turn steps on the
+   car; a held key repeats them, and release lets the current step end. */
+var carManual = false;
+var held = [];                      /* directions held, oldest first */
+var driving = DRIVE_STOP;           /* the direction being sent */
+var DRIVE_REPEAT_MS = 100;
+var lastDriveAt = 0;               /* when a drive was last sent */
+var KEY_DIR = { ArrowUp: DRIVE_FWD, ArrowDown: DRIVE_BACK,
+                ArrowLeft: DRIVE_LEFT, ArrowRight: DRIVE_RIGHT };
+
+function connected() { return !!(client && client.connected); }
+
+function canDrive() {
+  return connected() && carManual && lastFrameAt &&
+         (Date.now() - lastFrameAt) < 1000;
+}
+
+function sendDrive(dir, logIt) {
+  if (!connected()) { return; }
+  cmdSeq = (cmdSeq + 1) % 16;
+  client.publish(TOPIC_CMD, cmdEncode(CMD_DRIVE, dir, cmdSeq));
+  lastDriveAt = Date.now();
+  if (logIt) { $("cmdlog").textContent = "drive " + DRIVE_NAME[dir]; }
+}
+
+function isMove(dir) { return dir === DRIVE_FWD || dir === DRIVE_BACK; }
+
+/* The newest held direction wins; one direction at a time. */
+function applyHeld() {
+  var want = held.length ? held[held.length - 1] : DRIVE_STOP;
+  if (want === driving) { return; }
+  var was = driving;
+  driving = want;
+  if (want !== DRIVE_STOP) {
+    sendDrive(want, true);
+  } else if (isMove(was)) {
+    sendDrive(DRIVE_STOP, true);    /* a turn step is left to finish */
+  }
+  markHeld();
+}
+
+function pressDir(dir) {
+  if (!canDrive()) { return; }
+  held = held.filter(function (d) { return d !== dir; });
+  held.push(dir);
+  applyHeld();
+}
+
+function releaseDir(dir) {
+  held = held.filter(function (d) { return d !== dir; });
+  applyHeld();
+}
+
+function releaseAll() {
+  held = [];
+  applyHeld();
+}
+
+function markHeld() {
+  ["d-up", "d-down", "d-left", "d-right"].forEach(function (id) {
+    $(id).classList.toggle("held", Number($(id).dataset.dir) === driving);
+  });
+}
+
+/* Repeat 100 ms after the last send, not on a fixed clock, so a fresh
+   press is never followed by an instant duplicate. Checked every 20 ms. */
+setInterval(function () {
+  if (driving === DRIVE_STOP) { return; }
+  if (!canDrive()) { releaseAll(); return; }   /* lost manual or telemetry */
+  if (Date.now() - lastDriveAt >= DRIVE_REPEAT_MS) { sendDrive(driving, false); }
+}, 20);
+
+function updateDriveUI() {
+  var ok = canDrive();
+  var pill = $("modepill");
+  if (!lastFrameAt) {
+    pill.textContent = "\u2014"; pill.className = "modepill";
+    $("h-mode").textContent = "\u2014";
+  } else {
+    pill.textContent = carManual ? "MANUAL" : "AUTO";
+    pill.className = "modepill " + (carManual ? "manual" : "auto");
+    $("h-mode").textContent = carManual ? "manual" : "auto";
+  }
+  ["d-up", "d-down", "d-left", "d-right", "d-scan"].forEach(function (id) {
+    $(id).disabled = !ok;
+  });
+  $("drivebar").classList.toggle("live", ok);
+  $("drivehint").textContent =
+    !connected() ? "Connect first" :
+    !carManual   ? "Press Manual to drive with the arrow keys" :
+    !ok          ? "No telemetry - driving paused" :
+                   "Hold an arrow key or button. Up/Down at the Speed setting, Left/Right turn in steps. Scan when stopped.";
+}
+
+document.addEventListener("keydown", function (e) {
+  var dir = KEY_DIR[e.key];
+  if (!dir || !carManual) { return; }
+  var tag = (e.target && e.target.tagName) || "";
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") { return; }
+  e.preventDefault();               /* arrows must not scroll the page */
+  if (e.repeat) { return; }         /* the 100 ms timer does the repeat */
+  pressDir(dir);
+});
+
+document.addEventListener("keyup", function (e) {
+  var dir = KEY_DIR[e.key];
+  if (dir) { releaseDir(dir); }
+});
+
+/* Never leave the car driving because the page lost the key-up. */
+window.addEventListener("blur", releaseAll);
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) { releaseAll(); }
+});
+
+["d-up", "d-down", "d-left", "d-right"].forEach(function (id) {
+  var b = $(id), dir = Number(b.dataset.dir);
+  b.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (b.setPointerCapture) { b.setPointerCapture(e.pointerId); }
+    pressDir(dir);
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(function (ev) {
+    b.addEventListener(ev, function () { releaseDir(dir); });
+  });
+});
+
+/* One servo sweep; the car must be still, so let go of everything first.
+   The car refuses it while moving and says so on serial. */
+$("d-scan").onclick = function () {
+  releaseAll();
+  sendCmd(CMD_SCAN, 0, "SCAN");
+};
+
+$("c-auto").onclick = function () {
+  releaseAll();
+  sendCmd(CMD_MODE, MODE_AUTO, "AUTO");
+};
+$("c-manual").onclick = function () {
+  sendCmd(CMD_MODE, MODE_MANUAL, "MANUAL");
+  if (document.activeElement) { document.activeElement.blur(); }
+};
+
 /* Reset reboots the car the way its RST button does. It is the only
    command that cannot be undone from here, so it asks first. */
 $("c-reset").onclick = function () {
@@ -853,6 +1043,7 @@ $("connect").onclick = function () {
     },
     onError: function () { /* onclose reports it */ },
     onClose: function () {
+      releaseAll();
       setStatus("off", "offline");
       $("connect").textContent = "Connect";
       $("connect").classList.add("primary");

@@ -30,6 +30,7 @@
 #include "../subsystem4/subsystem4.h"		/* IF-11: hump word, state */
 #include "../subsystem4/imu_hump.h"		    /* IMU_HUMP_W_* field macros */
 #include "../subsystem5/subsystem5.h"		/* IF-09 word, s5_get_obstacle() */
+#include "../vehicle_controller.h"		/* vc_is_manual() */
 
 /*
  *	Subsystem 5 has no getter yet, so the obstacle fields stay empty.
@@ -372,9 +373,10 @@ static void collect_snapshot(T_TELEM *snap)
 	snap->cmd_ok  = sat8(s1_cmd_accepted());
 	snap->cmd_rej = sat8(s1_cmd_rejected());
 
-	/* vstate is the Vehicle Controller's mission state. vehicle_controller.c
-	   publishes no getter yet, so it stays 0 rather than carrying a guess. */
-	snap->vstate = 0U;
+	/* vstate: the Vehicle Controller's driving mode, read from the VC
+	   itself so the dashboard shows the car's mode, not the button the
+	   operator last pressed. */
+	snap->vstate = vc_is_manual() ? TELEM_VSTATE_MANUAL : TELEM_VSTATE_AUTO;
 }
 
 /* ---------------------------------------------------------------------

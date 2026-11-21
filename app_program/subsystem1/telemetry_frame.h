@@ -73,6 +73,10 @@
 #define TELEM_ENC_MIN		(-524288L)	/* -(2^19) */
 #define TELEM_ENC_MAX		(524287L)	/* 2^19 - 1 */
 #define TELEM_COUNT_MAX		255U	/* 8-bit counters saturate here */
+
+/* vstate (3 bits): the Vehicle Controller's driving mode. */
+#define TELEM_VSTATE_AUTO	0U	/* line following */
+#define TELEM_VSTATE_MANUAL	1U	/* arrow-key driving from the dashboard */
 #define TELEM_MAP_SLOT_BITS	5U
 #define TELEM_MAP_LETTER_MAX	26U	/* slot value for 'Z' */
 #define TELEM_MAP_SLOT(map, mv)	((uint8_t)(((map) >> ((mv) * 5U)) & 0x1FU))
@@ -92,6 +96,23 @@
 #define CMD_PING		4U	/* arg must be 0 */
 #define CMD_SET_MAP		5U	/* arg = movement<<5 | letter index */
 #define CMD_RESET		6U	/* arg must be 0: reboot the car */
+#define CMD_MODE		7U	/* arg = CMD_MODE_AUTO or CMD_MODE_MANUAL */
+#define CMD_DRIVE		8U	/* arg = CMD_DRIVE_*, manual mode only */
+#define CMD_SCAN		9U	/* arg must be 0: one servo scan, manual only */
+
+/*
+ *	Manual driving. CMD_MODE switches between line following (AUTO) and
+ *	arrow-key driving (MANUAL). CMD_DRIVE moves the car while in MANUAL;
+ *	the dashboard repeats it about every 100 ms while a key is held, and
+ *	the car's motor lease stops it shortly after the repeats stop.
+ */
+#define CMD_MODE_AUTO		0U
+#define CMD_MODE_MANUAL		1U
+#define CMD_DRIVE_STOP		0U
+#define CMD_DRIVE_FWD		1U
+#define CMD_DRIVE_BACK		2U
+#define CMD_DRIVE_LEFT		3U	/* spin left on the spot */
+#define CMD_DRIVE_RIGHT		4U	/* spin right on the spot */
 #define CMD_SPEED_MAX		100U
 
 /*

@@ -49,6 +49,12 @@ static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
 static void      vc_drain_commands(void);
 static void      vc_reboot(void);
+static void      vc_enter_manual(void);
+static void      vc_enter_auto(void);
+static void      vc_manual_drive(uint8_t direction);
+static void      vc_manual_scan(void);
+static void      vc_manual_watchdog(void);
+static void      vc_manual_assert(uint8_t direction);
 
 /* Names for the LINE_CMD_* movement values, for the serial log only. */
 static const char *
@@ -96,6 +102,16 @@ EXPORT ID vc_mbf_profile = 0;
 #if !VC_TEST_DRIVE
 static volatile bool     g_b_obstacle_stop = false;   // the last stop was ours
 static volatile bool     g_b_bypass_pending = false;
+/* Manual mode. g_b_bypass_busy is written by the bypass task only and is
+   true from the moment it takes a profile until it is idle again; with
+   g_b_bypass_pending it covers the whole bypass, so manual mode can be
+   refused for its whole length. g_b_manual is written by the estop task
+   only (it runs the command drain) and read by telemetry. */
+static volatile bool     g_b_bypass_busy = false;
+static volatile bool     g_b_manual = false;
+static int16_t           g_manual_duty = DRIVE_BASE_DUTY;
+static uint32_t          g_manual_hold_ticks = 0U; // estop-task ticks left
+static uint8_t           g_manual_hold_dir = CMD_DRIVE_STOP; // FWD or BACK
 static volatile uint32_t g_bypass_profile = 0U;
 static volatile uint32_t g_alert_cm = 0U;            // centre distance of the ALERT that stopped us
 
@@ -318,6 +334,7 @@ vc_estop_task (INT stacd, void *p_exinf)
 
         vc_drain_profiles();
         vc_drain_commands();
+        vc_manual_watchdog();
     }
 }
 
@@ -376,7 +393,14 @@ vc_drain_commands (void)
         case CMD_START:
             tm_printf((UB*)"[VC] MQTT START\n");
 
-            if (vc_clear_estop())
+            if (g_b_manual)
+            {
+                /* Releases the stop only: line following stays off
+                   until AUTO is pressed. */
+                tm_printf((UB*)"[VC] MANUAL: stop %s, still in manual\n",
+                          vc_clear_estop() ? "released" : "would not clear");
+            }
+            else if (vc_clear_estop())
             {
                 (void)s3_drive_set_enabled(true);
             }
@@ -393,6 +417,7 @@ vc_drain_commands (void)
                                ? DRIVE_DUTY_MAX : want;
 
                 line_drive_set_base_duty((int16_t)duty);
+                g_manual_duty = (int16_t)duty;   // manual forward/back too
 
                 tm_printf((UB*)"[VC] MQTT SET_SPEED %u cm/s -> duty %d%s\n",
                           (UINT)cmd.arg, (INT)duty,
@@ -430,6 +455,25 @@ vc_drain_commands (void)
             vc_reboot();
             break;
 
+        case CMD_MODE:
+            if (CMD_MODE_MANUAL == cmd.arg)
+            {
+                vc_enter_manual();
+            }
+            else
+            {
+                vc_enter_auto();
+            }
+            break;
+
+        case CMD_DRIVE:
+            vc_manual_drive(cmd.arg);
+            break;
+
+        case CMD_SCAN:
+            vc_manual_scan();
+            break;
+
         case CMD_PING:
             tm_printf((UB*)"[VC] MQTT PING\n");
             break;
@@ -449,6 +493,13 @@ vc_obstacle (uint32_t word)
         "left", "centre", "right", "none"
     };
     uint32_t kind = S5_P_KIND(word);
+
+    if (g_b_manual)
+    {
+        /* Manual mode turned S5's alerts off, so this is one queued from
+           before: the operator is driving, so no stop and no bypass. */
+        return;
+    }
 
     if (S5_KIND_ALERT == kind)
     {
@@ -1295,10 +1346,12 @@ vc_bypass_task (INT stacd, void *p_exinf)
     {
         if (false == g_b_bypass_pending)
         {
+            g_b_bypass_busy = false;    // manual mode: idle again
             (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
         }
         else
         {
+            g_b_bypass_busy = true;     // manual mode: set before pending clears
             word = g_bypass_profile;
             best = S5_P_BEST(word);
             g_b_bypass_pending = false;
@@ -1560,5 +1613,235 @@ vc_reboot (void)
     for (;;)
     {
         /* the reset lands within a few clock cycles */
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * Manual mode: the dashboard's arrow keys drive the car (CMD_MODE,
+ * CMD_DRIVE). Only the estop task calls these, from the command drain,
+ * which is also the only task that can start a bypass (vc_obstacle()),
+ * so the busy test below cannot race a bypass starting.
+ *
+ * Nothing here runs unless MANUAL is pressed: with it never pressed,
+ * the car behaves exactly as before.
+ * ------------------------------------------------------------------ */
+
+bool
+vc_is_manual (void)
+{
+    return (g_b_manual);
+}
+
+static void
+vc_enter_manual (void)
+{
+    if (g_b_manual)
+    {
+        tm_printf((UB*)"[VC] MANUAL: already in manual\n");
+        return;
+    }
+
+    if (g_b_bypass_busy || g_b_bypass_pending)
+    {
+        /* The bypass drives the motors itself and, when it ends, turns
+           line following and S5's alerts back on: it would fight the
+           operator. */
+        tm_printf((UB*)"[VC] MANUAL refused: going round an obstacle."
+                  " Press Stop, wait a few seconds, try again\n");
+        return;
+    }
+
+    g_b_manual = true;          // first: a queued S5 word is now ignored
+    g_b_obstacle_stop = false;  // as GP20 does: the operator takes over
+    s5_alert_set_enabled(false);
+    (void)s3_drive_set_enabled(false);
+    (void)motion_stop();
+
+    if (!vc_clear_estop())
+    {
+        tm_printf((UB*)"[VC] MANUAL: stop would not clear, press Start\n");
+    }
+
+    tm_printf((UB*)"[VC] MANUAL: line following and obstacle"
+              " avoidance OFF\n");
+}
+
+static void
+vc_enter_auto (void)
+{
+    bool b_was_manual = g_b_manual;
+
+    if (g_b_bypass_busy || g_b_bypass_pending)
+    {
+        /* Already AUTO and mid-bypass: handing back now would restart
+           the line drive under the bypass. */
+        tm_printf((UB*)"[VC] AUTO: going round an obstacle, ignored\n");
+        return;
+    }
+
+    g_b_manual = false;
+    g_manual_hold_dir = CMD_DRIVE_STOP;
+    g_manual_hold_ticks = 0U;
+    (void)motion_stop();
+    vc_release_to_line();       // stop cleared, S3 on, S5 alerts on
+
+    tm_printf((UB*)"[VC] AUTO: line following and obstacle avoidance"
+              " ON%s\n", b_was_manual ? "" : " (was already auto)");
+}
+
+/* Forward / back while held: called on each command and re-asserted every
+   estop-task tick by vc_manual_watchdog(). Repeats are harmless: same-
+   direction speed keeps the PI state (no re-kick), and a running reverse
+   move answers MOTION_BUSY without changing anything. */
+static void
+vc_manual_assert (uint8_t direction)
+{
+    float rpm = (float)g_manual_duty / (float)S3_DRIVE_DUTY_PER_RPM;
+
+    if (rpm > VC_MANUAL_RPM_MAX)
+    {
+        rpm = VC_MANUAL_RPM_MAX;  // same as line following at this Speed
+    }
+
+    if (CMD_DRIVE_FWD == direction)
+    {
+        (void)motion_set_speed(rpm, rpm);
+    }
+    else if (CMD_DRIVE_BACK == direction)
+    {
+        (void)motion_move_backward(VC_MANUAL_BACK_CM);
+    }
+    else
+    {
+        // turns are steps, not held
+    }
+}
+
+static void
+vc_manual_drive (uint8_t direction)
+{
+    static uint8_t last_direction = CMD_DRIVE_STOP;
+    static char const * const name[] =
+    {
+        "stop", "forward", "back", "left", "right"
+    };
+
+    if (!g_b_manual)
+    {
+        return;                 // AUTO: the line drive owns the motors
+    }
+
+    if ((CMD_DRIVE_FWD == direction) || (CMD_DRIVE_BACK == direction))
+    {
+        if ((g_manual_hold_dir != direction) &&
+            (CMD_DRIVE_STOP != g_manual_hold_dir))
+        {
+            (void)motion_stop();  // forward <-> back: end the old one first
+        }
+
+        /* The operator is holding the key: renew on arrival, whatever
+           S2 answered. */
+        g_manual_hold_dir = direction;
+        g_manual_hold_ticks = VC_MANUAL_LEASE_MS / VC_ESTOP_POLL_MS;
+        vc_manual_assert(direction);
+    }
+    else
+    {
+        if (CMD_DRIVE_STOP != g_manual_hold_dir)
+        {
+            (void)motion_stop();  // leaving forward / back
+        }
+
+        g_manual_hold_dir = CMD_DRIVE_STOP;
+        g_manual_hold_ticks = 0U;
+
+        if (CMD_DRIVE_LEFT == direction)
+        {
+            /* MOTION_BUSY while a step is still turning: a held key's
+               repeats wait for it, then start the next step. */
+            (void)motion_turn_left(VC_MANUAL_TURN_DEG);
+        }
+        else if (CMD_DRIVE_RIGHT == direction)
+        {
+            (void)motion_turn_right(VC_MANUAL_TURN_DEG);
+        }
+        else
+        {
+            (void)motion_stop();
+        }
+    }
+
+    /* A held key repeats about 10 times a second: log changes only. */
+    if ((direction != last_direction) && (direction <= CMD_DRIVE_RIGHT))
+    {
+        tm_printf((UB*)"[VC] MANUAL %s\n", name[direction]);
+        last_direction = direction;
+    }
+}
+
+/*
+ * One servo scan in manual mode, so the dashboard's obstacle card can be
+ * refreshed while the operator drives. Uses S5's own s5_scan_request()
+ * (the bypass uses it to rescan): S5 sweeps left / centre / right once
+ * and sends a PROFILE. vc_obstacle() ignores that word in manual mode, so
+ * the car neither stops nor drives round anything; the profile only
+ * updates s5_get_obstacle() for telemetry. After the scan S5's
+ * wait-for-release step returns to pinging at once, because nothing
+ * latched a stop. Refused while the car moves: S5 only scans a
+ * stationary car (Tribunal 1), a scan in motion reads wrong.
+ */
+static void
+vc_manual_scan (void)
+{
+    motion_status_t status = {0.0f, 0.0f, 0, 0, MOTION_STATE_STOPPED};
+
+    if (!g_b_manual)
+    {
+        tm_printf((UB*)"[VC] SCAN: manual mode only (in auto the"
+                  " scanner runs by itself)\n");
+        return;
+    }
+
+    if ((MOTION_OK != motion_get_status(&status))
+        || (MOTION_STATE_RUNNING == status.state))
+    {
+        tm_printf((UB*)"[VC] SCAN refused: stop the car first\n");
+        return;
+    }
+
+    s5_scan_request();
+    tm_printf((UB*)"[VC] MANUAL scan requested\n");
+}
+
+/*
+ * motion_set_speed() has no lease, so manual forward gets one here: the
+ * estop task calls this every VC_ESTOP_POLL_MS, and when no forward
+ * command has renewed the count for VC_MANUAL_LEASE_MS the motors stop.
+ * Covers a key-up that never arrived, a dead dashboard and WiFi loss.
+ * Same task as the command drain, so no lock is needed.
+ */
+static void
+vc_manual_watchdog (void)
+{
+    if (CMD_DRIVE_STOP == g_manual_hold_dir)
+    {
+        return;
+    }
+
+    if (g_manual_hold_ticks > 0U)
+    {
+        g_manual_hold_ticks--;
+    }
+
+    if (0U == g_manual_hold_ticks)
+    {
+        (void)motion_stop();
+        g_manual_hold_dir = CMD_DRIVE_STOP;
+        tm_printf((UB*)"[VC] MANUAL: no command for %u ms, stopped\n",
+                  (UINT)VC_MANUAL_LEASE_MS);
+    }
+    else
+    {
+        vc_manual_assert(g_manual_hold_dir);   // retry a BUSY within 20 ms
     }
 }

@@ -94,3 +94,6 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-21 | S1-P17 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: car-reported mapping (nav_map). |
 | 2026-11-21 | S1-P18 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: encoder counts keep their sign. |
 | 2026-11-21 | S1-P19 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: all v4 fields against a hand-computed frame. |
+| 2026-11-21 | S1-P12 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_manual.txt` | Unknown command is now 10 (7 = MODE, 8 = DRIVE, 9 = SCAN). 21 of 21 passed on the PC. |
+| 2026-11-21 | S1-P20 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_manual.txt` | New: MODE and DRIVE commands. |
+| 2026-11-21 | S1-P21 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_manual.txt` | New: SCAN command. |

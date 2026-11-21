@@ -171,7 +171,7 @@ int main(void)
 	ok = ok && cmd_encode(&c, k) == FRAME_OK && cmd_decode(k, CMD_LEN, &d) == FRAME_OK;
 	c.arg = 1;          ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;   /* STOP takes no arg */
 	c.cmd = 0; c.arg = 0; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE; /* unknown cmd */
-	c.cmd = 7;          ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
+	c.cmd = 10;         ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
 	c.cmd = CMD_SET_SPEED; c.arg = 101; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
 	c.arg = 100; c.seq = 16; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
 	k[0] = 0x01U; k[1] = 0x3FU; k[2] = 0xFFU;                              /* arg 255 */
@@ -332,6 +332,45 @@ int main(void)
 		     telem_decode(f, TELEM_LEN, &u) == FRAME_OK && same(&t, &u);
 	}
 	CHECK("S1-P19", ok, "all v4 fields together match a hand-computed frame");
+
+	/* S1-P20: MODE takes only AUTO (0) or MANUAL (1); DRIVE only STOP,
+	   FWD, BACK, LEFT, RIGHT (0..4). Both round-trip with their seq, and
+	   one past the end is refused, so a garbled arg cannot become a
+	   movement the car was never asked for. Golden: MODE MANUAL seq 2
+	   is 01 70 12, DRIVE FWD seq 3 is 01 80 13. */
+	ok = 1;
+	{
+		uint8_t a;
+		for (a = 0U; a <= CMD_MODE_MANUAL; a++) {
+			c.cmd = CMD_MODE; c.arg = a; c.seq = 4U;
+			ok = ok && cmd_encode(&c, k) == FRAME_OK &&
+			     cmd_decode(k, CMD_LEN, &d) == FRAME_OK &&
+			     d.cmd == CMD_MODE && d.arg == a && d.seq == 4U;
+		}
+		for (a = 0U; a <= CMD_DRIVE_RIGHT; a++) {
+			c.cmd = CMD_DRIVE; c.arg = a; c.seq = 11U;
+			ok = ok && cmd_encode(&c, k) == FRAME_OK &&
+			     cmd_decode(k, CMD_LEN, &d) == FRAME_OK &&
+			     d.cmd == CMD_DRIVE && d.arg == a && d.seq == 11U;
+		}
+	}
+	c.cmd = CMD_MODE;  c.arg = 2U; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
+	c.cmd = CMD_DRIVE; c.arg = 5U; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
+	c.cmd = CMD_MODE;  c.arg = CMD_MODE_MANUAL; c.seq = 2U;
+	ok = ok && cmd_encode(&c, k) == FRAME_OK &&
+	     k[0] == 0x01U && k[1] == 0x70U && k[2] == 0x12U;
+	c.cmd = CMD_DRIVE; c.arg = CMD_DRIVE_FWD; c.seq = 3U;
+	ok = ok && cmd_encode(&c, k) == FRAME_OK &&
+	     k[0] == 0x01U && k[1] == 0x80U && k[2] == 0x13U;
+	CHECK("S1-P20", ok, "MODE 0..1 and DRIVE 0..4 round-trip, one past refused, golden bytes");
+
+	/* S1-P21: SCAN carries no argument; golden SCAN seq 6 is 01 90 06. */
+	c.cmd = CMD_SCAN; c.arg = 0U; c.seq = 6U;
+	ok = cmd_encode(&c, k) == FRAME_OK &&
+	     k[0] == 0x01U && k[1] == 0x90U && k[2] == 0x06U &&
+	     cmd_decode(k, CMD_LEN, &d) == FRAME_OK && d.cmd == CMD_SCAN;
+	c.arg = 1U; ok = ok && cmd_encode(&c, k) == FRAME_ERR_RANGE;
+	CHECK("S1-P21", ok, "SCAN with arg 0 encodes to 01 90 06, any other arg refused");
 
 	printf("[PC] SUMMARY %d failed\n", failures);
 	return failures == 0 ? 0 : 1;
