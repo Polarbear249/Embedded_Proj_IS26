@@ -56,6 +56,9 @@ EXPORT ID	tid_telem;
 static UW	s_telem_seq;
 static UB	s_last_cmd_seq;		/* IF-06 cmd_seq, to spot a new barcode */
 static UB	s_cmd_seq_valid;
+static UB	s_last_char_seq;	/* IF-06 char_seq, to spot a new letter */
+static UB	s_char_seq_valid;
+static UB	s_char_seen;		/* a letter has been decoded at least once */
 
 /* ---------------------------------------------------------------------
  *	Names, for the printed lines only. The numbers themselves are what
@@ -137,7 +140,14 @@ EXPORT void s1_telem_print(const T_TELEM *snap)
 		  (unsigned int)snap->line_ok, (unsigned int)snap->junction);
 
 	if (snap->bc_ok != 0U) {
-		tm_printf((UB*)"  barcode  %s\n", bc_cmd_name(snap->bc_cmd));
+		if (snap->bc_char != 0U) {
+			tm_printf((UB*)"  barcode  '%c' -> %s\n",
+				  (INT)('A' + (snap->bc_char - 1U)),
+				  bc_cmd_name(snap->bc_cmd));
+		} else {
+			tm_printf((UB*)"  barcode  %s (no letter yet)\n",
+				  bc_cmd_name(snap->bc_cmd));
+		}
 	} else {
 		tm_printf((UB*)"  barcode  none yet\n");
 	}
@@ -187,6 +197,25 @@ static UB rpm_to_cm_s(float rpm)
 	return (UB)cm_s;
 }
 
+/* 8-bit counters stop at 255: a count that wrapped back to 3 would look
+   like a real, small number. */
+static UB sat8(UW count)
+{
+	return (count > TELEM_COUNT_MAX) ? (UB)TELEM_COUNT_MAX : (UB)count;
+}
+
+/* Encoder counts are sent as 20 bits signed; clamp rather than wrap. */
+static int32_t enc_clamp(int32_t count)
+{
+	if (count > TELEM_ENC_MAX) {
+		return TELEM_ENC_MAX;
+	}
+	if (count < TELEM_ENC_MIN) {
+		return TELEM_ENC_MIN;
+	}
+	return count;
+}
+
 static void collect_motion(T_TELEM *snap)
 {
 	motion_status_t	ms;
@@ -201,6 +230,8 @@ static void collect_motion(T_TELEM *snap)
 
 	snap->speed_l = rpm_to_cm_s(ms.left_rpm);
 	snap->speed_r = rpm_to_cm_s(ms.right_rpm);
+	snap->enc_l = enc_clamp(ms.left_encoder_count);
+	snap->enc_r = enc_clamp(ms.right_encoder_count);
 
 	if (motion_is_estopped()) {
 		snap->mstate = 6U;			/* estop */
@@ -264,6 +295,31 @@ static void collect_line(T_TELEM *snap)
 		snap->bc_ok = 1U;		/* at least one real decode */
 	}
 	snap->bc_cmd = ls.cmd;
+
+	/* line_if.h: "bc_char means nothing until char_seq changes" -- both
+	   counters reset to 0, so the field holds a reset value, not an 'A'.
+	   bc_char is therefore sent as 0 = none yet, 1..26 = 'A'..'Z', and
+	   only starts reporting once a letter has actually been decoded. */
+	if (s_char_seq_valid == 0U) {
+		s_last_char_seq = ls.char_seq;
+		s_char_seq_valid = 1U;
+	} else if (ls.char_seq != s_last_char_seq) {
+		s_last_char_seq = ls.char_seq;
+		s_char_seen = 1U;
+	}
+	snap->bc_char = (s_char_seen != 0U)
+			? (uint8_t)(ls.bc_char + 1U) : 0U;
+
+	/* The mapping the car actually holds, so the dashboard shows the
+	   car's state, not what it believes it sent. s3_nav_map_read() is
+	   S3's published reader (subsystem3.h, any task); S3 only ever
+	   stores 0 or 1..26 in a slot (nav_map_with()), and the word uses
+	   20 bits, so the mask only guards the frame against bits S3 does
+	   not define. */
+	snap->nav_map = s3_nav_map_read() & 0x000FFFFFUL;
+
+	snap->bc_dec_ok   = sat8((UW)g_s3_diag.decode_ok);
+	snap->bc_dec_fail = sat8((UW)g_s3_diag.decode_fail);
 }
 
 static void collect_terrain(T_TELEM *snap)
@@ -272,6 +328,7 @@ static void collect_terrain(T_TELEM *snap)
 	uint32_t		hump;
 
 	st = imu_terrain_get_state();
+	snap->imu_state = (UB)st & 0x03U;	/* IMU_TERRAIN_* is 0..3 */
 	if (st == IMU_TERRAIN_FAULT) {
 		snap->faults |= TELEM_FAULT_IMU;
 		return;
@@ -279,7 +336,10 @@ static void collect_terrain(T_TELEM *snap)
 
 	hump = imu_terrain_get_hump_word();	/* IF-11, one atomic load */
 	if (IMU_HUMP_W_VALID(hump) != 0U) {
-		snap->hump_mm = (UB)IMU_HUMP_W_LAST(hump);
+		snap->hump_mm  = (UB)IMU_HUMP_W_LAST(hump);
+		/* Mission Requirement 5: the highest hump of the run. S4 keeps
+		   it in the same word; both fields are 8 bits there too. */
+		snap->hump_max = (UB)IMU_HUMP_W_MAX(hump);
 	}
 }
 
@@ -307,6 +367,10 @@ static void collect_snapshot(T_TELEM *snap)
 	if (!s1_wifi_link_up()) {
 		snap->faults |= TELEM_FAULT_WIFI_LOSS;
 	}
+
+	/* Commands this car accepted or rejected (S1's own counters). */
+	snap->cmd_ok  = sat8(s1_cmd_accepted());
+	snap->cmd_rej = sat8(s1_cmd_rejected());
 
 	/* vstate is the Vehicle Controller's mission state. vehicle_controller.c
 	   publishes no getter yet, so it stays 0 rather than carrying a guess. */

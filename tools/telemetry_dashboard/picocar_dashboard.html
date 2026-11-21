@@ -104,6 +104,12 @@
   .v.warn { color: var(--warn); }
   .v.bad  { color: var(--bad); }
   .v.none { color: var(--dimmer); }
+  /* A debugging row: shown, but quieter than the rows above it so it
+     does not read as the barcode result. */
+  .row.secondary .k, .row.secondary .v { color: var(--dimmer); }
+  /* ...but a warning or fault in a quiet row must still be seen. */
+  .row.secondary .v.warn { color: var(--warn); }
+  .row.secondary .v.bad  { color: var(--bad); }
 
   /* ---- commands --------------------------------------------------- */
   .cmdbar {
@@ -120,7 +126,14 @@
     padding: 7px 9px; border-radius: 6px; width: 72px;
     font-family: var(--mono); font-size: 13px;
   }
-  #cmdlog { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-left: auto; }
+  #cmdlog, #maplog { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-left: auto; }
+  .maplbl { font-size: 12px; color: var(--dim); margin-left: 6px; }
+  /* Full-width second line of the map bar: the mapping the car reports,
+     so a Send can be seen to land. */
+  .carmaprow { flex-basis: 100%; display: flex; gap: 10px; align-items: baseline; }
+  .carmaprow .maplbl { margin-left: 0; }
+  #carmap { font-family: var(--mono); font-size: 14px; }
+  .cmdbar select { font-family: var(--mono); font-size: 13px; padding: 3px 4px; }
 
   /* ---- footer ----------------------------------------------------- */
   footer {
@@ -184,6 +197,7 @@
       <div class="row"><span class="k">Speed left</span><span class="v" id="spl">&mdash;</span></div>
       <div class="row"><span class="k">Speed right</span><span class="v" id="spr">&mdash;</span></div>
       <div class="row"><span class="k">Distance</span><span class="v" id="dist">&mdash;</span></div>
+      <div class="row secondary"><span class="k">Encoders L / R</span><span class="v" id="enc">&mdash;</span></div>
     </div>
 
     <div class="card">
@@ -191,12 +205,17 @@
       <div class="row"><span class="k">Line error</span><span class="v" id="lerr">&mdash;</span></div>
       <div class="row"><span class="k">On line</span><span class="v" id="lok">&mdash;</span></div>
       <div class="row"><span class="k">Junction</span><span class="v" id="junc">&mdash;</span></div>
+      <div class="row"><span class="k">Barcode letter</span><span class="v" id="bcchar">&mdash;</span></div>
       <div class="row"><span class="k">Barcode</span><span class="v" id="bc">&mdash;</span></div>
+      <div class="row secondary"><span class="k">Last crossroad</span><span class="v" id="lastturn">&mdash;</span></div>
+      <div class="row secondary"><span class="k">Barcode reads</span><span class="v" id="bcreads">&mdash;</span></div>
     </div>
 
     <div class="card">
       <h2>Terrain <em>S4</em></h2>
-      <div class="row"><span class="k">Hump height</span><span class="v" id="hump">&mdash;</span></div>
+      <div class="row"><span class="k">Highest hump</span><span class="v" id="humpmax">&mdash;</span></div>
+      <div class="row"><span class="k">Last hump</span><span class="v" id="hump">&mdash;</span></div>
+      <div class="row secondary"><span class="k">IMU</span><span class="v" id="imu">&mdash;</span></div>
     </div>
 
     <div class="card">
@@ -222,6 +241,7 @@
       <div class="row"><span class="k">Frames dropped</span><span class="v" id="ndrop">0</span></div>
       <div class="row"><span class="k">Rejected frames</span><span class="v" id="nbad">0</span></div>
       <div class="row"><span class="k">Heartbeat</span><span class="v" id="hb">&mdash;</span></div>
+      <div class="row secondary"><span class="k">Commands</span><span class="v" id="cmds">&mdash;</span></div>
     </div>
 
   </div>
@@ -230,12 +250,28 @@
     <span class="label">Command</span>
     <button id="c-stop"  class="danger" disabled>Stop</button>
     <button id="c-start" disabled>Start</button>
-    <button id="c-ping"  disabled>Ping</button>
+    <button id="c-reset" disabled title="Reboot the car, same as the RST button">Reset</button>
     <span class="label">Speed</span>
     <button id="c-slow" disabled>Slow</button>
     <button id="c-med"  disabled>Medium</button>
     <button id="c-fast" disabled>Fast</button>
     <span id="cmdlog"></span>
+  </div>
+
+  <!-- subsystem3.h: the built-in A/B/C/D table is a test stand-in and the
+       real mapping MUST come from here over MQTT before the demo. -->
+  <div class="cmdbar">
+    <span class="label">Barcode map</span>
+    <span class="maplbl">Left</span>   <select id="m-left"  disabled></select>
+    <span class="maplbl">Right</span>  <select id="m-right" disabled></select>
+    <span class="maplbl">Straight</span><select id="m-straight" disabled></select>
+    <span class="maplbl">U-turn</span> <select id="m-uturn" disabled></select>
+    <button id="c-map" disabled>Send mapping</button>
+    <span id="maplog"></span>
+    <div class="carmaprow">
+      <span class="maplbl">Car has</span>
+      <span class="v" id="carmap">&mdash;</span>
+    </div>
   </div>
 
   <footer>
@@ -263,20 +299,35 @@
 "use strict";
 
 /* ===================================================================
- * Telemetry frame v1 -- must match app_program/subsystem1/telemetry_frame.h
+ * Telemetry frame v4 -- must match app_program/subsystem1/telemetry_frame.h
  *
  *   version 8 | seq 5 | vstate 3 | mstate 3 | faults 5 | speed_l 8 |
  *   speed_r 8 | dist_cm 16 | line_err 7 | line_ok 1 | junction 1 |
- *   bc_ok 1 | bc_cmd 2 | hump_mm 8 | obs_ok 1 | obs_left 9 |
- *   obs_right 9 | obs_width 9                            = 104 bits
+ *   bc_ok 1 | bc_cmd 2 | bc_char 5 | nav_map 20 | hump_mm 8 | obs_ok 1 |
+ *   obs_left 9 | obs_right 9 | obs_width 9 | hump_max 8 | imu_state 2 |
+ *   enc_l 20 | enc_r 20 | bc_dec_ok 8 | bc_dec_fail 8 | cmd_ok 8 |
+ *   cmd_rej 8                                            = 211 bits
+ *   (padded to 216 bits / 27 bytes; the last 5 bits are zero)
+ *
+ * enc_l / enc_r are 20-bit two's complement (negative = wheel went
+ * backwards). The four 8-bit counters stop at 255 on the car.
+ *
+ * nav_map is the barcode mapping the car actually holds: four 5-bit
+ * slots, bits 4..0 LEFT, 9..5 RIGHT, 14..10 STRAIGHT, 19..15 U-TURN,
+ * each 0 = no letter or 1..26 = 'A'..'Z'.
  *
  * Plain MSB-first bitstream: bit 0 is the top bit of byte 0, exactly as
  * put_bits()/get_bits() do it on the car.
+ *
+ * If the car runs older firmware (v1 to v3) its frames land in the
+ * "rejected" counter rather than being mis-read, which is the point of
+ * bumping the version alongside the length.
  * =================================================================== */
 
-var TELEM_VERSION = 1, TELEM_LEN = 13;
+var TELEM_VERSION = 4, TELEM_LEN = 27;
 var CMD_VERSION = 1;
-var CMD_STOP = 1, CMD_START = 2, CMD_SET_SPEED = 3, CMD_PING = 4;
+var CMD_STOP = 1, CMD_START = 2, CMD_SET_SPEED = 3, CMD_PING = 4,
+    CMD_SET_MAP = 5, CMD_RESET = 6;
 
 var TOPIC_TELEM = "mtk3smp-pico/telem";
 var TOPIC_CMD   = "mtk3smp-pico/cmd";
@@ -299,7 +350,7 @@ function telemDecode(bytes) {
   if (!bytes || bytes.length !== TELEM_LEN) { return null; }
   var r = new BitReader(bytes);
   if (r.read(8) !== TELEM_VERSION) { return null; }
-  return {
+  var t = {
     seq:       r.read(5),
     vstate:    r.read(3),
     mstate:    r.read(3),
@@ -312,12 +363,41 @@ function telemDecode(bytes) {
     junction:  r.read(1),
     bc_ok:     r.read(1),
     bc_cmd:    r.read(2),
+    bc_char:   r.read(5),
+    nav_map:   r.read(20),
     hump_mm:   r.read(8),
     obs_ok:    r.read(1),
     obs_left:  r.read(9),
     obs_right: r.read(9),
-    obs_width: r.read(9)
+    obs_width: r.read(9),
+    hump_max:  r.read(8),
+    imu_state: r.read(2),
+    enc_l:     signed20(r.read(20)),
+    enc_r:     signed20(r.read(20)),
+    bc_dec_ok:   r.read(8),
+    bc_dec_fail: r.read(8),
+    cmd_ok:    r.read(8),
+    cmd_rej:   r.read(8)
   };
+  /* Same range checks as telem_decode() on the car, so both ends reject
+     exactly the same frames: motion state 0..6, and every mapping slot
+     either empty (0) or a letter (1..26). */
+  if (t.mstate > 6) { return null; }
+  for (var mv = 0; mv < 4; mv++) {
+    if (mapSlot(t.nav_map, mv) > 26) { return null; }
+  }
+  return t;
+}
+
+/* 20-bit two's complement -> signed number: bit 19 set means negative. */
+function signed20(bits) {
+  return bits >= 524288 ? bits - 1048576 : bits;
+}
+
+/* Letter in one mapping slot: 0 = none, 1..26 = 'A'..'Z'. Division
+   instead of >> keeps it exact for the full 20-bit word. */
+function mapSlot(map, movement) {
+  return Math.floor(map / Math.pow(32, movement)) % 32;
 }
 
 /* Command frame v1: version 8 | cmd 4 | arg 8 | seq 4 = 24 bits. */
@@ -472,6 +552,37 @@ var $ = function (id) { return document.getElementById(id); };
 var MSTATE = ["stopped", "moving", "turning", "reversing",
               "scanning", "bypassing", "estop / fault"];
 var BC_CMD = ["LEFT", "RIGHT", "STRAIGHT", "U-TURN"];
+var IMU_STATE = ["starting", "calibrating - keep still", "active", "FAULT"];
+
+/* The car stops its 8-bit counters at 255; say "255+" so it doesn't read
+   as an exact count. */
+function cap(n) { return n >= 255 ? "255+" : String(n); }
+
+/* What a scanned letter means under the mapping the car reports in the
+   same frame (nav_map), so the screen can never disagree with the car. */
+function barcodeMeaning(letterIdx, map) {
+  /* Same rule as nav_map_lookup() on the car: scan every slot and let the
+     last match win. nav_map_with() never leaves a letter in two slots, so
+     the order only matters if that ever changes -- and then this still
+     agrees with the car. */
+  var found = -1;
+  for (var mv = 0; mv < 4; mv++) {
+    if (mapSlot(map, mv) === letterIdx + 1) { found = mv; }
+  }
+  if (found >= 0) { return [BC_CMD[found], "good"]; }
+  /* barcode_nav.h: "A letter with no mapping ... means forward." */
+  return ["not mapped, default STRAIGHT", "warn"];
+}
+
+/* The car's whole mapping as text, e.g. "A=LEFT B=RIGHT C=STRAIGHT ...". */
+function mapText(map) {
+  var parts = [];
+  for (var mv = 0; mv < 4; mv++) {
+    var li = mapSlot(map, mv);
+    parts.push((li > 0 ? String.fromCharCode(64 + li) : "-") + "=" + BC_CMD[mv]);
+  }
+  return parts.join("  ");
+}
 
 var client = null;
 var nrx = 0, ndrop = 0, nbad = 0;
@@ -532,11 +643,33 @@ function onFrame(bytes) {
   set("lerr", (err > 0 ? "+" : "") + err);
   set("lok",  t.line_ok ? "yes" : "no", t.line_ok ? "good" : "warn");
   set("junc", t.junction ? "yes" : "no", t.junction ? "warn" : "none");
-  if (t.bc_ok) { set("bc", BC_CMD[t.bc_cmd] || "?", "good"); }
-  else         { set("bc", "none yet", "none"); }
+  /* bc_char is 0 until a letter has actually been decoded, so "none yet"
+     is a real reading, not a missing one. */
+  if (t.bc_char > 0 && t.bc_char <= 26) {
+    var m = barcodeMeaning(t.bc_char - 1, t.nav_map);
+    set("bcchar", String.fromCharCode(64 + t.bc_char), "good");
+    set("bc", m[0], m[1]);
+  } else {
+    set("bcchar", "none yet");
+    set("bc", "none yet", "none");
+  }
+  set("carmap", mapText(t.nav_map), "good");
+
+  /* bc_cmd is the movement S3 actually performed at the last cross-
+     junction, so it only changes when the car reaches one. */
+  if (t.bc_ok) { set("lastturn", "turned " + (BC_CMD[t.bc_cmd] || "?")); }
+  else         { set("lastturn", "none yet"); }
 
   /* terrain */
+  /* Mission Requirement 5: the highest hump of the run (since boot). */
+  set("humpmax", t.hump_max + " mm", t.hump_max > 0 ? "good" : "none");
   set("hump", t.hump_mm + " mm", t.hump_mm > 0 ? "good" : "none");
+  set("imu", IMU_STATE[t.imu_state] || "?",
+      t.imu_state === 3 ? "bad" : (t.imu_state === 2 ? null : "warn"));
+  set("enc", t.enc_l + " / " + t.enc_r);
+  set("bcreads", cap(t.bc_dec_ok) + " ok, " + cap(t.bc_dec_fail) + " failed");
+  set("cmds", cap(t.cmd_ok) + " ok, " + cap(t.cmd_rej) + " rejected",
+      t.cmd_rej > 0 ? "warn" : null);
 
   /* obstacle */
   set("obs", t.obs_ok ? "yes" : "no", t.obs_ok ? "warn" : "none");
@@ -576,7 +709,8 @@ setInterval(function () {
 }, 250);
 
 function enableCmds(on) {
-  ["c-stop", "c-start", "c-ping", "c-slow", "c-med", "c-fast"].forEach(function (id) {
+  ["c-stop", "c-start", "c-reset", "c-slow", "c-med", "c-fast", "c-map",
+   "m-left", "m-right", "m-straight", "m-uturn"].forEach(function (id) {
     $(id).disabled = !on;
   });
 }
@@ -590,12 +724,94 @@ function sendCmd(cmd, arg, name) {
 
 $("c-stop").onclick  = function () { sendCmd(CMD_STOP, 0, "STOP"); };
 $("c-start").onclick = function () { sendCmd(CMD_START, 0, "START"); };
-$("c-ping").onclick  = function () { sendCmd(CMD_PING, 0, "PING"); };
+/* Reset reboots the car the way its RST button does. It is the only
+   command that cannot be undone from here, so it asks first. */
+$("c-reset").onclick = function () {
+  if (!window.confirm("Reset the car?\n\nIt stops, reboots and rejoins WiFi " +
+                      "(about 10 s). The barcode mapping is lost, so send it " +
+                      "again once frames come back.")) {
+    return;
+  }
+  sendCmd(CMD_RESET, 0, "RESET");
+  $("maplog").textContent = "car reset - send mapping again once it reconnects";
+};
 /* Fixed presets. Below 4 cm/s the motors stall on static friction; above
    11 cm/s the duty clamps at DRIVE_DUTY_MAX, so a larger number does
    nothing. Three buttons keep a marker from typing a value that does
    either. */
 var SPEED_SLOW = 4, SPEED_MED = 7, SPEED_FAST = 11;
+
+/* ---- Barcode letter -> movement mapping (CMD_SET_MAP) ----------------
+   subsystem3.h ships an A/B/C/D table but calls it a test stand-in: the
+   demo mapping has to arrive from here. One command carries one movement
+   and its letter packed into the 8-bit arg, so a full mapping is four
+   commands sent back to back. The defaults below match S3's stand-in so
+   that pressing Send without changing anything is a no-op, not a
+   surprise. */
+var MAP_SLOTS = [
+  { id: "m-left",     movement: 0, name: "LEFT",     def: "A" },
+  { id: "m-right",    movement: 1, name: "RIGHT",    def: "B" },
+  { id: "m-straight", movement: 2, name: "STRAIGHT", def: "C" },
+  { id: "m-uturn",    movement: 3, name: "U-TURN",   def: "D" }
+];
+
+MAP_SLOTS.forEach(function (slot) {
+  var sel = $(slot.id), i, o;
+  for (i = 0; i < 26; i++) {
+    o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = String.fromCharCode(65 + i);
+    sel.appendChild(o);
+  }
+  sel.value = String(slot.def.charCodeAt(0) - 65);
+  sel.onchange = function () {
+    refreshMapOptions();
+    /* The log still names the last mapping actually sent; say plainly
+       that what is on screen now has not reached the car yet. */
+    $("maplog").textContent = "changed - press Send mapping";
+  };
+});
+
+/* One letter can only mean one movement. A letter picked in one dropdown
+   is greyed out in the other three, so a duplicate cannot be selected at
+   all, rather than only being caught when Send is pressed. To swap two
+   letters, move one to a free letter first. */
+function refreshMapOptions() {
+  var taken = MAP_SLOTS.map(function (s) { return $(s.id).value; });
+  MAP_SLOTS.forEach(function (s, n) {
+    var opts = $(s.id).options, i;
+    for (i = 0; i < opts.length; i++) {
+      opts[i].disabled = taken.some(function (v, m) {
+        return m !== n && v === opts[i].value;
+      });
+    }
+  });
+}
+refreshMapOptions();
+
+$("c-map").onclick = function () {
+  var chosen = MAP_SLOTS.map(function (s) { return $(s.id).value; });
+  var seen = {}, i, dupe = null;
+
+  /* Two movements on one letter is not rejected by the car -- the later
+     s3_nav_map_set() just wins -- so catch it here, where it is still a
+     typo rather than a wrong turn on the track. */
+  for (i = 0; i < chosen.length; i++) {
+    if (seen[chosen[i]]) { dupe = String.fromCharCode(65 + Number(chosen[i])); break; }
+    seen[chosen[i]] = true;
+  }
+  if (dupe) {
+    $("maplog").textContent = "'" + dupe + "' is used twice - not sent";
+    return;
+  }
+
+  MAP_SLOTS.forEach(function (s, n) {
+    var li = Number(chosen[n]);
+    sendCmd(CMD_SET_MAP, (s.movement << 5) | li,
+            "MAP " + String.fromCharCode(65 + li) + " -> " + s.name);
+  });
+  $("maplog").textContent = "sent - check 'Car has' below updates";
+};
 
 $("c-slow").onclick = function () {
   sendCmd(CMD_SET_SPEED, SPEED_SLOW, "SPEED slow (" + SPEED_SLOW + " cm/s)");

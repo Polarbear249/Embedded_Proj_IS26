@@ -75,3 +75,22 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-28 | S1-P11 | `buddy1-wifi` (uncommitted) | Fitz | PASS | `logs/2026-10-28_s1_pc_frame_tests.txt` | |
 | 2026-10-28 | S1-P12 | `buddy1-wifi` (uncommitted) | Fitz | PASS | `logs/2026-10-28_s1_pc_frame_tests.txt` | |
 | 2026-10-28 | S1-P13 | `buddy1-wifi` (uncommitted) | Fitz | PASS | `logs/2026-10-28_s1_pc_frame_tests.txt` | |
+| 2026-11-21 | S1-P01 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Frame v4: 27 bytes, version 0x04. 19 of 19 passed on the PC. |
+| 2026-11-21 | S1-P02 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Version byte now 0x04; rest of the golden vector unchanged. |
+| 2026-11-21 | S1-P03 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Last field is now cmd_rej (bits 203..210), 5 pad bits. |
+| 2026-11-21 | S1-P04 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Includes the v2-v4 fields at their maxima. |
+| 2026-11-21 | S1-P05 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | |
+| 2026-11-21 | S1-P06 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Lengths 0, 26 and 28. |
+| 2026-11-21 | S1-P07 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Versions 0..3 (older frames) and 255. |
+| 2026-11-21 | S1-P08 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | |
+| 2026-11-21 | S1-P09 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | |
+| 2026-11-21 | S1-P10 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | |
+| 2026-11-21 | S1-P11 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | |
+| 2026-11-21 | S1-P12 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Unknown command is now 7 (5 = SET_MAP, 6 = RESET). |
+| 2026-11-21 | S1-P13 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | Also checks no decoded mapping slot is above 26. |
+| 2026-11-21 | S1-P14 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: barcode letter field (bc_char). |
+| 2026-11-21 | S1-P15 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: SET_MAP command packing. |
+| 2026-11-21 | S1-P16 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: RESET command. |
+| 2026-11-21 | S1-P17 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: car-reported mapping (nav_map). |
+| 2026-11-21 | S1-P18 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: encoder counts keep their sign. |
+| 2026-11-21 | S1-P19 | `hotfix-ultra2` | Fitz | PASS | `logs/2026-11-21_s1_pc_frame_tests_v4.txt` | New: all v4 fields against a hand-computed frame. |

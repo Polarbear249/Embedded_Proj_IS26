@@ -5,9 +5,10 @@
  *	and no byte swapping is needed. Never cast a buffer to a struct.
  */
 
+#include <string.h>
 #include "telemetry_frame.h"
 
-#define CMD_CMD_MAX	CMD_PING
+#define CMD_CMD_MAX	CMD_RESET
 
 static void put_bits(uint8_t *buf, uint32_t *pos, uint32_t width, uint32_t value)
 {
@@ -40,15 +41,56 @@ static int fits(uint32_t value, uint32_t width)
 	return (value >> width) == 0U;
 }
 
+/* Encoder counts: signed, sent as 20-bit two's complement. */
+static int enc_fits(int32_t value)
+{
+	return (value >= TELEM_ENC_MIN) && (value <= TELEM_ENC_MAX);
+}
+
+static uint32_t enc_to_bits(int32_t value)
+{
+	return (uint32_t)value & ((1UL << TELEM_ENC_BITS) - 1UL);
+}
+
+static int32_t enc_from_bits(uint32_t bits)
+{
+	/* Sign-extend bit 19: subtract 2^20 when it is set. */
+	if ((bits & (1UL << (TELEM_ENC_BITS - 1U))) != 0U) {
+		return (int32_t)bits - (int32_t)(1L << TELEM_ENC_BITS);
+	}
+	return (int32_t)bits;
+}
+
+/* Every slot of the mapping word must be "no letter" (0) or 'A'..'Z'
+   (1..26). 27..31 fit in 5 bits but name no letter. */
+static int map_valid(uint32_t map)
+{
+	uint32_t	mv;
+
+	if (!fits(map, TELEM_MAP_SLOTS * TELEM_MAP_SLOT_BITS)) {
+		return 0;
+	}
+	for (mv = 0U; mv < TELEM_MAP_SLOTS; mv++) {
+		if (TELEM_MAP_SLOT(map, mv) > TELEM_MAP_LETTER_MAX) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 static int telem_in_range(const T_TELEM *t)
 {
 	return fits(t->seq, 5U) && fits(t->vstate, 3U) &&
 	       (t->mstate <= TELEM_MSTATE_MAX) && fits(t->faults, 5U) &&
 	       fits(t->line_err, 7U) && fits(t->line_ok, 1U) &&
 	       fits(t->junction, 1U) && fits(t->bc_ok, 1U) &&
-	       fits(t->bc_cmd, 2U) && fits(t->obs_ok, 1U) &&
+	       fits(t->bc_cmd, 2U) && fits(t->bc_char, 5U) &&
+	       map_valid(t->nav_map) &&
+	       fits(t->obs_ok, 1U) &&
 	       fits(t->obs_left, 9U) && fits(t->obs_right, 9U) &&
-	       fits(t->obs_width, 9U);
+	       fits(t->obs_width, 9U) &&
+	       fits(t->imu_state, 2U) &&
+	       enc_fits(t->enc_l) && enc_fits(t->enc_r);
 }
 
 T_FRAME_STATUS telem_encode(const T_TELEM *in, uint8_t out[TELEM_LEN])
@@ -78,11 +120,21 @@ T_FRAME_STATUS telem_encode(const T_TELEM *in, uint8_t out[TELEM_LEN])
 	put_bits(out, &pos, 1U, in->junction);
 	put_bits(out, &pos, 1U, in->bc_ok);
 	put_bits(out, &pos, 2U, in->bc_cmd);
+	put_bits(out, &pos, 5U, in->bc_char);
+	put_bits(out, &pos, 20U, in->nav_map);
 	put_bits(out, &pos, 8U, in->hump_mm);
 	put_bits(out, &pos, 1U, in->obs_ok);
 	put_bits(out, &pos, 9U, in->obs_left);
 	put_bits(out, &pos, 9U, in->obs_right);
 	put_bits(out, &pos, 9U, in->obs_width);
+	put_bits(out, &pos, 8U, in->hump_max);
+	put_bits(out, &pos, 2U, in->imu_state);
+	put_bits(out, &pos, TELEM_ENC_BITS, enc_to_bits(in->enc_l));
+	put_bits(out, &pos, TELEM_ENC_BITS, enc_to_bits(in->enc_r));
+	put_bits(out, &pos, 8U, in->bc_dec_ok);
+	put_bits(out, &pos, 8U, in->bc_dec_fail);
+	put_bits(out, &pos, 8U, in->cmd_ok);
+	put_bits(out, &pos, 8U, in->cmd_rej);
 	return FRAME_OK;
 }
 
@@ -100,6 +152,7 @@ T_FRAME_STATUS telem_decode(const uint8_t *buf, uint32_t len, T_TELEM *out)
 	if (get_bits(buf, &pos, 8U) != TELEM_VERSION) {
 		return FRAME_ERR_VERSION;
 	}
+	memset(&t, 0, sizeof(t));
 	t.seq = (uint8_t)get_bits(buf, &pos, 5U);
 	t.vstate = (uint8_t)get_bits(buf, &pos, 3U);
 	t.mstate = (uint8_t)get_bits(buf, &pos, 3U);
@@ -112,12 +165,22 @@ T_FRAME_STATUS telem_decode(const uint8_t *buf, uint32_t len, T_TELEM *out)
 	t.junction = (uint8_t)get_bits(buf, &pos, 1U);
 	t.bc_ok = (uint8_t)get_bits(buf, &pos, 1U);
 	t.bc_cmd = (uint8_t)get_bits(buf, &pos, 2U);
+	t.bc_char = (uint8_t)get_bits(buf, &pos, 5U);
+	t.nav_map = get_bits(buf, &pos, 20U);
 	t.hump_mm = (uint8_t)get_bits(buf, &pos, 8U);
 	t.obs_ok = (uint8_t)get_bits(buf, &pos, 1U);
 	t.obs_left = (uint16_t)get_bits(buf, &pos, 9U);
 	t.obs_right = (uint16_t)get_bits(buf, &pos, 9U);
 	t.obs_width = (uint16_t)get_bits(buf, &pos, 9U);
-	if (t.mstate > TELEM_MSTATE_MAX) {
+	t.hump_max = (uint8_t)get_bits(buf, &pos, 8U);
+	t.imu_state = (uint8_t)get_bits(buf, &pos, 2U);
+	t.enc_l = enc_from_bits(get_bits(buf, &pos, TELEM_ENC_BITS));
+	t.enc_r = enc_from_bits(get_bits(buf, &pos, TELEM_ENC_BITS));
+	t.bc_dec_ok = (uint8_t)get_bits(buf, &pos, 8U);
+	t.bc_dec_fail = (uint8_t)get_bits(buf, &pos, 8U);
+	t.cmd_ok = (uint8_t)get_bits(buf, &pos, 8U);
+	t.cmd_rej = (uint8_t)get_bits(buf, &pos, 8U);
+	if ((t.mstate > TELEM_MSTATE_MAX) || !map_valid(t.nav_map)) {
 		return FRAME_ERR_RANGE;
 	}
 	*out = t;
@@ -135,7 +198,13 @@ static int cmd_in_range(const T_CMD *c)
 	if (c->cmd == CMD_SET_SPEED) {
 		return c->arg <= CMD_SPEED_MAX;
 	}
-	return c->arg == 0U;	/* STOP, START, PING carry no argument */
+	if (c->cmd == CMD_SET_MAP) {
+		/* Both halves are checked: a letter index above 'Z' would
+		   otherwise reach s3_nav_map_set() as a junk character. */
+		return (CMD_MAP_MOVEMENT(c->arg) <= CMD_MAP_MOVEMENT_MAX) &&
+		       (CMD_MAP_LETTER(c->arg) <= CMD_MAP_LETTER_MAX);
+	}
+	return c->arg == 0U;	/* STOP, START, PING, RESET: no argument */
 }
 
 T_FRAME_STATUS cmd_encode(const T_CMD *in, uint8_t out[CMD_LEN])

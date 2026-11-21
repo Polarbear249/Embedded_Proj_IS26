@@ -103,6 +103,14 @@ IMPORT ID vc_mbf_profile;
 #define VC_BYPASS_ARMED_CHECK_MS (300U)     // line must hold this long when S3 is armed
 #define VC_BYPASS_RESUME_CM     (60.0f)     // seek cap when re-joining after a re-plan
 #define VC_BYPASS_RESUME_MS     (1500U)     // S3 should be driving by then
+
+/* MQTT commands (IF-08). DRIVE_BASE_DUTY (120) is about 20 RPM, which on
+   a 20.73 cm wheel is about 7 cm/s: a little over 17 duty per cm/s. The
+   duty ceiling means anything past about 11 cm/s clamps. Depth caps one
+   poll so a flood of commands cannot hold the estop task. */
+#define VC_CMD_DUTY_PER_CMS     (17)
+#define VC_CMD_DEPTH            (8U)
+#define VC_RESET_FLUSH_MS       (100U)  /* let the RESET line print */
 /* After the turn back, the straight return to the lane is about the leg
    length again (the outbound and return angles are the same), but a
    turn that under-rotates makes the return longer. Give the seek 60 %

@@ -17,6 +17,30 @@ static int16_t line_drive_clamp(int32_t duty);
 static void    line_drive_arm(line_drive_t *p_ctx, uint8_t mode,
                               bool b_centre_black);
 
+/* Straight-ahead duty, DRIVE_BASE_DUTY until MQTT SET_SPEED moves it.
+   One aligned 16-bit store from the VC, read by the Line task: no lock
+   needed, and a half-applied value is not possible. */
+static int16_t g_base_duty = DRIVE_BASE_DUTY;
+
+void
+line_drive_set_base_duty (int16_t duty)
+{
+    if (duty < 0)
+    {
+        duty = 0;
+    }
+    else if (duty > DRIVE_DUTY_MAX)
+    {
+        duty = DRIVE_DUTY_MAX;
+    }
+    else
+    {
+        // in range
+    }
+
+    g_base_duty = duty;
+}
+
 void
 line_drive_init (line_drive_t *p_ctx)
 {
@@ -65,8 +89,8 @@ line_drive_step (line_drive_t *p_ctx, uint8_t error, uint8_t mode,
             turn = (err_signed * gain) / DRIVE_KP_DEN;
 
             // JUNCTION reports error 64, so it simply drives straight
-            *p_left  = line_drive_clamp(DRIVE_BASE_DUTY + turn);
-            *p_right = line_drive_clamp(DRIVE_BASE_DUTY - turn);
+            *p_left  = line_drive_clamp(g_base_duty + turn);
+            *p_right = line_drive_clamp(g_base_duty - turn);
             b_drive  = true;
         }
         else

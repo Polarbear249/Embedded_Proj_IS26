@@ -77,4 +77,12 @@ bool line_drive_step(line_drive_t *p_ctx, uint8_t error, uint8_t mode,
                      bool b_centre_black, int16_t *p_left,
                      int16_t *p_right);
 
+/*!
+ * Straight-ahead duty the steering works around, so an MQTT SET_SPEED
+ * can change how fast the car follows the line. Clamped to
+ * 0..DRIVE_DUTY_MAX; 0 leaves the car armed but stationary. The
+ * steering law and the gains are untouched: only BASE moves.
+ */
+void line_drive_set_base_duty(int16_t duty);
+
 #endif /* LINE_DRIVE_H */

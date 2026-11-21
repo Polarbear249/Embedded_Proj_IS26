@@ -11,6 +11,8 @@
 #include "subsystem4/imu_terrain.h"
 #include "subsystem4/imu_hump.h"
 #include "subsystem3/subsystem3.h"      // S3_DRIVE_ENABLE
+#include "subsystem3/line_drive.h"      // base duty, for SET_SPEED
+#include "subsystem1/subsystem1.h"      // IF-08: s1_cmd_recv()
 
 #if VC_TEST_DRIVE && S3_DRIVE_ENABLE
 // Two motor commanders: turn one off (S3_DRIVE_SWITCH in subsystem3.h)
@@ -45,6 +47,22 @@ static vc_stop_t vc_drive(int32_t *p_driven_mm);
 static void      vc_estop_task(INT stacd, void *p_exinf);
 static void      vc_toggle_estop(void);
 static void      vc_drain_profiles(void);
+static void      vc_drain_commands(void);
+static void      vc_reboot(void);
+
+/* Names for the LINE_CMD_* movement values, for the serial log only. */
+static const char *
+vc_movement_name (uint8_t movement)
+{
+    switch (movement)
+    {
+    case LINE_CMD_LEFT:     return "LEFT";
+    case LINE_CMD_RIGHT:    return "RIGHT";
+    case LINE_CMD_STRAIGHT: return "STRAIGHT";
+    case LINE_CMD_UTURN:    return "U-TURN";
+    default:                return "?";
+    }
+}
 static void      vc_obstacle(uint32_t word);
 static void      vc_bypass_task(INT stacd, void *p_exinf);
 static bool      vc_wait_move_done(UINT timeout_ms);
@@ -299,6 +317,7 @@ vc_estop_task (INT stacd, void *p_exinf)
         }
 
         vc_drain_profiles();
+        vc_drain_commands();
     }
 }
 
@@ -325,6 +344,100 @@ vc_drain_profiles (void)
         }
 
         count++;
+    }
+}
+
+/*
+ * MQTT commands (IF-08). S1 has already checked the version, the length
+ * and the ranges, so anything arriving here is well formed: this only
+ * decides what the car does with it. Nothing in Buddy 2's motor code
+ * changes -- STOP uses the emergency stop the GP20 button already
+ * drives, and SET_SPEED moves the straight-ahead duty S3 steers around,
+ * leaving its steering law and gains alone.
+ */
+static void
+vc_drain_commands (void)
+{
+    T_CMD    cmd;
+    uint32_t count = 0U;
+
+    while ((count < VC_CMD_DEPTH) && (E_OK == s1_cmd_recv(&cmd, TMO_POL)))
+    {
+        count++;
+
+        switch (cmd.cmd)
+        {
+        case CMD_STOP:
+            tm_printf((UB*)"[VC] MQTT STOP\n");
+            (void)s3_drive_set_enabled(false);
+            (void)motion_estop();
+            break;
+
+        case CMD_START:
+            tm_printf((UB*)"[VC] MQTT START\n");
+
+            if (vc_clear_estop())
+            {
+                (void)s3_drive_set_enabled(true);
+            }
+            else
+            {
+                tm_printf((UB*)"[VC] MQTT START: stop would not clear\n");
+            }
+            break;
+
+        case CMD_SET_SPEED:
+            {
+                int32_t want = (int32_t)cmd.arg * VC_CMD_DUTY_PER_CMS;
+                int32_t duty = (want > DRIVE_DUTY_MAX)
+                               ? DRIVE_DUTY_MAX : want;
+
+                line_drive_set_base_duty((int16_t)duty);
+
+                tm_printf((UB*)"[VC] MQTT SET_SPEED %u cm/s -> duty %d%s\n",
+                          (UINT)cmd.arg, (INT)duty,
+                          (want > DRIVE_DUTY_MAX) ? " (clamped)" : "");
+            }
+            break;
+
+        case CMD_SET_MAP:
+            {
+                /* subsystem3.h: s3_nav_map_set() must have a single
+                   writer, and names this task as that writer. */
+                uint8_t mv  = CMD_MAP_MOVEMENT(cmd.arg);
+                char    ltr = (char)('A' + CMD_MAP_LETTER(cmd.arg));
+                ER      er  = s3_nav_map_set(mv, ltr);
+
+                if (er == E_OK) {
+                    tm_printf((UB*)"[VC] MQTT SET_MAP '%c' -> %s\n",
+                              (INT)ltr, vc_movement_name(mv));
+                } else {
+                    tm_printf((UB*)"[VC] MQTT SET_MAP '%c' rejected\n",
+                              (INT)ltr);
+                }
+            }
+            break;
+
+        case CMD_RESET:
+            /* Same end result as the Robo Pico RST button: the firmware
+               starts from the top and rejoins WiFi. Motors are cut
+               first so the car is stationary while it reboots, and
+               the delay lets this line reach the serial console. */
+            tm_printf((UB*)"[VC] MQTT RESET: rebooting\n");
+            (void)s3_drive_set_enabled(false);
+            (void)motion_estop();
+            (void)tk_dly_tsk(VC_RESET_FLUSH_MS);
+            vc_reboot();
+            break;
+
+        case CMD_PING:
+            tm_printf((UB*)"[VC] MQTT PING\n");
+            break;
+
+        default:
+            /* S1 rejects unknown commands; nothing to do if one slips. */
+            break;
+        }
     }
 }
 
@@ -1409,4 +1522,43 @@ static bool
 vc_button_pressed (void)
 {
     return (0U == gpio_get_val(VC_BUTTON_PIN));
+}
+
+/*
+ * Reboot the whole chip from software, the way the Pico SDK's
+ * watchdog_reboot() does it (RP2040 datasheet 4.7, Watchdog; 2.13, PSM):
+ *   - PSM_WDSEL selects what the watchdog resets: every block except the
+ *     two oscillators (ROSC bit 0, XOSC bit 1), which keep running.
+ *   - SCRATCH4..7 are cleared: the bootrom only jumps to a saved address
+ *     when SCRATCH4 holds its magic value, so zero means a normal boot
+ *     from flash, exactly as after the RST button.
+ *   - Setting CTRL.TRIGGER (bit 31) fires the watchdog at once.
+ * Interrupts are masked so nothing runs between the trigger and the reset.
+ * Never returns.
+ */
+#define VC_PSM_WDSEL        (0x40010000UL + 0x08UL)  /* PSM_BASE + WDSEL */
+#define VC_PSM_WDSEL_ALL    (0x0001FFFCUL)           /* bits 16..2 */
+#define VC_WDOG_CTRL        (0x40058000UL + 0x00UL)  /* WATCHDOG_BASE */
+#define VC_WDOG_TRIGGER     (1UL << 31)
+#define VC_WDOG_SCRATCH4    (0x40058000UL + 0x1CUL)
+
+static void
+vc_reboot (void)
+{
+    uint32_t i;
+
+    DI(i);
+    (void)i;
+
+    out_w(VC_WDOG_SCRATCH4 + 0x0UL, 0U);
+    out_w(VC_WDOG_SCRATCH4 + 0x4UL, 0U);
+    out_w(VC_WDOG_SCRATCH4 + 0x8UL, 0U);
+    out_w(VC_WDOG_SCRATCH4 + 0xCUL, 0U);
+    out_w(VC_PSM_WDSEL, VC_PSM_WDSEL_ALL);
+    out_w(VC_WDOG_CTRL, in_w(VC_WDOG_CTRL) | VC_WDOG_TRIGGER);
+
+    for (;;)
+    {
+        /* the reset lands within a few clock cycles */
+    }
 }
