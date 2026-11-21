@@ -147,15 +147,24 @@ IMPORT ID vc_mbf_profile;
    stops the seek on the spot, before the car has driven back. */
 #define VC_BYPASS_SEEK_GRACE    (0.5f)
 /* Centre sensor is this far ahead of the axle. After the seek stops on
-   the line, the AXLE is still 7 cm x sin(turn) short of it: drive this
-   much more so the axle reaches the lane, then the straighten pivot
-   puts the sensor back on the line. Without it the counter-back looks
-   shorter than the way out, which is exactly what it is. */
+   the line, the AXLE is still 7 cm x sin(turn) short of it, which is
+   what VC_BYPASS_LAND_CM below pays back. Without that carry the
+   counter-back looks shorter than the way out, which it is. */
 #define VC_SENSOR_AHEAD_CM      (7.0f)
-#define VC_BYPASS_SWEEP_DEG     (60.0f)     // pivot search range, each way:
-                                            // 7 cm nose x sin60 is 6 cm of
-                                            // lateral reach, enough to find
-                                            // the line after an overshoot
+/* [ultraline] Carry after the sensor goes white, so the AXLE reaches the
+   lane: 7 cm x sin(60) is 6.06, less what the car rolls after the stop,
+   about 0.5 cm at the creep speed below. */
+#define VC_BYPASS_LAND_CM       (5.5f)
+/* [ultraline] Return-leg creep, in RPM. 20 is the speed manual forward
+   uses, and the shorter roll is what makes the landing repeat. */
+#define VC_BYPASS_CREEP_RPM     (20.0f)
+#define VC_BYPASS_SWEEP_DEG     (60.0f)     // recovery reach, each way: 7 cm
+                                            // nose x sin60 is 6 cm, needed
+                                            // after a failed manoeuvre
+/* [ultraline] 7/7 expects a small residual: 1.5 cm is 12 deg on a 7 cm
+   nose, so 30 deg each way is enough, and it keeps the nose out of the
+   object on a narrow track. */
+#define VC_BYPASS_ALIGN_SWEEP_DEG (30.0f)
 #define VC_BYPASS_MIN_STOP_CM   (18U)       // closer: back off before the 60 deg pivot
 #define VC_BYPASS_SAME_CM       (3U)        // a rescan within this is the same view
 /* Half-hexagon bypass: two short slants at 60 deg off the lane either
@@ -168,7 +177,9 @@ IMPORT ID vc_mbf_profile;
                                             // 5 car half, 4 clear. The barcode
                                             // sensor sits proud of the flank,
                                             // so this is 5 cm more than 2/3
-#define VC_BYPASS_OBJ_DEPTH_CM  (10.0f)     // object front to back
+#define VC_BYPASS_OBJ_DEPTH_CM  (15.0f)     // [ultraline] assume 15 x 15:
+                                            // at 10 a deeper object clipped
+                                            // the tail on the way back
 #define VC_CAR_LEN_CM           (15.0f)     // front sensor to tail
 #define VC_BYPASS_PASS_MARGIN_CM (5.0f)
 

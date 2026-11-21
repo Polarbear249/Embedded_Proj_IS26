@@ -75,7 +75,8 @@ static bool      vc_wait_move_done(UINT timeout_ms);
 static bool      vc_line_centre_black(void);
 static bool      vc_seek_line(float distance_cm, float grace_cm,
                               float extra_cm);
-static bool      vc_sweep_line(bool b_right_first);
+static void      vc_seek_stop(void);
+static bool      vc_sweep_line(bool b_right_first, float max_deg);
 static bool      vc_pivot_to_line(float max_deg, bool b_left);
 static bool      vc_hold_arm(void);
 static bool      vc_resume_line(float cap_cm, float grace_cm);
@@ -671,12 +672,28 @@ vc_line_centre_black (void)
 }
 
 /*
+ * [ultraline] Stop the creep and report how far the car rolled after the
+ * command. That roll is the coast the landing maths depends on.
+ */
+static void
+vc_seek_stop (void)
+{
+    int32_t at_mm = motion_get_distance_mm();
+
+    (void)motion_stop();
+    (void)tk_dly_tsk(300);
+
+    tm_printf((UB*)"[VC] seek stop, coast %d mm\n",
+              (int)(motion_get_distance_mm() - at_mm));
+}
+
+/*
  * Drive at the line and stop the moment the CENTRE sensor sees it.
  * Centre only: the right sensor is one spot to the side, so stopping on
  * it leaves the car un-armable. grace_cm of the approach ignores black:
  * the turn back swings the sensor across the floor and it can catch the
  * lane, a junction or a barcode at the wrong point, and stopping there
- * leaves the car short of the line. extra_cm keeps the move running
+ * leaves the car short of the line. extra_cm keeps the creep running
  * after the black so the axle, which trails the sensor, can reach the
  * line too. False = distance ran out, operator aborted, or the move
  * failed; g_bypass_why says which.
@@ -688,12 +705,21 @@ vc_seek_line (float distance_cm, float grace_cm, float extra_cm)
     uint32_t        waited_ms = 0U;
     UINT            timeout_ms = vc_move_timeout_ms(distance_cm + extra_cm);
     int32_t         start_mm = motion_get_distance_mm();
+    int32_t         cap_mm   = (int32_t)((distance_cm + extra_cm) * 10.0f);
     int32_t         grace_mm = (int32_t)(grace_cm * 10.0f);
     int32_t         extra_mm = (int32_t)(extra_cm * 10.0f);
     int32_t         seen_mm  = 0;
     bool            b_seen   = false;
 
-    if (MOTION_OK != motion_move_forward(distance_cm + extra_cm))
+    /*
+     * [ultraline] Creep the whole leg instead of a distance move. The move
+     * engine stops with a 2 to 3 cm roll, which parked the axle past the
+     * tape every time. Speed mode is closed loop, so it holds the same
+     * speed on a sagging supply, and its shorter roll is what lets the
+     * landing repeat.
+     */
+    if (MOTION_OK != motion_set_speed(VC_BYPASS_CREEP_RPM,
+                                      VC_BYPASS_CREEP_RPM))
     {
         g_bypass_why = "seek refused";
         return (false);
@@ -714,8 +740,7 @@ vc_seek_line (float distance_cm, float grace_cm, float extra_cm)
 
                 if (extra_mm <= 0)
                 {
-                    (void)motion_stop();    // cancel the rest of the approach
-                    (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+                    vc_seek_stop();         // cancel the rest of the creep
                     return (true);
                 }
             }
@@ -724,10 +749,10 @@ vc_seek_line (float distance_cm, float grace_cm, float extra_cm)
                  >= extra_mm)
         {
             /*
-             * Still black after the 7 cm of travel that should have
-             * carried the sensor off a 6 mm line: this is a black patch
-             * wider than the line (a box on the floor), not the lane.
-             * Keep driving instead of stopping and handing back on it.
+             * Still black after the carry that should have taken the
+             * sensor off a 6 mm line: this is a black patch wider than
+             * the line (a box on the floor), not the lane. Keep driving
+             * instead of stopping and handing back on it.
              */
             if (vc_line_centre_black())
             {
@@ -736,10 +761,21 @@ vc_seek_line (float distance_cm, float grace_cm, float extra_cm)
             }
             else
             {
-                (void)motion_stop();        // axle is on the line now
-                (void)tk_dly_tsk(VC_BYPASS_POLL_MS);
+                vc_seek_stop();             // axle is on the line now
                 return (true);
             }
+        }
+
+        /*
+         * [ultraline] Speed mode has no goal of its own, so the cap is
+         * checked here. Without it the car creeps on until the timeout,
+         * well past where the line should have been.
+         */
+        if ((motion_get_distance_mm() - start_mm) >= cap_mm)
+        {
+            vc_seek_stop();
+            g_bypass_why = "line not found (seek distance used up)";
+            return (false);
         }
 
         if (vc_button_pressed())
@@ -751,19 +787,25 @@ vc_seek_line (float distance_cm, float grace_cm, float extra_cm)
 
         if (MOTION_OK != motion_get_status(&status))
         {
+            (void)motion_stop();
             g_bypass_why = "status error in seek";
             return (false);
         }
 
+        /*
+         * Speed mode only leaves RUNNING if S2 faulted, so stop rather
+         * than leave the creep running.
+         */
         if (MOTION_STATE_RUNNING != status.state)
         {
-            g_bypass_why = "line not found (seek distance used up)";
+            (void)motion_stop();
+            g_bypass_why = "s2 stopped during seek";
             return (false);
         }
     }
 
     g_bypass_why = "line not found (seek timeout)";
-    (void)motion_stop();
+    vc_seek_stop();
     return (false);
 }
 
@@ -810,25 +852,25 @@ vc_pivot_to_line (float max_deg, bool b_left)
 
 /*
  * Search for the line within one pivot of the current heading.
- * b_right_first: which way to look first. Pivot that way up to
- * VC_BYPASS_SWEEP_DEG, then twice as far the other way, then back to
- * the starting heading. The heading is left where the line was found;
- * S3 corrects the rest as soon as it drives.
+ * b_right_first: which way to look first. Pivot that way up to max_deg,
+ * then twice as far the other way, then back to the starting heading.
+ * The heading is left where the line was found; S3 corrects the rest as
+ * soon as it drives.
  */
 static bool
-vc_sweep_line (bool b_right_first)
+vc_sweep_line (bool b_right_first, float max_deg)
 {
-    if (vc_pivot_to_line(VC_BYPASS_SWEEP_DEG, false == b_right_first))
+    if (vc_pivot_to_line(max_deg, false == b_right_first))
     {
         return (true);
     }
 
-    if (vc_pivot_to_line(2.0f * VC_BYPASS_SWEEP_DEG, b_right_first))
+    if (vc_pivot_to_line(2.0f * max_deg, b_right_first))
     {
         return (true);
     }
 
-    return (vc_pivot_to_line(VC_BYPASS_SWEEP_DEG, false == b_right_first));
+    return (vc_pivot_to_line(max_deg, false == b_right_first));
 }
 
 /*
@@ -929,7 +971,7 @@ vc_resume_line (float cap_cm, float grace_cm)
                   (false != b_found) ? "coasted past the line"
                                      : g_bypass_why);
 
-        if (false == vc_sweep_line(false))
+        if (false == vc_sweep_line(false, VC_BYPASS_SWEEP_DEG))
         {
             return (false);
         }
@@ -1182,12 +1224,11 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm, float *p_applied_deg)
     }
 
     /*
-     * The object is off the front axis now, so S5 can look again: a new
-     * object in the slant or during the pass must stop the car and abort
-     * the manoeuvre. Alerts go off again before 5, because the return is
-     * about finding the line, not about what is beside it.
+     * [ultraline] Alerts stay OFF for the rest of the manoeuvre, including
+     * the pass. The object passes at 16.5 cm, inside the 25 cm alert
+     * distance, and a hit mid-leg latched a stop and refused the next
+     * turn. S5 comes back on in vc_release_to_line().
      */
-    s5_alert_set_enabled(true);
 
     *p_applied_deg = b_left ? VC_BYPASS_TURN_DEG
                             : -VC_BYPASS_TURN_DEG;
@@ -1266,16 +1307,14 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm, float *p_applied_deg)
 
     /*
      * 6. Slant back onto the lane. This is where the line matters
-     * again. The centre sensor is watched while the car comes back; on
-     * black it carries on another 7 cm, the sensor-to-axle distance,
-     * so the axle lands on the lane rather than stopping when the nose
-     * touches it. A fixed 21 cm would only be right if every turn were
-     * exact; this ends on the line wherever the line actually is.
+     * again. The centre sensor is watched while the car creeps back; on
+     * black it carries on VC_BYPASS_LAND_CM more, so the axle lands on
+     * the lane rather than stopping when the nose touches it.
      */
     tm_printf((UB*)"[VC] 6/7 slant back %d cm\n", (INT)f_slant);
 
-    if (false == vc_seek_line(f_slant + VC_SENSOR_AHEAD_CM, 0.0f,
-                              VC_SENSOR_AHEAD_CM))
+    if (false == vc_seek_line(f_slant + VC_BYPASS_LAND_CM, 0.0f,
+                              VC_BYPASS_LAND_CM))
     {
         /* No line within the slant plus one nose: still line up and let
            the check after 7/7 sweep for it. */
@@ -1302,7 +1341,7 @@ vc_bypass_manoeuvre (uint32_t best, uint32_t centre_cm, float *p_applied_deg)
 
     if (false == vc_line_centre_black())
     {
-        if (false == vc_sweep_line(b_left))
+        if (false == vc_sweep_line(b_left, VC_BYPASS_ALIGN_SWEEP_DEG))
         {
             g_bypass_why = "line lost after bypass";
             return (false);
